@@ -1,0 +1,10 @@
+= FAQ =
+
+==What's a Visual Novel?==
+It's a less-popular game genre (compared to MMORPGs, RTS, FPS, etc.), mostly used in dating sims. But it's more than that. Think Choose-Your-Own-Adventure meets graphic novels.
+
+==Why make another engine?==
+Actually, this just started as a study in HTML5 that has gone a little too way out of hand. :) Admittedly, there's a lot of better engines out there.
+
+==Can I help?==
+Sure why not. I appreciate feature requests, bug reports, patches, etc. Also, I do not have access to other platforms, particularly IE9/Win7, Safari/MAC, iOs, Android, iPhone, etc. So any help on the above is very much welcome.
