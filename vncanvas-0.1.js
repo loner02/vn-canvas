@@ -43,12 +43,15 @@
 ******************************************************************************/
 /******************************************************************************
 Revision history:
+12.30.11 - Simplified 'audio'
+12.29.11 - Added configuration file (just the basics)
+12.28.11 - Added a subset of HTML forms
 12.26.11 - Simplified 'set' and 'jump'
 12.25.11 - Added actor avatar
 		 - Updated checkpoint saves to include avatar and forms
 12.24.11 - Added video for intros, cutscenes, endings
 		 - Updated demo and docs
-12.21.11 - Added forms (buttons only... so far)
+12.21.11 - Added canvas forms (buttons only... so far)
 12.20.11 - Added basic saves using checkpoint
          - Completed initial demo
 12.08.11 - Added overlay and atmosphere basics
@@ -59,70 +62,91 @@ Revision history:
 ******************************************************************************/
 
 // Generic/helper methods
-// Function for adding an event listener
-function addEvent(obj, evType, fn, useCapture) {
-	if (obj.addEventListener) {
-		obj.addEventListener(evType, fn, useCapture);
-		return true;
-	} else if (obj.attachEvent) {
-		var r = obj.attachEvent("on" + evType, fn);
-		return r;
-	} else {
-		alert("Handler could not be attached.");
-	}
-}
-// Function for including external javascript files
-function includeJs(jsFilePath) {
-    var js = document.createElement("script");
-    js.type = "text/javascript";
-    js.src = jsFilePath;
-    //document.getElementsByTagName('head')[0].appendChild(js);
-	document.body.appendChild(js);
-}
-// Function to check support for localStorage
-function supportsLocalStorage() {
-  try {
-    return 'localStorage' in window && window['localStorage'] !== null;
-  } catch(e){
-    return false;
-  }
-}
-// Helper function to search for user variable
-function findVar(id) {
-	for (var i in Stage.variables) {
-		if (Stage.variables[i].Name() == id) {
-			return i;
+var Helper = {
+	// Function for adding an event listener
+	addEvent: function (obj, evType, fn, useCapture) {
+		if (obj.addEventListener) {
+			obj.addEventListener(evType, fn, useCapture);
+			return true;
+		} else if (obj.attachEvent) {
+			var r = obj.attachEvent("on" + evType, fn);
+			return r;
+		} else {
+			alert("Handler could not be attached.");
 		}
-	}
-	return -1;
-}
-// Helper function to parse font string
-function parseFontString(s) {
-	var splitText = s.split(' ');
-	// combine as needed
-	var subs = new Array();
-	var combine = false;
-	var tempText = '';
-	for (var i in splitText) {
-		if (splitText[i].search("\'")!=-1) {
-			if (combine == false) {
-				combine = true;
-				tempText = splitText[i];
+	},
+	// Function for including external javascript files
+	includeJs: function (jsFilePath) {
+	    var js = document.createElement("script");
+	    js.type = "text/javascript";
+	    js.src = jsFilePath;
+	    //document.getElementsByTagName('head')[0].appendChild(js);
+		document.body.appendChild(js);
+	},
+	// Function to check support for localStorage
+	supportsLocalStorage: function () {
+	  try {
+	    return 'localStorage' in window && window['localStorage'] !== null;
+	  } catch(e){
+	    return false;
+	  }
+	},
+	// Helper function to search for user variable
+	findVar: function (id) {
+		for (var i in Stage.variables) {
+			if (Stage.variables[i].Name() == id) {
+				return i;
+			}
+		}
+		return -1;
+	},
+	// Helper function to obtain value from stage or config variables
+	getValue: function (id) {
+		var idx = Helper.findVar(id);
+		if (idx != -1)
+			return Stage.variables[idx].Value();
+		return eval("Config."+id);
+	},
+	// Helper function to set value to stage or config variables
+	setValue: function (id, value) {
+		var idx = Helper.findVar(id);
+		if (idx != -1)
+			Stage.variables[idx].value = value;
+		
+		if (typeof value == 'string') {
+			eval("Config."+id +"=\""+value+"\"");
+		}
+		else
+			eval("Config."+id +"="+value);
+	},
+	// Helper function to parse font string
+	parseFontString: function (s) {
+		var splitText = s.split(' ');
+		// combine as needed
+		var subs = new Array();
+		var combine = false;
+		var tempText = '';
+		for (var i in splitText) {
+			if (splitText[i].search("\'")!=-1) {
+				if (combine == false) {
+					combine = true;
+					tempText = splitText[i];
+				}
+				else {
+					combine = false;
+					tempText += " " + splitText[i];
+					subs.push(tempText);
+				}
 			}
 			else {
-				combine = false;
-				tempText += " " + splitText[i];
-				subs.push(tempText);
+				if (combine == true)
+					tempText += " " + splitText[i];
+				else
+					subs.push(splitText[i]);
 			}
 		}
-		else {
-			if (combine == true)
-				tempText += " " + splitText[i];
-			else
-				subs.push(splitText[i]);
-		}
-	}
-	return subs;
+		return subs;
+	},
 }
 // Function to determine optimal animation frame
 window.requestAnimFrame = (function(callback){
@@ -138,9 +162,14 @@ window.requestAnimFrame = (function(callback){
 // Helper function on window resize
 window.onresize = (function(){
 	for (var idx in Stage.videos) {
-		var x = Stage.canvas.offsetLeft + 0.025 * Stage.canvas.width;// - window.pageXOffset;
-		var y = Stage.canvas.offsetTop + 0.025 * Stage.canvas.height;// - window.pageYOffset;
+		var x = Stage.canvas.offsetLeft + (1-Config.movieSize)/2 * Stage.canvas.width;// - window.pageXOffset;
+		var y = Stage.canvas.offsetTop + (1-Config.movieSize)/2 * Stage.canvas.height;// - window.pageYOffset;
 		Stage.videos[idx].movie.setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px');
+	}
+	for (var i=0; i<document.forms.length; i++) {
+		var x = Stage.canvas.offsetLeft;//- window.pageXOffset;
+		var y = Stage.canvas.offsetTop; //- window.pageYOffset;
+		document.forms[i].setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px;');
 	}
 });
 
@@ -166,11 +195,11 @@ function set(param) {
 	for (var i=0; i<arr_param.length; i+=2) {
 		arr_param[i] = eval(arr_param[i]);
 		arr_param[i+1] = eval(arr_param[i+1]);
-		var idx = findVar(arr_param[i]);
+		var idx = Helper.findVar(arr_param[i]);
 		if (idx != -1) {
 			if (typeof arr_param[i+1] == 'string') {
 				// if value is a reference to other variables
-				var j = findVar(arr_param[i+1]);
+				var j = Helper.findVar(arr_param[i+1]);
 				if (j != -1) {
 					Stage.variables[idx].Set(arr_param[i], Stage.variables[j].Value());
 				}
@@ -193,7 +222,7 @@ function set(param) {
 			var uv = new UserVars();
 			if (typeof arr_param[i+1] == 'string') {
 				// if value is a reference to other variables
-				var j = findVar(arr_param[i+1]);
+				var j = Helper.findVar(arr_param[i+1]);
 				if (j != -1) {
 					uv.Set(arr_param[i], Stage.variables[j].Value());
 				}
@@ -211,7 +240,7 @@ function set(param) {
 }
 // get - gets value of a user variable
 function get(param) {
-	var idx = findVar(param.name);
+	var idx = Helper.findVar(param.name);
 	if (idx != -1) {
 		return Stage.variables[idx].Value();
 	}
@@ -231,7 +260,7 @@ function jump(param) {
 			arr_param[i+1] = eval(arr_param[i+1]);
 			if (arr_param[i] == 'label') continue;
 			
-			var idx = findVar(arr_param[i]);
+			var idx = Helper.findVar(arr_param[i]);
 			if (idx != -1) {
 				if (Stage.variables[idx].type == 'number') {
 					if (Stage.variables[idx].Value() >= arr_param[i+1])
@@ -290,7 +319,7 @@ function scene(param) {
 	}
 	else 
 		bg.effects = 'in';
-	if (param.time) bg.transTime = param.time;
+	if (param.time != null) bg.transTime = (param.time>0) ? param.time : 0.01;
 	Stage.layers[0].push(bg);
 }
 // actor - create and display character (layer 1)
@@ -353,10 +382,12 @@ function actor(param) {
 				var same_window = false;
 				// get name of speaker
 				var current_speaker = '';
-				var startIdx = Stage.layers[4][0].text.indexOf("Verdana;\'>");
+				var startIdx = Stage.layers[4][0].text.indexOf(Stage.layers[4][0].tagFamily+";\'>");
 				var endIdx = Stage.layers[4][0].text.indexOf("</style><br/>");
-				if ((startIdx != -1) && (endIdx != -1))
-					current_speaker = Stage.layers[4][0].text.substr(startIdx+10, endIdx-startIdx-10);
+				if ((startIdx != -1) && (endIdx != -1)) {
+					current_speaker = Stage.layers[4][0].text.substr(startIdx+Stage.layers[4][0].tagFamily.length+3, 
+																     endIdx-startIdx-Stage.layers[4][0].tagFamily.length-3);
+				}
 				
 				if ((current_speaker != Stage.layers[1][idx].nick) || (param.append == false)) {
 					Stage.layers[4][0].cont = false;
@@ -371,8 +402,11 @@ function actor(param) {
 				}
 				if (same_window) {
 					var dialog = '';
-					dialog = "<style=\'font-weight:bold;color:" + Stage.layers[1][idx].color + 
-							 ";font-family:Verdana;\'>" + Stage.layers[1][idx].nick + "</style><br/>";
+					dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
+								";color:" + Stage.layers[1][idx].color + 
+								";font-size:" + Stage.layers[4][0].tagSize +
+								";font-family:" + Stage.layers[4][0].tagFamily +
+								";\'>" + Stage.layers[1][idx].nick + "</style><br/>";
 					// strip speaker name here if present
 					var index = Stage.layers[4][0].text.indexOf("</style><br/>");
 					if (index!=-1)
@@ -384,8 +418,11 @@ function actor(param) {
 				}
 				else {
 					var dialog = '';
-					dialog = "<style=\'font-weight:bold;color:" + Stage.layers[1][idx].color + 
-							 ";font-family:Verdana;\'>" + Stage.layers[1][idx].nick + "</style><br/>";
+					dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
+								";color:" + Stage.layers[1][idx].color + 
+								";font-size:" + Stage.layers[4][0].tagSize +
+								";font-family:" + Stage.layers[4][0].tagFamily +
+								";\'>" + Stage.layers[1][idx].nick + "</style><br/>";
 					dialog += param.say;
 					Stage.layers[4][0].text = dialog;
 				}
@@ -416,7 +453,7 @@ function actor(param) {
 	if (param.color)
 		chr.color = param.color;
 	else
-		chr.color = '#c8ffc8';
+		chr.color = Stage.layers[4][0].tagColor;
 	if (param.type)
 		chr.type = param.type;
 	if (param.sprite) {
@@ -440,12 +477,16 @@ function actor(param) {
 		else
 			chr.effects = 'in';
 	}
-	if (param.time) chr.transTime = param.time;
+	if (param.time != null) chr.transTime = (param.time>0) ? param.time : 0.01;
 	if (param.say) {
 		// new actor will have new dialog window, continue is ignored
 		Stage.layers[4][0].cont = false;
 		var dialog = '';
-		dialog = "<style=\'font-weight:bold;color:"+chr.color+";font-family:Verdana;\'>"+chr.nick+"</style><br/>";
+		dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
+					";color:" + chr.color + 
+					";font-size:" + Stage.layers[4][0].tagSize +
+					";font-family:" + Stage.layers[4][0].tagFamily +
+					";\'>" + chr.nick + "</style><br/>";
 		dialog += param.say;
 		Stage.layers[4][0].text = dialog;
 		if (chr.avatar != null)
@@ -488,7 +529,7 @@ function overlay(param) {
 		ovl.effects = param.effect + 'in';
 	else 
 		ovl.effects = 'in';
-	if (param.time) ovl.transTime = param.time;
+	if (param.time != null) ovl.transTime = (param.time>0) ? param.time : 0.01;
 	if (param.offset) {
 		if (typeof (param.offset) == "string") {
 			if (param.offset == "scroll")
@@ -525,7 +566,7 @@ function atmosphere(param) {
 			else
 				Stage.layers[3][idx].action = 'start';
 			if (Stage.layers[3][idx].action == 'start') {
-				if (param.count)
+				if (param.count != null)
 					Stage.layers[3][idx].Init(param.type, param.count);
 				else
 					Stage.layers[3][idx].Init(param.type, 0);
@@ -537,7 +578,7 @@ function atmosphere(param) {
 	// this is new fx type
 	var atm = new Atmosphere();
 	atm.Create('atm' + nextid);
-	if (param.count)
+	if (param.count != null)
 		atm.Init(param.type, param.count);
 	else
 		atm.Init(param.type, 0);
@@ -589,7 +630,7 @@ function text(param) {
 	}
 	else {
 		if (param.font) { 
-			var subs = parseFontString(param.font);
+			var subs = Helper.parseFontString(param.font);
 			
 			if (subs.length > 0) Stage.layers[4][0].fontWeight = subs[0];
 			if (subs.length > 1) {
@@ -604,10 +645,11 @@ function text(param) {
 		// get name of speaker
 		var current_speaker = '';
 		var new_speaker = '';
-		var startIdx = Stage.layers[4][0].text.indexOf("Verdana;\'>");
+		var startIdx = Stage.layers[4][0].text.indexOf(Stage.layers[4][0].tagFamily+";\'>");
 		var endIdx = Stage.layers[4][0].text.indexOf("</style><br/>");
 		if ((startIdx != -1) && (endIdx != -1))
-			current_speaker = Stage.layers[4][0].text.substr(startIdx+10, endIdx-startIdx-10);
+			current_speaker = Stage.layers[4][0].text.substr(startIdx+Stage.layers[4][0].tagFamily.length+3, 
+															 endIdx-startIdx-Stage.layers[4][0].tagFamily.length-3);
 		if (param.speaker) new_speaker = param.speaker;
 		
 		if ((current_speaker != new_speaker) || (param.append == false)) {
@@ -625,7 +667,7 @@ function text(param) {
 			var dialog = '';
 			if (param.speaker) {
 				var nick = param.speaker;
-				var color = '#c8ffc8';
+				var color = Stage.layers[4][0].tagColor;
 				for (var i in Stage.layers[1]) {
 					if (Stage.layers[1][i].id == param.speaker) {
 						nick = Stage.layers[1][i].nick;
@@ -633,7 +675,11 @@ function text(param) {
 						break;
 					}
 				}
-				dialog = "<style=\'font-weight:bold;color:"+color+";font-family:Verdana;\'>"+nick+"</style><br/>";
+				dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
+							";color:" + color + 
+							";font-size:" + Stage.layers[4][0].tagSize +
+							";font-family:" + Stage.layers[4][0].tagFamily +
+							";\'>" + nick + "</style><br/>";
 			}
 			// strip speaker name here if present
 			var idx = Stage.layers[4][0].text.indexOf("</style><br/>");
@@ -650,7 +696,7 @@ function text(param) {
 			var dialog = '';
 			if (param.speaker) {
 				var nick = param.speaker;
-				var color = '#c8ffc8';
+				var color = Stage.layers[4][0].tagColor;
 				for (var i in Stage.layers[1]) {
 					if (Stage.layers[1][i].id == param.speaker) {
 						nick = Stage.layers[1][i].nick;
@@ -658,7 +704,11 @@ function text(param) {
 						break;
 					}
 				}
-				dialog = "<style=\'font-weight:bold;color:"+color+";font-family:Verdana;\'>"+nick+"</style><br/>";
+				dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
+							";color:" + color + 
+							";font-size:" + Stage.layers[4][0].tagSize +
+							";font-family:" + Stage.layers[4][0].tagFamily +
+							";\'>" + nick + "</style><br/>";
 			}
 			if (param.value)
 				dialog += param.value;
@@ -693,7 +743,7 @@ function menu(param) {
 	Stage.layers[4][0].changed = true;
 	Stage.layers[4][0].inputFocus = true;
 }
-// button - create a button (layer 4), independent of form
+// button - create a canvas button (layer 4), independent of cform
 function button(param) {
 	// check existing button w/ same id
 	/*
@@ -725,8 +775,8 @@ function button(param) {
 	Stage.layers[4].push(bt);
 	//Stage.pause = true;
 }
-// form - container for form elements such as buttons (layer 4)
-function form(param) {
+// form - container for canvas form elements such as buttons (layer 4)
+function cform(param) {
 	if (typeof param == "string") {	// TODO: check array count
 		switch (param) {
 			case 'close':
@@ -762,6 +812,17 @@ function form(param) {
 				}
 				Stage.pause = true;
 				break;
+			case 'default':
+				// revert back to default style
+				Stage.formStyle.splice(0, Stage.formStyle.length);
+				var subs = Helper.parseFontString(Config.formStyle);
+				if (subs.length >= 4) {
+					Stage.formStyle.push(subs.slice(0,3).join(' '));
+					Stage.formStyle.push(subs.slice(3).join(' '));
+				}
+				else
+					Stage.formStyle.push(param);
+				break;
 			default:
 				for (var i in Stage.formStack) {
 					if (Stage.formStack[i] == param) {
@@ -781,7 +842,7 @@ function form(param) {
 				}
 				// else, assume this is a formStyle
 				Stage.formStyle.splice(0, Stage.formStyle.length);
-				var subs = parseFontString(param);
+				var subs = Helper.parseFontString(param);
 				if (subs.length >= 4) {
 					Stage.formStyle.push(subs.slice(0,3).join(' '));
 					Stage.formStyle.push(subs.slice(3).join(' '));
@@ -829,30 +890,26 @@ function audio(param) {
 					"ogg": 'audio/ogg;codecs="vorbis"',
 					"mp3": "audio/mpeg"};
 
-	switch (param.type) {
-		case 'bgm':
-			if (param.src) {
-				if ((Stage.sounds[0].length==0) || (Stage.sounds[0][0].src.search(param.src)==-1)) {
-					var s = new Sounds();
-					if (param.format) {
-						s.src = null;
-						for (var i in param.format) {
-							if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
-								s.src = param.src + '.' + param.format[i];
-								break;
-							}
-						}
+	if (param.bgm) {
+		if ((Stage.sounds[0].length==0) || (Stage.sounds[0][0].src.search(param.bgm)==-1)) {
+			var s = new Sounds();
+			if (param.format) {
+				s.src = null;
+				for (var i in param.format) {
+					if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
+						s.src = param.bgm + '.' + param.format[i];
+						break;
 					}
-					while (Stage.sounds[0].length > 0) {
-						var old = Stage.sounds[0].shift();
-						old.Stop(true);
-					}
-					s.delay = (param.delay) ? param.delay : 0;
-					Stage.sounds[0].push(s);
-					return;
 				}
 			}
-			// no src given or existing, apply action to current bgm
+			while (Stage.sounds[0].length > 0) {
+				var old = Stage.sounds[0].shift();
+				old.Stop(true);
+			}
+			s.delay = (param.delay > 0) ? param.delay : 0;
+			Stage.sounds[0].push(s);
+		}
+		else {
 			switch (param.action) {
 				case "stop":
 					Stage.sounds[0][0].Stop(false);
@@ -868,69 +925,101 @@ function audio(param) {
 					Stage.sounds[0][0].Play(false);
 					break;
 			}
-			break;
-		case 'bgs':
-		case 'se':
-			var arridx, rpt;
-			if (param.type == 'bgs') {
-				arridx = 1;
-				rpt = -1;
-			}
-			else {
-				arridx = 2;
-				rpt = (param.repeat) ? param.repeat : 0;
-			}
-			
-			if (param.src) {
-				var index = -1;
-				if (Stage.sounds[arridx].length > 0) {
-					for (var i in Stage.sounds[arridx]) {
-						if (Stage.sounds[arridx][i].src.search(param.src) != -1) {
-							index = i;
-							break;
-						}
-					}
-				}
-				if (index != -1) {
-					switch (param.action) {
-						case "stop":
-							Stage.sounds[arridx][index].Stop(false);
-							break;
-						case "pause":
-							Stage.sounds[arridx][index].Pause();
-							break;
-						case "rewind":
-							Stage.sounds[arridx][index].Rewind();
-							break;
-						case "remove":
-							Stage.sounds[arridx][index].Stop(true);
-							Stage.sounds[arridx].splice(index, 1);
-							break;
-						case "play":
-						default:
-							Stage.sounds[arridx][index].Play(false);
-							break;
-					}
-				}
-				else {
-					var s = new Sounds();
-					if (param.format) {
-						s.src = null;
-						for (var i in param.format) {
-							if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
-								s.src = param.src + '.' + param.format[i];
-								break;
-							}
-						}
-					}
-					s.repeat = rpt;
-					s.delay = (param.delay) ? param.delay : 0;
-					Stage.sounds[arridx].push(s);
+		}
+	}
+	if (param.bgs) {
+		var index = -1;
+		if (Stage.sounds[1].length > 0) {
+			for (var i in Stage.sounds[1]) {
+				if (Stage.sounds[1][i].src.search(param.bgs) != -1) {
+					index = i;
+					break;
 				}
 			}
-			break;
-		default:
-			break;
+		}
+		if (index != -1) {
+			switch (param.action) {
+				case "stop":
+					Stage.sounds[1][index].Stop(false);
+					break;
+				case "pause":
+					Stage.sounds[1][index].Pause();
+					break;
+				case "rewind":
+					Stage.sounds[1][index].Rewind();
+					break;
+				case "remove":
+					Stage.sounds[1][index].Stop(true);
+					Stage.sounds[1].splice(index, 1);
+					break;
+				case "play":
+				default:
+					Stage.sounds[1][index].Play(false);
+					break;
+			}
+		}
+		else {
+			var s = new Sounds();
+			if (param.format) {
+				s.src = null;
+				for (var i in param.format) {
+					if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
+						s.src = param.bgs + '.' + param.format[i];
+						break;
+					}
+				}
+			}
+			s.repeat = -1;
+			s.delay = (param.delay > 0) ? param.delay : 0;
+			Stage.sounds[1].push(s);
+		}
+	}
+	if (param.se) {
+		var index = -1;
+		if (Stage.sounds[2].length > 0) {
+			for (var i in Stage.sounds[2]) {
+				if (Stage.sounds[2][i].src.search(param.se) != -1) {
+					index = i;
+					break;
+				}
+			}
+		}
+		if (index != -1) {
+			switch (param.action) {
+				case "stop":
+					Stage.sounds[2][index].Stop(false);
+					break;
+				case "pause":
+					Stage.sounds[2][index].Pause();
+					break;
+				case "rewind":
+					Stage.sounds[2][index].Rewind();
+					break;
+				case "remove":
+					Stage.sounds[2][index].Stop(true);
+					Stage.sounds[2].splice(index, 1);
+					break;
+				case "play":
+				default:
+					Stage.sounds[2][index].Play(false);
+					break;
+			}
+		}
+		else {
+			var s = new Sounds();
+			if (param.format) {
+				s.src = null;
+				for (var i in param.format) {
+					if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
+						s.src = param.se + '.' + param.format[i];
+						break;
+					}
+				}
+			}
+			s.repeat = (param.repeat > 0) ? param.repeat : 0;
+			s.delay = (param.delay > 0) ? param.delay : 0;
+			Stage.sounds[2].push(s);
+		}
 	}
 }
 // video - plays a video (cutscene, etc.)
@@ -954,13 +1043,200 @@ function video(param) {
 	Stage.videos.push(v);
 	Stage.pause = true;
 }
+// default form elements
+function input(param) {
+	var element = document.createElement("input");
+	element.name = param.name;
+	element.id = param.name;
+	if (param.placeholder) element.placeholder = param.placeholder;
+	if (param.autofocus) element.autofocus = param.autofocus;
+	if (param.bind) {
+		element.value = Helper.getValue(param.bind);
+		Stage.formBindings.push([param.name, param.bind]);
+	}
+	return element;
+}
+function input_label(param, tip) {
+	var element = document.createElement("label");
+	element.htmlFor = param;
+	element.innerHTML = param;
+	if (tip) element.title = tip;
+		//element.innerHTML += '<span>'+tip+'</span>';
+	return element;
+}
+function textarea(param) {
+	var element = document.createElement("textarea");
+	element.name = param.name;
+	element.id = param.name;
+	if (param.placeholder) element.placeholder = param.placeholder;
+	if (param.autofocus) element.autofocus = param.autofocus;
+	//if (param.rows != null) element.rows = param.rows;
+	//if (param.cols != null) element.cols = param.cols;
+	if (param.bind) {
+		element.value = Helper.getValue(param.bind);
+		Stage.formBindings.push([param.name, param.bind]);
+	}
+	return element;
+}
+function fieldset(param) {
+	var element = document.createElement("fieldset");
+	element.id = param;
+	return element;
+}
+function select(param) {
+	var element = document.createElement("select");
+	element.name = param.name;
+	element.id = param.name;
+	for (var i=0; i<param.options.length; i+=2) {
+		var opt = document.createElement("option");
+		opt.innerText = param.options[i];
+		opt.value = param.options[i+1];
+		element.appendChild(opt);
+		if (param.bind) {
+			if (opt.value == Helper.getValue(param.bind)) 
+				element.selectedIndex = i/2;
+		}
+	}
+	if (param.bind) Stage.formBindings.push([param.name, param.bind]);
+	return element;
+}
+function submit(param) {
+	var element = document.createElement("input");
+	element.type = "button";
+	element.name = param.name;
+	element.id = param.name;
+	element.value = param.name;
+	element.appendChild(document.createTextNode(param.name));
+	Helper.addEvent(element, 'click', function(e) {
+			if (e.which != 1) return;
+			// update bindings here
+			for (var idx in Stage.formBindings) {
+				var items = document.getElementById(Stage.formBindings[idx][0]);
+				//alert(items.type+" "+items.value+" "+items.checked);
+				if (items.type == "radio") {
+					if (items.checked == true) 
+						Helper.setValue(Stage.formBindings[idx][1], items.value);
+				}
+				else if (items.type == "checkbox") {
+					Helper.setValue(Stage.formBindings[idx][1], items.checked);
+				}
+				else if ((items.type == "range") || (items.type == "number")) {
+					Helper.setValue(Stage.formBindings[idx][1], items.valueAsNumber);
+				}
+				else {
+					Helper.setValue(Stage.formBindings[idx][1], items.value);
+				}
+			}
+			// remove form here
+			Stage.activeForm.parent.removeChild(Stage.activeForm.newForm);
+			Stage.activeForm = null;
+			Stage.pause = false;
+        }, false);
+
+	return element;
+}
+function checkbox(param) {
+	var element = document.createElement("input");
+	element.type = "checkbox";
+	element.name = param.name;
+	element.id = param.name;
+	if (param.checked)
+		element.checked = param.checked;
+	else
+		element.checked = false;
+	if (param.bind) {
+		element.checked = Helper.getValue(param.bind);
+		Stage.formBindings.push([param.name, param.bind]);
+	}
+	return element;
+}
+function radio(param) {
+	var element = document.createElement("input");
+	element.type = "radio";
+	element.name = param.name;
+	element.id = param.value;
+	element.value = param.value;
+	if (param.checked)
+		element.checked = param.checked;
+	else
+		element.checked = false;
+	if (param.bind) {
+		element.checked = (element.value == Helper.getValue(param.bind));
+		Stage.formBindings.push([param.value, param.bind]);
+	}
+	return element;
+}
+function spinbox(param) {
+	var element = document.createElement("input");
+	element.type = "number";
+	element.name = param.name;
+	element.id = param.name;
+	if (param.min != null) element.min = param.min;
+	if (param.max != null) element.max = param.max;
+	if (param.step != null) element.step = param.step;
+	if (param.value != null) element.value = param.value;
+	if (param.bind) {
+		element.value = Helper.getValue(param.bind);
+		Stage.formBindings.push([param.name, param.bind]);
+	}
+	return element;
+}
+function slider(param) {
+	var element = document.createElement("input");
+	element.type = "range";
+	element.name = param.name;
+	element.id = param.name;
+	if (param.min != null) element.min = param.min;
+	if (param.max != null) element.max = param.max;
+	if (param.step != null) element.step = param.step;
+	if (param.value != null) element.value = param.value;
+	if (param.bind) {
+		element.value = Helper.getValue(param.bind);
+		Stage.formBindings.push([param.name, param.bind]);
+	}
+	return element;
+}
+// form - create a default HTML form
+function form(param) {
+	var f = new Form();
+	var fset = null;
+	f.Create(param[0]);
+	for (var i=1; i<param.length; i+=2) {
+		// if this element is a fieldset, revert to default fieldset
+		if (param[i] == fieldset)
+			fset = null;
+		
+		// append element to active fieldset
+		if ((param[i] == input) || 
+			(param[i] == select) || 
+			(param[i] == spinbox) ||
+			(param[i] == slider) ||
+			(param[i] == textarea)) {
+			f.AddChild(input_label(param[i+1].name, param[i+1].tip), fset);
+		}
+		f.AddChild(param[i].call(this, param[i+1]), fset);	
+		if (param[i] == checkbox) {
+			f.AddChild(input_label(param[i+1].name, param[i+1].tip), fset);
+		}
+		if (param[i] == radio) {
+			f.AddChild(input_label(param[i+1].value, param[i+1].tip), fset);
+		}
+		
+		// if this element is a fieldset, attach succeeding elements to it
+		if (param[i] == fieldset)
+			fset = param[i+1];
+	}
+
+	Stage.activeForm = f;
+	Stage.pause = true;
+}
 // message - display a message box
 function message(param) {
 	alert(param);
 }
 // checkpoint - loads/saves at a given checkpoint
 function checkpoint(param) {
-	if (!supportsLocalStorage()) return;
+	if (!Helper.supportsLocalStorage()) return;
 
 	if (param == "save") {
 		localStorage.clear();
@@ -1053,6 +1329,10 @@ function checkpoint(param) {
 				localStorage["l4_"+i+"_lineHeight"] = Stage.layers[4][i].lineHeight;
 				localStorage["l4_"+i+"_fontWeight"] = Stage.layers[4][i].fontWeight;
 				localStorage["l4_"+i+"_fontColor"] = Stage.layers[4][i].fontColor;
+				localStorage["l4_"+i+"_tagFamily"] = Stage.layers[4][i].tagFamily;
+				localStorage["l4_"+i+"_tagSize"] = Stage.layers[4][i].tagSize;
+				localStorage["l4_"+i+"_tagWeight"] = Stage.layers[4][i].tagWeight;
+				localStorage["l4_"+i+"_tagColor"] = Stage.layers[4][i].tagColor;
 				localStorage["l4_"+i+"_timeout"] = Stage.layers[4][i].timeout;
 				localStorage["l4_"+i+"_offset_x"] = Stage.layers[4][i].textOffset.x;
 				localStorage["l4_"+i+"_offset_y"] = Stage.layers[4][i].textOffset.y;
@@ -1113,7 +1393,8 @@ function checkpoint(param) {
 		for (var i=0; i<Stage.formStyle.length; i++) {
 			localStorage["formStyle_"+i] = Stage.formStyle[i];
 		}
-		
+		// Store config
+		localStorage["Config"] = JSON.stringify(Config);
 	}
 	else if (param == "load") {
 		if (localStorage.length <= 0) {
@@ -1209,6 +1490,10 @@ function checkpoint(param) {
 				sb.lineHeight = localStorage["l4_"+i+"_lineHeight"];
 				sb.fontWeight = localStorage["l4_"+i+"_fontWeight"];
 				sb.fontColor = localStorage["l4_"+i+"_fontColor"];
+				sb.tagFamily = localStorage["l4_"+i+"_tagFamily"];
+				sb.tagSize = localStorage["l4_"+i+"_tagSize"];
+				sb.tagWeight = localStorage["l4_"+i+"_tagWeight"];
+				sb.tagColor = localStorage["l4_"+i+"_tagColor"];
 				sb.timeout = parseFloat(localStorage["l4_"+i+"_timeout"]);
 				sb.textOffset.x = parseInt(localStorage["l4_"+i+"_offset_x"]);
 				sb.textOffset.y = parseInt(localStorage["l4_"+i+"_offset_y"]);
@@ -1287,6 +1572,8 @@ function checkpoint(param) {
 		for (var i=0; i<parseInt(localStorage["forms_style_count"]); i++) {
 			Stage.formStyle.push(localStorage["formStyle_"+i]);
 		}
+		// populate Config
+		Config = JSON.parse(localStorage["Config"]);
 		
 		// then jump to checkpoint location
 		//alert (localStorage["sequence"] +" "+localStorage["frame"]);
@@ -1342,7 +1629,7 @@ function Sounds() {
 					if (this.repeat < 0)
 						this.audio.loop = true;
 					else {
-						addEvent(this.audio, 'ended', (function(self) {
+						Helper.addEvent(this.audio, 'ended', (function(self) {
 							return function() {
 								if (self.repeat > 0) {
 									self.Play(false);
@@ -1352,7 +1639,7 @@ function Sounds() {
 				        })(this), false);					
 					}
 					*/
-					addEvent(this.audio, 'ended', (function(self) {
+					Helper.addEvent(this.audio, 'ended', (function(self) {
 						return function() {
 							if (self.repeat > 0) {
 								self.Play(false);
@@ -1366,7 +1653,7 @@ function Sounds() {
 							}
 						}
 					})(this), false);
-					this.audio.volume = 1;
+					this.audio.volume = (Config.volumeAudio != null) ? Config.volumeAudio : 1;
 					if (!this.isPaused) {
 						if (this.delay > 0)
 							setTimeout((function(self) { return function () { self.audio.play(); }; })(this), this.delay * 1000);
@@ -1376,7 +1663,7 @@ function Sounds() {
 					this.initd = true;
 				}
 				else {
-					this.audio.volume = 1;
+					this.audio.volume = (Config.volumeAudio != null) ? Config.volumeAudio : 1;
 					this.isPaused = false;
 					if (this.delay > 0)
 						setTimeout((function(self) { return function () { self.audio.play(); }; })(this), this.delay * 1000);
@@ -1441,28 +1728,33 @@ function Movie() {
 			if ((this.movie != null) && 
 				(this.src != null)) {
 				
-				addEvent(this.movie, 'ended', (function(self) {
+				Helper.addEvent(this.movie, 'ended', (function(self) {
 					return function() {
 						self.isStopping = true;
 					}
 				})(this), false);			
-				addEvent(this.movie, 'mouseup', function(e) {
+				Helper.addEvent(this.movie, 'mouseup', function(e) {
 					if (e.which != 1) return;
 					vid.isStopping = true;
 		        }, false);
-				addEvent(this.movie, 'touchend', function(e) {
+				Helper.addEvent(this.movie, 'touchend', function(e) {
 					e.preventDefault();
 					vid.isStopping = true;
 				}, false);
+				
 				this.movie.src = this.src;
-				this.movie.width = 0.95 * Stage.canvas.width;
-				this.movie.height = 0.95 * Stage.canvas.height;
-				var x = Stage.canvas.offsetLeft + 0.025 * Stage.canvas.width;// - window.pageXOffset;
-				var y = Stage.canvas.offsetTop + 0.025 * Stage.canvas.height;// - window.pageYOffset;
+				var x = Stage.canvas.offsetLeft;// - window.pageXOffset;
+				var y = Stage.canvas.offsetTop;// - window.pageYOffset;
+				if (Config.movieSize) {
+					this.movie.width = Config.movieSize * Stage.canvas.width;
+					this.movie.height = Config.movieSize * Stage.canvas.height;
+					x += (1.0-Config.movieSize)/2 * Stage.canvas.width;// - window.pageXOffset;
+					y += (1.0-Config.movieSize)/2 * Stage.canvas.height;// - window.pageYOffset;
+				}
 				this.movie.setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px');
 				this.initd = true;
 				this.movie.autoplay = true;
-				this.movie.volume = 1;
+				this.movie.volume = (Config.volumeVideo != null) ? Config.volumeVideo : 1;
 				this.parent = Stage.canvas.parentElement;
 				this.parent.appendChild(this.movie);
 			}
@@ -1478,6 +1770,43 @@ function Movie() {
 		}
 	}
 	return vid;
+}
+// Default form element
+function Form() {
+	var frm = {
+		newForm: document.createElement("form"),
+		newFieldset: document.createElement("fieldset"),
+		id: 0,
+		parent: 0,
+		
+		Create: function(id) {
+			this.newForm.id = id;
+			var x = Stage.canvas.offsetLeft;// - window.pageXOffset;
+			var y = Stage.canvas.offsetTop; // - window.pageYOffset;
+			this.newForm.setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px;');
+			
+			var newHeading = document.createElement("h1");
+			newHeading.innerHTML = id;
+			this.newForm.appendChild(newHeading);
+			var newHr = document.createElement("hr");
+			this.newForm.appendChild(newHr);
+			
+			this.newFieldset.id = "_fieldset_";
+			this.newForm.appendChild(this.newFieldset);
+
+			this.parent = Stage.canvas.parentElement;
+			this.parent.appendChild(this.newForm);
+			Stage.formBindings.splice(0, Stage.formBindings.length);
+		},
+		
+		AddChild: function(element, fieldsetname) {
+			if (fieldsetname != null)
+				document.getElementById(fieldsetname).appendChild(element);
+			else
+				this.newFieldset.appendChild(element);
+		}
+	}
+	return frm;
 }
 // Background/Overlay image
 function Backdrop() {
@@ -1528,6 +1857,12 @@ function Backdrop() {
 				bg.IsLoaded();
 			}
 			this.image.src = file;
+			
+			// configure transition
+			if (Config.transTime != null) {
+				this.transTime = (Config.transTime > 0) ? Config.transTime : 0.01;
+			}
+			
 			this.update = false;
 			return this.canvas.id;
 		},
@@ -1737,6 +2072,7 @@ function ScriptBox() {
 		redraw: true,
 		update: false,
 		origin: {x:0, y:0},			// gui origin is topleft
+		dimStyle: new Array(),
 		
 		isready: true,				// flow control
 		changed: true,
@@ -1757,21 +2093,45 @@ function ScriptBox() {
 		fontWeight: 'normal',
 		lineHeight: '18',
 		textOffset: {x:10, y:20},
+		tagFamily: 'Verdana',
+		tagColor: '#c8ffc8',
+		tagSize: '14px',
+		tagWeight: 'bold',
 		
 		Create: function(w, h) {
 			this.src = '';
 			this.vpwidth = w;	// viewport dimensions
 			this.vpheight = h;
-			this.origin.x = this.vpwidth * 1/8;
-			this.origin.y = this.vpheight * 3/4;
-			this.font = '14px normal Verdana';
+			this.origin.x = this.vpwidth * (1-Config.boxWidth)/2; 	//1/8;
+			this.origin.y = this.vpheight * (1-Config.boxHeight);	//3/4;
 			
 			// create a default script box: dim at bottom
 			this.canvas = document.createElement('canvas');
 			//this.canvas.id = 'sb_canvas';	// fixed id for script box
 			this.context = this.canvas.getContext('2d');
-			this.canvas.setAttribute('width', this.vpwidth * 3/4);
-			this.canvas.setAttribute('height', this.vpheight * 1/4);
+			this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+			this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+			
+			// configure font style
+			if (Config.boxFontStyle) { 
+				var subs = Helper.parseFontString(Config.boxFontStyle);
+				
+				if (subs.length > 0) this.fontWeight = subs[0];
+				if (subs.length > 1) {
+					this.fontSize = subs[1];
+					this.lineHeight = eval(subs[1].substring(0,subs[1].length-2)) + 4;
+				}			
+				if (subs.length > 2) this.fontFamily = subs[2].replace(/\'/g,'');
+				if (subs.length > 3) this.fontColor = subs[3];
+			}
+			if (Config.boxTagStyle) {
+				var subs = Helper.parseFontString(Config.boxTagStyle);
+				
+				if (subs.length > 0) this.tagWeight = subs[0];
+				if (subs.length > 1) this.tagSize = subs[1];
+				if (subs.length > 2) this.tagFamily = subs[2].replace(/\'/g,'');
+				if (subs.length > 3) this.tagColor = subs[3];
+			}
 
 			// configure CanvasText
 			this.canvasText.config({
@@ -1797,34 +2157,41 @@ function ScriptBox() {
 					box.isready = true;
 			}
 			this.prompt.src = this.psrc;
+			
+			// configure dim style
+			if (Config.boxDimStyle) {
+				var subs = Config.boxDimStyle.split(' ');
+				for (var idx in subs)
+					this.dimStyle.push(subs[idx]);
+			}
 		},
 		
 		Update: function(elapsed) {
 			if (this.changed) {
 				switch (this.pos) {
 					case 'bottom':
-						this.origin.x = this.vpwidth * 1/8;
-						this.origin.y = this.vpheight * 3/4;
-						//this.canvas.setAttribute('width', this.vpwidth * 3/4);
-						this.canvas.setAttribute('height', this.vpheight * 1/4);
+						this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
+						this.origin.y = this.vpheight * (1-Config.boxHeight);
+						this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+						this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
 						break;
 					case 'center':
-						this.origin.x = this.vpwidth * 1/8;
-						this.origin.y = this.vpheight * 3/8;
-						//this.canvas.setAttribute('width', this.vpwidth * 3/4);
-						this.canvas.setAttribute('height', this.vpheight * 1/4);
+						this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
+						this.origin.y = this.vpheight * (1-Config.boxHeight)/2;
+						this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+						this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
 						break;
 					case 'top':
-						this.origin.x = this.vpwidth * 1/8;
+						this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
 						this.origin.y = 0;
-						//this.canvas.setAttribute('width', this.vpwidth * 3/4);
-						this.canvas.setAttribute('height', this.vpheight * 1/4);
+						this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+						this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
 						break;
 					case 'full':
-						this.origin.x = this.vpwidth * 1/8;
-						this.origin.y = this.vpheight * 1/16;
-						//this.canvas.setAttribute('width', this.vpwidth * 3/4);
-						this.canvas.setAttribute('height', this.vpheight * 7/8)
+						this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
+						this.origin.y = this.vpheight * (1-Config.boxFullHeight)/2;
+						this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+						this.canvas.setAttribute('height', this.vpheight * Config.boxFullHeight)
 						break;
 				}
 				switch (this.back) {
@@ -1882,14 +2249,17 @@ function ScriptBox() {
 				if (this.back == 'dim') {
 					//alert("image dim");
 					this.context.globalAlpha = 0.5;
-					var grd=this.context.createLinearGradient(0,0,0,this.canvas.height);
-					grd.addColorStop(0,"#808080");
-					grd.addColorStop(1,"#000000");
-					this.context.fillStyle=grd;
+					if (this.dimStyle.length > 1) {
+						var grd=this.context.createLinearGradient(0,0,0,this.canvas.height);
+						grd.addColorStop(0,this.dimStyle[1]);
+						grd.addColorStop(1/this.canvas.height,this.dimStyle[0]);
+						grd.addColorStop(1,this.dimStyle[1]);
+						this.context.fillStyle=grd;
+					} 
+					else {
+						this.context.fillStyle = this.dimStyle[0];
+					}
 					this.context.fillRect(0,0,this.canvas.width,this.canvas.height);
-					
-					//this.context.fillStyle = '#404040';
-					//this.context.fillRect(0,0,this.canvas.width,this.canvas.height);
 				}
 				if (this.back == 'image') {
 					//alert("image back");
@@ -1902,9 +2272,11 @@ function ScriptBox() {
 					this.context.globalAlpha = 1;
 					// draw the avatar if any
 					var avatarOffsetX = 0;
-					if (this.avatar != null) {
-						avatarOffsetX = this.avatar.width;
-						this.context.drawImage(this.avatar, this.textOffset.x/2, (this.canvas.height - this.avatar.height)/2);
+					if (Config.actorShowAvatar == true) {
+						if (this.avatar != null) {
+							avatarOffsetX = this.avatar.width;
+							this.context.drawImage(this.avatar, this.textOffset.x/2, (this.canvas.height - this.avatar.height)/2);
+						}
 					}
 					var ret = this.canvasText.drawText({
 						text:this.text,
@@ -1928,7 +2300,7 @@ function ScriptBox() {
 					// draw hover
 					if (this.menuHover != -1) {
 						this.context.globalAlpha = 0.25;						
-						this.context.fillStyle = '#404040';
+						this.context.fillStyle = Config.boxMenuHilite;
 						this.context.fillRect(5,this.jumpTo[this.menuHover].hotspot[1] - this.lineHeight + 4,
 												this.canvas.width - 10,this.lineHeight);
 					}
@@ -1958,7 +2330,7 @@ function ScriptBox() {
 			if (this.jumpTo.length == 0) return false;
 			if (this.jumpTo[0].hotspot.length < 2) return false;
 			if (Stage.coord.x < this.origin.x) return false;
-			if (Stage.coord.x > this.origin.x + this.vpwidth * 3/4) return false;
+			if (Stage.coord.x > this.origin.x + this.vpwidth * Config.boxWidth) return false;
 			
 			for (var i in this.jumpTo) {
 				if (Stage.coord.y < this.origin.y + this.jumpTo[i].hotspot[1] - this.lineHeight) continue;
@@ -2047,6 +2419,10 @@ function Character() {
 			this.canvas.id = escape(id);
 			this.context = this.canvas.getContext('2d');
 
+			// configure transition
+			if (Config.transTime != null) {
+				this.transTime = (Config.transTime > 0) ? Config.transTime : 0.01;
+			}
 			this.isready = true;
 			this.update = false;		
 			return this.canvas.id;
@@ -2231,7 +2607,7 @@ function Particle() {
 		Reset: function() {
 			this.x = Math.random() * 1.2 * this.vieww - 0.2 * this.vieww;
 			//this.y = Math.random() * this.viewh;
-			this.y = Math.random() * -100;	// somewhere above the canvas
+			this.y = Math.random() * (-100);	// somewhere above the canvas
 			this.yvel = Math.random() * 40 + 10;
 			this.xvel = this.yvel * Math.tan(Math.PI/12);
 		},
@@ -2239,7 +2615,7 @@ function Particle() {
 		Update: function(elapsed, reset) {		
 			this.x += 2*this.xvel;
 			this.y += 2*this.yvel;
-			//this.yvel += 0.5;		// accelerate
+			//this.yvel += 1;		// accelerate
 			if ((this.x > this.vieww) || (this.y > this.viewh + 50)) {
 				if (reset) 
 					this.Reset();
@@ -2418,6 +2794,8 @@ var Stage = {
 	*/
 	formStack: new Array(),
 	formStyle: new Array(),
+	formBindings: new Array(),
+	activeForm: null,
 	
 	Init: function(canvasId, width, height) {
 		// DEBUG: for FPS monitoring
@@ -2439,45 +2817,44 @@ var Stage = {
 		this.prevPos = this.coord;
 
 		// add event listeners here for user inputs
-		// note jQuery has mousemove but no touchmove, so to be consistent, add all here	
-		addEvent(this.canvas, 'mousemove', function(e) {
+		Helper.addEvent(this.canvas, 'mousemove', function(e) {
 			Stage.mouseOut = false;
 			Stage.mouseUp = false;
 			Stage.mouseDown = false;
 			Stage.mouseMove = true;
 			Stage.HandleEvents(e);
         }, false);
-		addEvent(this.canvas, 'mousedown', function(e) {
+		Helper.addEvent(this.canvas, 'mousedown', function(e) {
 			if (e.which != 1) return;
 			Stage.mouseDown = true;
 			Stage.HandleEvents(e);
         }, false);
-		//addEvent(this.canvas, 'click', function(e) {
-		addEvent(this.canvas, 'mouseup', function(e) {
+		//Helper.addEvent(this.canvas, 'click', function(e) {
+		Helper.addEvent(this.canvas, 'mouseup', function(e) {
 			if (e.which != 1) return;
 			Stage.mouseUp = true;
 			Stage.mouseDown = false;
 			Stage.HandleEvents(e);
         }, false);
-		addEvent(this.canvas, 'mouseover', function(e) {
+		Helper.addEvent(this.canvas, 'mouseover', function(e) {
 			Stage.mouseOut = false;
 			Stage.HandleEvents(e);
         }, false);
-		addEvent(this.canvas, 'mouseout', function(e) {
+		Helper.addEvent(this.canvas, 'mouseout', function(e) {
 			Stage.mouseOut = true;
 			Stage.HandleEvents(e);
         }, false);
-		addEvent(this.canvas, 'touchstart', function(e) {
+		Helper.addEvent(this.canvas, 'touchstart', function(e) {
 			e.preventDefault();
 			Stage.touchStart = true;
 			Stage.HandleEvents(e);
 		}, false);
-		addEvent(this.canvas, 'touchmove', function(e) {
+		Helper.addEvent(this.canvas, 'touchmove', function(e) {
 			e.preventDefault();
 			Stage.mouseMove = true;
 			Stage.HandleEvents(e);
 		}, false);
-		addEvent(this.canvas, 'touchend', function(e) {
+		Helper.addEvent(this.canvas, 'touchend', function(e) {
 			e.preventDefault();
 			Stage.touchEnd = true;
 			Stage.HandleEvents(e);
@@ -2503,6 +2880,17 @@ var Stage = {
 		// create the script
 		this.script = new Script();
 		
+		// setup default forms theme
+		if (Config.formFontStyle) {
+			var subs = Helper.parseFontString(Config.formFontStyle);
+			if (subs.length >= 4) {
+				this.formStyle.push(subs.slice(0,3).join(' '));
+				this.formStyle.push(subs.slice(3).join(' '));
+			}
+			else
+				this.formStyle.push(param);
+		}
+
 		// setup timer tick
 		this.update = true;		// use this.update = false to wait when loading resources
 		this.redraw = true;		// use this.redraw = false when redraw not necessary
@@ -2512,7 +2900,7 @@ var Stage = {
 	
 	Update: function(elapsed) {
 		// Note: set this.redraw to true if update needs a redraw
-		this.inputFocus = true;
+		this.inputFocus = (this.activeForm == null);
 		if (this.layers[4].length > 0) {
 			for (var i in this.layers[4]) {
 				if (this.layers[4][i].inputFocus) 
@@ -2828,12 +3216,11 @@ var Stage = {
 		if (Math.abs(this.coord.x-this.targetPos.x) > 0.1) return true;
 		if (Math.abs(this.coord.x-this.targetPos.x) > 0.1) return true;
 		return false;
-		//return true;
 	},
 	
 	Transition: function(type) {
 		if (type == 'show_actor')
-			this.transTime = 1;
+			this.transTime = (Config.transTime != null) ? Config.transTime : 0.01;
 	},
 	
 	Tick: function(interval) {	
@@ -2892,7 +3279,9 @@ var Stage = {
 	}
 };
 
-// finally, the script is loaded
+// ensure config is not null
+var Config = {};
+// finally, the script and config is loaded
 for (var j in TOC) {
-	includeJs(TOC[j]);
+	Helper.includeJs(TOC[j]);
 }
