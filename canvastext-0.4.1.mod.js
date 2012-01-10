@@ -22,6 +22,8 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
  /* Modified by lo'ner for VN-Canvas
+ 01.07.12 - added support for scrolling
+ 01.06.12 - added support for text alignment
  12.03.11 - added support for \n in string
  12.04.11 - added classText to distinguish menu item
 		  - added text coordinate return value to parent
@@ -62,6 +64,9 @@ function CanvasText() {
      */
     this.initTime = null;
     this.endTime = null;
+	
+	// MOD: Support for brute force scrolling
+	this.scrollText = false;
 
     /**
      * Set the main values.
@@ -137,15 +142,37 @@ function CanvasText() {
             alert("You should specify a correct \"x\" & \"y\" axis value.");
             return false;
         }
-        // Reset our cacheCanvas.
-        this.bufferCanvas.width = this.bufferCanvas.width;
-        // Set the color.
-        this.bufferContext.fillStyle = this.fontColor;
-        // Set the size & font family.
-        this.bufferContext.font = this.fontWeight + ' ' + this.fontSize + ' ' + this.fontFamily;
-        // Parse and draw the styled text.
 		// MOD: added return value
-        var ret = this.drawStyledText(textInfo);
+		// MOD: support scroll
+		// MOD: dynamically adjust bufferCanvas size
+		var ret;
+		if (!textInfo.scroll[0]) {
+			this.scrollText = false;
+	        // Reset our cacheCanvas.
+	        this.bufferCanvas.width = this.bufferCanvas.width;
+	        // Set the color.
+	        this.bufferContext.fillStyle = this.fontColor;
+	        // Set the size & font family.
+	        this.bufferContext.font = this.fontWeight + ' ' + this.fontSize + ' ' + this.fontFamily;
+	        // Parse and draw the styled text.
+	        ret = this.drawStyledText(textInfo);
+		}
+		else {
+			if (!this.scrollText) {
+		        // Reset our cacheCanvas.
+		        this.bufferCanvas.width = this.bufferCanvas.width;
+		        // Set the color.
+		        this.bufferContext.fillStyle = this.fontColor;
+		        // Set the size & font family.
+		        this.bufferContext.font = this.fontWeight + ' ' + this.fontSize + ' ' + this.fontFamily;
+				// Parse and draw the styled text.
+				ret = this.drawStyledText(textInfo);
+				if (ret.linecount * this.lineHeight > this.bufferCanvas.height) 
+					this.bufferCanvas.height = (ret.linecount+1) * this.lineHeight;
+				else
+					this.scrollText = true;
+			}
+		}
 		// ENDMOD
         // Cache the result.
         if (textInfo.cacheId != undefined) {
@@ -156,7 +183,8 @@ function CanvasText() {
         //console.log((this.endTime-this.initTime)/1000);
         // Draw or return the final image.
         if (!textInfo.returnImage) {
-            this.context.drawImage(this.bufferCanvas, 0, 0);
+			// MOD: for scrolling
+            this.context.drawImage(this.bufferCanvas, 0, Math.round(textInfo.scroll[1]));
         } else if (textInfo.returnImage) {
             return this.bufferCanvas;
         }
@@ -180,13 +208,14 @@ function CanvasText() {
 		// MOD vars
 		var endX, endY;
 		var classText = false;
-		var ret = {endpt:0, hotspot:[]};
+		var ret = {endpt:0, linecount:0, hotspot:[]};
 
         // The main regex. Looks for <style>, <class> or <br /> tags.
         var match = text.match(/<\s*br\s*\/>|<\s*class=["|']([^"|']+)["|']\s*\>([^>]+)<\s*\/class\s*\>|<\s*style=["|']([^"|']+)["|']\s*\>([^>]+)<\s*\/style\s*\>|[^<]+/g);
         var innerMatch = null;
 
         // Let's draw something for each match found.
+		var linecount = 0;
         for (i = 0; i < match.length; i++) {
             // Save the current context.
             this.bufferContext.save();
@@ -304,6 +333,7 @@ function CanvasText() {
                 // Check if current fragment is a line break.
                 y += parseInt(this.lineHeight, 10) * 1.0;
                 x = textInfo.x;
+				linecount++;
                 continue;
             } else {
                 // Text without special style.
@@ -399,26 +429,46 @@ function CanvasText() {
             }
 
             // Let's draw the text
+			//linecount += textLines.length;
             for (n = 0; n < textLines.length; n++) {
                 // Start a new line.
                 if (textLines[n].linebreak) {
                     y += parseInt(this.lineHeight, 10);
                     x = textInfo.x;
+					linecount++;
                 }
 				// MOD
 				if (classText)
 					ret.hotspot.push([x, y]);
-                this.bufferContext.fillText(textLines[n].text, x, y);
+				this.bufferContext.globalAlpha = textInfo.alpha;
+				if (textInfo.align == 'center') {
+					this.bufferContext.textAlign = 'center';
+					this.bufferContext.fillText(textLines[n].text, x+textInfo.boxWidth/2, y);
+				}
+				else if ((textInfo.align == 'right') || (textInfo.align == 'end')) {
+					this.bufferContext.textAlign = 'end';
+					this.bufferContext.fillText(textLines[n].text, x+textInfo.boxWidth, y);
+				}
+				else {
+					this.bufferContext.textAlign = 'start';
+					this.bufferContext.fillText(textLines[n].text, x, y);
+				}
                 // Increment X position based on current text measure.
                 x += this.bufferContext.measureText(textLines[n].text).width;
 				// MOD: added endX and endY
-				endX = x;
+				if (textInfo.align == 'center')
+					endX = (x + textInfo.boxWidth)/2;
+				else if ((textInfo.align == 'right') || (textInfo.align == 'end'))
+					endX = textInfo.boxWidth - x;
+				else
+					endX = x;
 				endY = y;
             }
 
             this.bufferContext.restore();
         }
 		ret.endpt = [endX, endY];
+		ret.linecount = linecount;
 		return ret;
     };
 

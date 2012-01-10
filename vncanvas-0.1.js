@@ -43,6 +43,13 @@
 ******************************************************************************/
 /******************************************************************************
 Revision history:
+01.09.12 - Added themes
+		 - Forms can be instantiated in-game
+01.06.12 - Implemented text effects
+01.04.12 - Bug fix: avatar, checkpoint
+		 - Implemented additional actor effects
+		 - Implemented additional overlay effects
+		 - Implemented additional background effects
 12.30.11 - Simplified 'audio'
 12.29.11 - Added configuration file (just the basics)
 12.28.11 - Added a subset of HTML forms
@@ -112,12 +119,91 @@ var Helper = {
 		var idx = Helper.findVar(id);
 		if (idx != -1)
 			Stage.variables[idx].value = value;
-		
-		if (typeof value == 'string') {
-			eval("Config."+id +"=\""+value+"\"");
+		else {
+			eval("Config."+id+"="+value);
+			// a configuration variable has changed, reflect it back
+			Helper.configUpdate(id);
+			Stage.redraw = true;
 		}
-		else
-			eval("Config."+id +"="+value);
+	},
+	// Helper function to update game config
+	configUpdate: function (id) {
+		switch(id) {
+			case "activeTheme": 
+				// formstyle
+				if (Config.activeTheme.formFontStyle) {
+					Stage.formStyle.splice(0, Stage.formStyle.length);
+					var subs = Helper.parseFontString(Config.activeTheme.formFontStyle);
+					if (subs.length >= 4) {
+						Stage.formStyle.push(subs.slice(0,3).join(' '));
+						Stage.formStyle.push(subs.slice(3).join(' '));
+					}
+					else
+						Stage.formStyle.push(param);
+				}
+				// tooltips are automatically updated
+				// script box
+				if (Config.activeTheme.boxFontStyle) { 
+					var subs = Helper.parseFontString(Config.activeTheme.boxFontStyle);
+					
+					if (subs.length > 0) Stage.layers[4][0].fontWeight = subs[0];
+					if (subs.length > 1) {
+						Stage.layers[4][0].fontSize = subs[1];
+						Stage.layers[4][0].lineHeight = eval(subs[1].substring(0,subs[1].length-2)) + 4;
+					}			
+					if (subs.length > 2) Stage.layers[4][0].fontFamily = subs[2].replace(/\'/g,'');
+					if (subs.length > 3) Stage.layers[4][0].fontColor = subs[3];
+				}
+				if (Config.activeTheme.boxTagStyle) {
+					var subs = Helper.parseFontString(Config.activeTheme.boxTagStyle);
+					
+					if (subs.length > 0) Stage.layers[4][0].tagWeight = subs[0];
+					if (subs.length > 1) Stage.layers[4][0].tagSize = subs[1];
+					if (subs.length > 2) Stage.layers[4][0].tagFamily = subs[2].replace(/\'/g,'');
+					if (subs.length > 3) Stage.layers[4][0].tagColor = subs[3];
+				}
+				if (Config.activeTheme.boxDimStyle) {
+					var subs = Config.activeTheme.boxDimStyle.split(' ');
+					Stage.layers[4][0].dimStyle.splice(0,Stage.layers[4][0].dimStyle.length);
+					for (var idx in subs)
+						Stage.layers[4][0].dimStyle.push(subs[idx]);
+				}
+				// configure CanvasText
+				Stage.layers[4][0].canvasText.config({
+			        canvas: Stage.layers[4][0].canvas,
+			        context: Stage.layers[4][0].context,
+			        fontFamily: Stage.layers[4][0].fontFamily,
+			        fontSize: Stage.layers[4][0].fontSize,
+			        fontWeight: Stage.layers[4][0].fontWeight,
+			        fontColor: Stage.layers[4][0].fontColor,
+			        lineHeight: Stage.layers[4][0].lineHeight
+			    });			
+				Stage.layers[4][0].canvasText.defineClass("menu", {
+			        fontFamily: Stage.layers[4][0].fontFamily,
+			        fontSize: Stage.layers[4][0].fontSize,
+			        fontWeight: Stage.layers[4][0].fontWeight,
+			        fontColor: Stage.layers[4][0].fontColor,
+					fontStyle: "italic"
+				});
+				break;
+			case "volumeAudio":
+				for (var idx in Stage.sounds) {
+					if (Stage.sounds[idx].length > 0) {
+						for (var entry in Stage.sounds[idx]) {
+							if ((!Stage.sounds[idx][entry].isPaused) && (!Stage.sounds[idx][entry].isStopping))
+								Stage.sounds[idx][entry].audio.volume = Config.volumeAudio;
+						}
+					}
+				}
+				break;
+			case "volumeVideo":
+				for (var idx in Stage.videos) {
+					if (!Stage.videos[idx].isStopping) {
+						this.videos[idx].movie.volume = Config.volumeVideo;
+					}
+				}
+				break;
+		}
 	},
 	// Helper function to parse font string
 	parseFontString: function (s) {
@@ -146,6 +232,243 @@ var Helper = {
 			}
 		}
 		return subs;
+	},
+	// Helper function to process effects
+	processEffects: function (obj, elapsed) {
+		obj.target_alpha = 1.0;
+		switch (obj.effects) {
+			case 'scale':
+			case 'scalein':
+				obj.Reset(false);
+				obj.alpha = 1.0;
+				obj.drawn = true;
+				if (Math.abs(1-obj.target_scale/obj.fxparam) <= 0.01) {
+					obj.effects = 'done';
+					//obj.drawn = true;
+					obj.scale = 1.0;
+					//obj.target_scale = 1.0;
+				}
+				else {
+					obj.scale = Math.exp(Math.log(obj.fxparam/obj.target_scale)*elapsed/(obj.transTime * 1000));
+					obj.target_scale *= obj.scale;
+				}
+				break;
+			case 'rotate':
+			case 'rotatein':
+				obj.Reset(false);
+				obj.alpha = 1.0;
+				obj.drawn = true;
+				if (Math.abs(obj.target_rotation - obj.fxparam) <= 0.1) {
+					obj.effects = 'done';
+					//obj.drawn = true;
+					obj.rotation = 0;
+					obj.target_rotation = 0;
+				}
+				else {
+					obj.rotation = (obj.fxparam - obj.target_rotation)* elapsed/(obj.transTime * 1000);
+					obj.target_rotation += obj.rotation;
+				}
+				break;
+			case 'fadein':
+			case 'dissolvein':
+			case 'ghostin':
+				obj.Reset(false);
+				if (obj.effects == 'ghostin') obj.target_alpha = 0.5;
+				if (obj.alpha >= obj.target_alpha) {
+					obj.effects = 'done';
+					obj.drawn = true;
+				}
+				else {
+					obj.alpha += elapsed/(obj.transTime * 1000);
+				}
+				break;
+			case 'fadeout':
+			case 'dissolveout':
+			case 'ghostout':
+				if (obj.alpha <= 0.0) {
+					obj.effects = 'done';
+					obj.drawn = true;
+					obj.visible = false;
+				}
+				else {
+					obj.alpha -= elapsed/(obj.transTime * 1000);
+				}
+				obj.redraw = true;
+				break;
+			case 'nonein':
+			case 'in':
+				obj.Reset(false);
+				obj.alpha = 1.0;
+				obj.effects = 'done';
+				obj.drawn = true;
+				break;
+			case 'rotateout':
+			case 'scaleout':
+			case 'noneout':
+			case 'out':
+				obj.alpha = 0.0;
+				obj.effects = 'done';
+				obj.drawn = true;
+				obj.redraw = true;
+				obj.visible = false;
+				break;
+			case 'left':
+			case 'leftin':
+				obj.Reset(false);
+				obj.drawn = true;
+				obj.alpha = 1.0;
+				obj.effects = 'done'
+				obj.pos.x = -obj.canvas.width;
+				break;
+			case 'right':
+			case 'rightin':
+				obj.Reset(false);
+				obj.drawn = true;
+				obj.alpha = 1.0;
+				obj.effects = 'done'
+				obj.pos.x = Stage.canvas.width + obj.canvas.width;
+				break;
+			case 'bottom':
+			case 'bottomin':
+				obj.Reset(false);
+				obj.drawn = true;
+				obj.alpha = 1.0;
+				obj.effects = 'done';
+				obj.pos.y = Stage.canvas.height + obj.canvas.height;
+				break;
+			case 'top':
+			case 'topin':
+				obj.Reset(false);
+				obj.drawn = true;
+				obj.alpha = 1.0;
+				obj.effects = 'done';
+				obj.pos.y = -obj.canvas.height;
+				break;
+			case 'leftout':
+			case 'rightout':
+			case 'bottomout':
+			case 'topout':
+				obj.redraw = true;
+				obj.posMode = obj.effects;
+				obj.drawn = true;
+				obj.effects = 'done';
+				break;
+			case 'done':
+			default:
+				obj.drawn = true;
+				break;
+		}	
+	},
+	// Helper function to draw visual elements
+	drawElements: function(obj, layer, defaults) {
+		if (!obj.visible) return false;
+		var positionX, positionY;
+		var factorX = defaults[0];
+		var factorY = defaults[1];
+		var running_draw = false;
+		switch (obj.posMode) {
+			case 'left': factorX = 1/4; break;
+			case 'right': factorX = 3/4; break;
+			case 'leftout': factorX = -(obj.canvas.width/Stage.canvas.width); break;
+			case 'rightout': factorX = 1+(obj.canvas.width/Stage.canvas.width); break;
+			case 'bottomout': factorY = 1+(obj.canvas.height/Stage.canvas.height); break;
+			case 'topout': factorY = -(obj.canvas.height/Stage.canvas.height); break;
+			case 'center':
+			case 'auto':
+			default: break;
+		}
+		if (Stage.transTime <= 0) {
+			positionX = Stage.canvas.width*factorX;
+			positionY = Stage.canvas.height*factorY;
+			obj.pos.x = positionX;
+			obj.pos.y = positionY;
+			if (obj.posMode.indexOf('out') != -1) {
+				obj.posMode = (layer==1) ? 'auto' : '';
+				obj.alpha = 0;
+				obj.visible = false;
+			}
+		}
+		else {
+			positionX = Stage.transTime * obj.pos.x + (1-Stage.transTime) * Stage.canvas.width*factorX;
+			positionY = Stage.transTime * obj.pos.y + (1-Stage.transTime) * Stage.canvas.height*factorY;
+			running_draw = true;
+		}
+
+		Stage.context.drawImage(obj.canvas,
+						   positionX - obj.target_scale * obj.origin.x + obj.offset[0] + 
+								Stage.AddDepth(layer, Stage.canvas.width/2 - Stage.coord.x),
+						   positionY - obj.target_scale * obj.origin.y + obj.offset[1] + 
+								Stage.AddDepth(layer, Stage.canvas.height/2 - Stage.coord.y)/2,
+						   obj.canvas.width * obj.target_scale,
+						   obj.canvas.height * obj.target_scale);	
+		return running_draw;
+	},
+	// Helper function to get current speaker
+	checkCurrentSpeaker: function(name, append) {
+		var current_speaker = '';
+		var startIdx = Stage.layers[4][0].text.indexOf(Stage.layers[4][0].tagFamily+";\'>");
+		var endIdx = Stage.layers[4][0].text.indexOf("</style><br/>");
+		if ((startIdx != -1) && (endIdx != -1)) {
+			current_speaker = Stage.layers[4][0].text.substr(startIdx+Stage.layers[4][0].tagFamily.length+3, 
+															 endIdx-startIdx-Stage.layers[4][0].tagFamily.length-3);
+		}
+		//return current_speaker;
+		var same_window = false;
+		if ((current_speaker != name) || (append == false)) {
+			Stage.layers[4][0].cont = false;
+			same_window = false;
+		}
+		else if (append == true) {
+			Stage.layers[4][0].cont = true;
+			same_window = true;
+		}
+		else {	// whatever value including undefined
+			same_window = Stage.layers[4][0].cont;
+		}
+		return same_window;
+	},
+	addTagToDialog: function(tag, tagcolor, text, append) {
+		var dialog = '';
+		if (tag != null) {
+			dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
+						";color:" + tagcolor + 
+						";font-size:" + Stage.layers[4][0].tagSize +
+						";font-family:" + Stage.layers[4][0].tagFamily +
+						";\'>" + tag + "</style><br/>";
+		}
+		if (append) {
+			// strip speaker name here if present
+			var index = Stage.layers[4][0].text.indexOf("</style><br/>");
+			if (index!=-1)
+				dialog += Stage.layers[4][0].text.slice(index+13);
+			else 
+				dialog += Stage.layers[4][0].text;
+			dialog += '\n';
+		}
+		if (text != null)
+			dialog += text.replace(/\n/g,"<br/>");
+		return dialog;
+	},
+	showTooltip: function(tip) {
+		Stage.context.save();
+		Stage.context.fillStyle = Config.activeTheme.formTipColor;
+		Stage.context.shadowColor = 'black';
+		Stage.context.shadowBlur = 2;
+
+		var subs = Helper.parseFontString(Config.activeTheme.formTipStyle);
+		Stage.context.font = subs.slice(0,3).join(' ');
+		var w = Stage.context.measureText(tip).width;
+		var h = parseInt(subs[1]);
+		var x = Math.min(Stage.coord.x, Stage.canvas.width - w - 5);
+		var y = Math.min(Stage.coord.y, Stage.canvas.height - 2*h - 5);
+		Stage.context.fillRect(x-5, y-5+h, w+10, h+10);
+		//Stage.context.strokeRect(x-5, y-5+h, w+10, h+10);
+		
+		Stage.context.shadowBlur = 0;
+		Stage.context.fillStyle = subs.slice(3).join(' ');
+		Stage.context.textBaseline = 'top';
+		Stage.context.fillText(tip, x, y + h);
+		Stage.context.restore();
 	},
 }
 // Function to determine optimal animation frame
@@ -249,9 +572,17 @@ function get(param) {
 // jump - continues execution at given label
 function jump(param) {
 	if (typeof param == 'string') {
-		Stage.script.SetFrame(param);
+		if (param == 'return') {
+			Stage.script.PopFrame();
+			Stage.pause = true;
+		}
+		else {
+			Stage.script.PushFrame();
+			Stage.script.SetFrame(param);
+		}
 	}
 	else {
+		Stage.script.PushFrame();
 		var str_param = JSON.stringify(param);
 		var arr_param = str_param.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
 		//alert(arr_param); // expects only 4 items
@@ -275,6 +606,24 @@ function jump(param) {
 						Stage.script.SetFrame(param.label);
 				}
 			}
+			else {
+				// try a config variable
+				var val = eval("Config."+arr_param[i]);
+				if (val != null) {
+					if (typeof val == 'number') {
+						if (val > arr_param[i+1])
+							Stage.script.SetFrame(param.label);
+					}
+					else if (typeof val == 'string') {
+						if (val === arr_param[i+1])
+							Stage.script.SetFrame(param.label);
+					}
+					else {
+						if (val == arr_param[i+1])
+							Stage.script.SetFrame(param.label);
+					}
+				}
+			}
 		}
 	}
 }
@@ -290,8 +639,16 @@ function scene(param) {
 		}
 		// do a reverse effect on the previous backdrop
 		// current effect is 'done'
-		if (param.effect)
-			Stage.layers[0][0].effects = param.effect + 'out';
+		if (param.effect) {
+			if ((param.effect == 'dissolve') || 
+				(param.effect == 'fade')) {
+				Stage.layers[0][0].effects = param.effect + 'out';
+			}
+			else {
+				// do nothing to previous backdrop
+				Stage.layers[0][0].effects = 'in';
+			}
+		}
 		else 
 			Stage.layers[0][0].effects = 'out';
 		Stage.layers[0][0].drawn = false;
@@ -313,7 +670,21 @@ function scene(param) {
 	}
 	bg.Create('bg' + nextid, param.image, obj);
 	if (param.effect) {
-		bg.effects = param.effect + 'in';
+		if ((param.effect.indexOf('scale') != -1) || 
+			(param.effect.indexOf('rotate') != -1)) {
+			var fx = param.effect.split(' ');
+			bg.effects = fx[0] + 'in';
+			bg.fxparam = parseFloat(fx[1]);
+			if (fx[0] == 'rotate') {
+				bg.orientation += bg.fxparam;
+				bg.orientation %= 360;
+			}
+			if (fx[0] == 'scale') {
+				bg.size = bg.fxparam;
+			}
+		}
+		else 
+			bg.effects = param.effect + 'in';
 		if ((param.effect == 'fade') && (Stage.layers[0].length > 0))
 			bg.alpha = -1;
 	}
@@ -321,6 +692,7 @@ function scene(param) {
 		bg.effects = 'in';
 	if (param.time != null) bg.transTime = (param.time>0) ? param.time : 0.01;
 	Stage.layers[0].push(bg);
+	Stage.Transition('show_backdrop');
 }
 // actor - create and display character (layer 1)
 function actor(param) {
@@ -360,8 +732,26 @@ function actor(param) {
 			if (param.avatar) {
 				Stage.layers[1][idx].AddAvatar(param.avatar);
 			}
-			if (param.effect)
-				Stage.layers[1][idx].effects = param.effect;
+			if (param.effect) {
+				if ((param.effect.indexOf('scale') != -1) || 
+					(param.effect.indexOf('rotate') != -1)) {
+					var fx = param.effect.split(' ');
+					Stage.layers[1][idx].effects = fx[0];
+					Stage.layers[1][idx].prevFx = fx[0];
+					Stage.layers[1][idx].fxparam = parseFloat(fx[1]);
+					if (fx[0] == 'rotate') {
+						Stage.layers[1][idx].orientation += Stage.layers[1][idx].fxparam;
+						Stage.layers[1][idx].orientation %= 360;
+					}
+					if (fx[0] == 'scale') {
+						Stage.layers[1][idx].size = Stage.layers[1][idx].fxparam;
+					}
+				}
+				else {
+					Stage.layers[1][idx].effects = param.effect;
+					Stage.layers[1][idx].prevFx = param.effect;
+				}
+			}
 			else
 				Stage.layers[1][idx].effects = Stage.layers[1][idx].prevFx;
 			//if ((param.remove == true) || (param.show == false))
@@ -379,67 +769,58 @@ function actor(param) {
 			}
 				
 			if (param.say) {
-				var same_window = false;
-				// get name of speaker
-				var current_speaker = '';
-				var startIdx = Stage.layers[4][0].text.indexOf(Stage.layers[4][0].tagFamily+";\'>");
-				var endIdx = Stage.layers[4][0].text.indexOf("</style><br/>");
-				if ((startIdx != -1) && (endIdx != -1)) {
-					current_speaker = Stage.layers[4][0].text.substr(startIdx+Stage.layers[4][0].tagFamily.length+3, 
-																     endIdx-startIdx-Stage.layers[4][0].tagFamily.length-3);
-				}
-				
-				if ((current_speaker != Stage.layers[1][idx].nick) || (param.append == false)) {
-					Stage.layers[4][0].cont = false;
-					same_window = false;
-				}
-				else if (param.append == true) {
-					Stage.layers[4][0].cont = true;
-					same_window = true;
-				}
-				else {	// whatever value including undefined
-					same_window = Stage.layers[4][0].cont;
-				}
-				if (same_window) {
-					var dialog = '';
-					dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
-								";color:" + Stage.layers[1][idx].color + 
-								";font-size:" + Stage.layers[4][0].tagSize +
-								";font-family:" + Stage.layers[4][0].tagFamily +
-								";\'>" + Stage.layers[1][idx].nick + "</style><br/>";
-					// strip speaker name here if present
-					var index = Stage.layers[4][0].text.indexOf("</style><br/>");
-					if (index!=-1)
-						dialog += Stage.layers[4][0].text.slice(index+13);
-					else 
-						dialog += Stage.layers[4][0].text;
-					dialog += '\n' + param.say;
-					Stage.layers[4][0].text = dialog;
-				}
-				else {
-					var dialog = '';
-					dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
-								";color:" + Stage.layers[1][idx].color + 
-								";font-size:" + Stage.layers[4][0].tagSize +
-								";font-family:" + Stage.layers[4][0].tagFamily +
-								";\'>" + Stage.layers[1][idx].nick + "</style><br/>";
-					dialog += param.say;
-					Stage.layers[4][0].text = dialog;
-				}
+				var same_window = Helper.checkCurrentSpeaker(Stage.layers[1][idx].nick, param.append);
+				Stage.layers[4][0].text = Helper.addTagToDialog(Stage.layers[1][idx].nick, 
+																Stage.layers[1][idx].color,
+																param.say,
+																same_window);
 				if (Stage.layers[1][idx].avatar != null)
 					Stage.layers[4][0].avatar = Stage.layers[1][idx].avatar;
 				else
 					Stage.layers[4][0].avatar = null;
+				Stage.layers[4][0].alpha = 1;
+				Stage.layers[4][0].effects = "none";
+				Stage.layers[4][0].scrollOffsetY = 0;
 				Stage.layers[4][0].visible = true;
 				Stage.layers[4][0].changed = true;
+			}
+			
+			var updchr = '';
+			var changepos = false;
+			if (param.position) {
+				var subs = param.position.split(' ');
+				for (var i in subs) {
+					if ((subs[i] == 'left') ||
+						(subs[i] == 'right') ||
+						(subs[i] == 'center') ||
+						(subs[i] == 'auto')) {
+							Stage.layers[1][idx].posMode = subs[i];
+							changepos = true;
+						}
+					if ((subs[i] == 'front') ||
+						(subs[i] == 'back'))
+							updchr = subs[i];
+				}
 			}
 			
 			// done updating, do not trickle down
 			Stage.layers[1][idx].drawn = false;
 			Stage.layers[1][idx].update = false;
+			//Stage.layers[1][idx].redraw = true;
 			if ((Stage.layers[1][idx].visible && (Stage.layers[1][idx].effects.indexOf('out')!=-1)) ||
-				(!Stage.layers[1][idx].visible && (Stage.layers[1][idx].effects.indexOf('in')!=-1)))
+				(!Stage.layers[1][idx].visible && (Stage.layers[1][idx].effects.indexOf('in')!=-1)) ||
+				changepos)
 				Stage.Transition('show_actor');
+				
+			// finally check if a reorder is needed
+			if (updchr != '') {
+				var chr = Stage.layers[1][idx];
+				Stage.layers[1].splice(idx, 1);
+				if (updchr == 'front')
+					Stage.layers[1].push(chr);
+				else if (updchr == 'back')
+					Stage.layers[1].unshift(chr);
+			}
 			return;
 		}
 	}
@@ -464,8 +845,24 @@ function actor(param) {
 		chr.AddAvatar(param.avatar);
 	}
 	if (param.effect) {
-		chr.effects = param.effect;
-		chr.prevFx = param.effect;
+		if ((param.effect.indexOf('scale') != -1) || 
+			(param.effect.indexOf('rotate') != -1)) {
+			var fx = param.effect.split(' ');
+			chr.effects = fx[0];
+			chr.prevFx = fx[0];
+			chr.fxparam = parseFloat(fx[1]);
+			if (fx[0] == 'rotate') {
+				chr.orientation += chr.fxparam;
+				chr.orientation %= 360;
+			}
+			if (fx[0] == 'scale') {
+				chr.size = chr.fxparam;
+			}
+		}
+		else {
+			chr.effects = param.effect;
+			chr.prevFx = param.effect;
+		}
 		if (param.show == false)
 			chr.effects += 'out';
 		else
@@ -481,36 +878,75 @@ function actor(param) {
 	if (param.say) {
 		// new actor will have new dialog window, continue is ignored
 		Stage.layers[4][0].cont = false;
-		var dialog = '';
-		dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
-					";color:" + chr.color + 
-					";font-size:" + Stage.layers[4][0].tagSize +
-					";font-family:" + Stage.layers[4][0].tagFamily +
-					";\'>" + chr.nick + "</style><br/>";
-		dialog += param.say;
-		Stage.layers[4][0].text = dialog;
+		Stage.layers[4][0].text = Helper.addTagToDialog(chr.nick, chr.color, param.say, false);
 		if (chr.avatar != null)
 			Stage.layers[4][0].avatar = chr.avatar;
 		else
 			Stage.layers[4][0].avatar = null;
+		Stage.layers[4][0].alpha = 1;
+		Stage.layers[4][0].effects = "none";
+		Stage.layers[4][0].scrollOffsetY = 0;
 		Stage.layers[4][0].visible = true;
 		Stage.layers[4][0].changed = true;
 	}
-	Stage.layers[1].push(chr);	
+	var addchr = 'front';
+	if (param.position) {
+		var subs = param.position.split(' ');
+		for (var i in subs) {
+			if ((subs[i] == 'left') ||
+				(subs[i] == 'right') ||
+				(subs[i] == 'center') ||
+				(subs[i] == 'auto'))
+					chr.posMode = subs[i];
+			if ((subs[i] == 'front') ||
+				(subs[i] == 'back'))
+					addchr = subs[i];
+		}
+	}
+	if (addchr == 'front')
+		Stage.layers[1].push(chr);	
+	else
+		Stage.layers[1].unshift(chr);
 	Stage.Transition('show_actor');
 }
 // overlay - displays an overlay image (layer 2)
 function overlay(param) {
 	var nextid = 0;
+	Stage.Transition('show_overlay');
 	if (Stage.layers[2].length > 0) {
 		// overlay layer has more than one element
 		// to conserve memory, maintain only the previous and the incoming overlay
 		while (Stage.layers[2].length > 1) {
 			Stage.layers[2].shift();
 		}
+		if (!param.image && (param.show != false)) {
+			// show the previous overlay
+			if (param.effect) {
+				if ((param.effect.indexOf('scale') != -1) || 
+					(param.effect.indexOf('rotate') != -1)) {
+					var fx = param.effect.split(' ');
+					Stage.layers[2][0].effects = fx[0] + 'in';
+				}
+				else
+					Stage.layers[2][0].effects = param.effect + 'in';
+			}
+			else 
+				Stage.layers[2][0].effects = 'in';
+			Stage.layers[2][0].drawn = false;
+			Stage.layers[2][0].update = false;
+			return;
+		}
+		
 		// do a reverse effect on the previous overlay
-		if (param.effect)
-			Stage.layers[2][0].effects = param.effect + 'out';
+		if (param.effect) {
+			if ((param.effect.indexOf('scale') != -1) || 
+				(param.effect.indexOf('rotate') != -1)) {
+				var fx = param.effect.split(' ');
+				Stage.layers[2][0].effects = fx[0] + 'out';
+			}
+			else
+				Stage.layers[2][0].effects = param.effect + 'out';
+		}
 		else 
 			Stage.layers[2][0].effects = 'out';
 		Stage.layers[2][0].drawn = false;
@@ -525,8 +961,23 @@ function overlay(param) {
 	// add the new overlay layer
 	var ovl = new Backdrop();
 	ovl.Create('ovl' + nextid, param.image, null);
-	if (param.effect)
-		ovl.effects = param.effect + 'in';
+	if (param.effect) {
+		if ((param.effect.indexOf('scale') != -1) || 
+			(param.effect.indexOf('rotate') != -1)) {
+			var fx = param.effect.split(' ');
+			ovl.effects = fx[0] + 'in';
+			ovl.fxparam = parseFloat(fx[1]);
+			if (fx[0] == 'rotate') {
+				ovl.orientation += ovl.fxparam;
+				ovl.orientation %= 360;
+			}
+			if (fx[0] == 'scale') {
+				ovl.size = ovl.fxparam;
+			}
+		}
+		else 
+			ovl.effects = param.effect + 'in';
+	}
 	else 
 		ovl.effects = 'in';
 	if (param.time != null) ovl.transTime = (param.time>0) ? param.time : 0.01;
@@ -613,18 +1064,25 @@ function box(param) {
 			Stage.layers[4][0].prompt.src = param.prompt;
 		}
 	}
+	if (param.align) {
+		Stage.layers[4][0].textAlign = param.align;
+	}
 
 	// assumes this function won't be called unless there are some changes somewhere
 	Stage.layers[4][0].changed = true;
 }
 // text - display text in script box (layer 4)
 function text(param) {
+	Stage.layers[4][0].avatar = null;
+	Stage.layers[4][0].alpha = 1;
+	Stage.layers[4][0].effects = "none";
+	Stage.layers[4][0].scrollOffsetY = 0;
 	if (typeof param == "string") {
 		if (Stage.layers[4][0].cont) {
-			Stage.layers[4][0].text += '\n' + param;
+			Stage.layers[4][0].text += '\n' + param.replace(/\n/g,"<br/>");
 		}
 		else {
-			Stage.layers[4][0].text = param;
+			Stage.layers[4][0].text = param.replace(/\n/g,"<br/>");
 		}	
 		//alert(Stage.layers[4][0].text);
 	}
@@ -640,80 +1098,38 @@ function text(param) {
 			if (subs.length > 2) Stage.layers[4][0].fontFamily = subs[2];
 			if (subs.length > 3) Stage.layers[4][0].fontColor = subs[3];
 		}
-			
-		var same_window = false;
-		// get name of speaker
-		var current_speaker = '';
-		var new_speaker = '';
-		var startIdx = Stage.layers[4][0].text.indexOf(Stage.layers[4][0].tagFamily+";\'>");
-		var endIdx = Stage.layers[4][0].text.indexOf("</style><br/>");
-		if ((startIdx != -1) && (endIdx != -1))
-			current_speaker = Stage.layers[4][0].text.substr(startIdx+Stage.layers[4][0].tagFamily.length+3, 
-															 endIdx-startIdx-Stage.layers[4][0].tagFamily.length-3);
-		if (param.speaker) new_speaker = param.speaker;
+		if (param.align) {
+			Stage.layers[4][0].textAlign = param.align;
+		}
 		
-		if ((current_speaker != new_speaker) || (param.append == false)) {
-			Stage.layers[4][0].cont = false;
-			same_window = false;
+		if (param.effect) {
+			if (param.effect == "fade")
+				Stage.layers[4][0].alpha = 0;
+			if (param.effect == "scroll")
+				Stage.layers[4][0].scrollOffsetY = Stage.layers[4][0].canvas.height;
+			Stage.layers[4][0].effects = param.effect;
 		}
-		else if (param.append == true) {	
-			Stage.layers[4][0].cont = true;
-			same_window = true;
-		}
-		else {	// whatever value including undefined
-			same_window = Stage.layers[4][0].cont;
-		}
-		if (same_window) {
-			var dialog = '';
-			if (param.speaker) {
-				var nick = param.speaker;
-				var color = Stage.layers[4][0].tagColor;
-				for (var i in Stage.layers[1]) {
-					if (Stage.layers[1][i].id == param.speaker) {
-						nick = Stage.layers[1][i].nick;
-						color = Stage.layers[1][i].color;
-						break;
-					}
+			
+		var nick = null;
+		var color = '';
+		if (param.speaker) {
+			nick = param.speaker;
+			color = Stage.layers[4][0].tagColor;
+			for (var i in Stage.layers[1]) {
+				if (Stage.layers[1][i].id == param.speaker) {
+					nick = Stage.layers[1][i].nick;
+					color = Stage.layers[1][i].color;
+					if (Stage.layers[1][i].avatar != null)
+						Stage.layers[4][0].avatar = Stage.layers[1][i].avatar;
+					else
+						Stage.layers[4][0].avatar = null;
+					break;
 				}
-				dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
-							";color:" + color + 
-							";font-size:" + Stage.layers[4][0].tagSize +
-							";font-family:" + Stage.layers[4][0].tagFamily +
-							";\'>" + nick + "</style><br/>";
 			}
-			// strip speaker name here if present
-			var idx = Stage.layers[4][0].text.indexOf("</style><br/>");
-			if (idx!=-1)
-				dialog += Stage.layers[4][0].text.slice(idx+13);
-			else 
-				dialog += Stage.layers[4][0].text;
-			if (param.value)
-				dialog += '\n' + param.value;
-			Stage.layers[4][0].text = dialog;
-			//if (param.value) Stage.layers[4][0].text += '\n' + param.value;
 		}
-		else {
-			var dialog = '';
-			if (param.speaker) {
-				var nick = param.speaker;
-				var color = Stage.layers[4][0].tagColor;
-				for (var i in Stage.layers[1]) {
-					if (Stage.layers[1][i].id == param.speaker) {
-						nick = Stage.layers[1][i].nick;
-						color = Stage.layers[1][i].color;
-						break;
-					}
-				}
-				dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
-							";color:" + color + 
-							";font-size:" + Stage.layers[4][0].tagSize +
-							";font-family:" + Stage.layers[4][0].tagFamily +
-							";\'>" + nick + "</style><br/>";
-			}
-			if (param.value)
-				dialog += param.value;
-			Stage.layers[4][0].text = dialog;
-		}
+		var same_window = Helper.checkCurrentSpeaker((param.speaker) ? param.speaker : '', param.append);
+		Stage.layers[4][0].text = Helper.addTagToDialog(nick, color, 
+														(param.value) ? param.value : null, same_window);
 		
 		if (param.duration > 0) Stage.layers[4][0].timeout = param.duration;
 		if (param.offset) {
@@ -721,7 +1137,7 @@ function text(param) {
 			Stage.layers[4][0].textOffset.y = param.offset[1];
 		}
 	}
-	Stage.layers[4][0].avatar = null;
+	//Stage.layers[4][0].avatar = null;	<-- moved to top
 	Stage.layers[4][0].visible = true;
 	Stage.layers[4][0].changed = true;
 }
@@ -772,6 +1188,8 @@ function button(param) {
 	if (param.link) bt.link = param.link;
 	if (param.showText == false)
 		bt.showText = false;
+	if (param.tip)
+		bt.tooltip = param.tip;
 	Stage.layers[4].push(bt);
 	//Stage.pause = true;
 }
@@ -806,7 +1224,7 @@ function cform(param) {
 				for (var i in Stage.layers[4]) {
 					if (Stage.layers[4][i].group == formid) {
 						Stage.layers[4][i].visible = true;
-						Stage.layers[4][i].inputFocus = true;
+						//Stage.layers[4][i].inputFocus = true;
 						Stage.layers[4][i].redraw = true;
 					}
 				}
@@ -833,7 +1251,7 @@ function cform(param) {
 						for (var i in Stage.layers[4]) {
 							if (Stage.layers[4][i].group == param) {
 								Stage.layers[4][i].visible = true;
-								Stage.layers[4][i].inputFocus = true;
+								//Stage.layers[4][i].inputFocus = true;
 								Stage.layers[4][i].redraw = true;
 							}
 						}
@@ -859,21 +1277,21 @@ function cform(param) {
 				for (var j in Stage.layers[4]) {
 					if (Stage.layers[4][j].group == param[0]) {
 						Stage.layers[4][j].visible = true;
-						Stage.layers[4][j].inputFocus = true;
+						//Stage.layers[4][j].inputFocus = true;
 						Stage.layers[4][j].redraw = true;
 					}
 				}
-				Stage.pause = true;
+				Stage.pause = param[1];
 				return;
 			}
 		}
 		// this is a new form
 		Stage.formStack.push(param[0]);
-		for (var i=1; i<param.length; i+=2) {
+		for (var i=2; i<param.length; i+=2) {
 			param[i].call(this, param[i+1]);
 			Stage.layers[4][Stage.layers[4].length-1].group = param[0];
 		}
-		Stage.pause = true;
+		Stage.pause = param[1];
 	}
 }
 // audio - plays a sound
@@ -1027,7 +1445,7 @@ function video(param) {
 	if (!document.createElement('video').canPlayType) return;
 	
 	var mimeType = {"mp4": 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
-					"mpv": 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
+					"m4v": 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
 					"ogg": 'video/ogg; codecs="theora, vorbis"',
 					"ogv": 'video/ogg; codecs="theora, vorbis"',
 					"webm": 'video/webm; codecs="vp8, vorbis"'};
@@ -1087,14 +1505,29 @@ function select(param) {
 	var element = document.createElement("select");
 	element.name = param.name;
 	element.id = param.name;
-	for (var i=0; i<param.options.length; i+=2) {
-		var opt = document.createElement("option");
-		opt.innerText = param.options[i];
-		opt.value = param.options[i+1];
-		element.appendChild(opt);
-		if (param.bind) {
-			if (opt.value == Helper.getValue(param.bind)) 
-				element.selectedIndex = i/2;
+	if (typeof param.options == 'string') {
+		var options = Helper.getValue(param.options);
+		for (var i=0; i<options.length; i+=2) {
+			var opt = document.createElement("option");
+			opt.innerText = options[i];
+			opt.value = JSON.stringify(options[i+1]);
+			element.appendChild(opt);
+			if (param.bind) {
+				if (opt.value == JSON.stringify(Helper.getValue(param.bind))) 
+					element.selectedIndex = i/2;
+			}
+		}
+	}
+	else {
+		for (var i=0; i<param.options.length; i+=2) {
+			var opt = document.createElement("option");
+			opt.innerText = param.options[i];
+			opt.value = JSON.stringify(param.options[i+1]);
+			element.appendChild(opt);
+			if (param.bind) {
+				if (opt.value == JSON.stringify(Helper.getValue(param.bind)))
+					element.selectedIndex = i/2;
+			}
 		}
 	}
 	if (param.bind) Stage.formBindings.push([param.name, param.bind]);
@@ -1115,13 +1548,16 @@ function submit(param) {
 				//alert(items.type+" "+items.value+" "+items.checked);
 				if (items.type == "radio") {
 					if (items.checked == true) 
-						Helper.setValue(Stage.formBindings[idx][1], items.value);
+						Helper.setValue(Stage.formBindings[idx][1], JSON.stringify(items.value));
 				}
 				else if (items.type == "checkbox") {
 					Helper.setValue(Stage.formBindings[idx][1], items.checked);
 				}
 				else if ((items.type == "range") || (items.type == "number")) {
 					Helper.setValue(Stage.formBindings[idx][1], items.valueAsNumber);
+				}
+				else if ((items.type == "text") || (items.type == "textarea")) {
+					Helper.setValue(Stage.formBindings[idx][1], JSON.stringify(items.value));
 				}
 				else {
 					Helper.setValue(Stage.formBindings[idx][1], items.value);
@@ -1249,6 +1685,8 @@ function checkpoint(param) {
 			localStorage["sequence"] = '';
 			localStorage["frame"] = 0;
 		}
+		// Store jump stack
+		localStorage["frameStack"] = JSON.stringify(Stage.script.frameStack);
 		// Store layer 0
 		localStorage["l0_count"] = Stage.layers[0].length;
 		for (var i=0; i<Stage.layers[0].length; i++) {
@@ -1261,8 +1699,15 @@ function checkpoint(param) {
 				localStorage["l0_"+i+"_obj_"+j+"_y"] = Stage.layers[0][i].objects[j].y;
 			}
 			localStorage["l0_"+i+"_alpha"] = Stage.layers[0][i].alpha;
+			localStorage["l0_"+i+"_visible"] = Stage.layers[0][i].visible;
 			localStorage["l0_"+i+"_effects"] = Stage.layers[0][i].effects;
 			localStorage["l0_"+i+"_time"] = Stage.layers[0][i].transTime;
+			if (Stage.layers[0][i].posMode != '')
+				localStorage["l0_"+i+"_posMode"] = Stage.layers[0][i].posMode;
+			else
+				localStorage["l0_"+i+"_posMode"] = "undefined";
+			localStorage["l0_"+i+"_orientation"] = Stage.layers[0][i].orientation;
+			localStorage["l0_"+i+"_size"] = Stage.layers[0][i].size;
 		}
 		// Store layer 1
 		localStorage["l1_count"] = Stage.layers[1].length;
@@ -1285,6 +1730,10 @@ function checkpoint(param) {
 			localStorage["l1_"+i+"_time"] = Stage.layers[1][i].transTime;
 			localStorage["l1_"+i+"_visible"] = Stage.layers[1][i].visible;
 			localStorage["l1_"+i+"_pending"] = Stage.layers[1][i].pendingRemoval;
+			localStorage["l1_"+i+"_posMode"] = Stage.layers[1][i].posMode;
+			//localStorage["l1_"+i+"_fxparam"] = Stage.layers[1][i].fxparam;
+			localStorage["l1_"+i+"_orientation"] = Stage.layers[1][i].orientation;
+			localStorage["l1_"+i+"_size"] = Stage.layers[1][i].size;
 		}
 		// Store layer 2
 		localStorage["l2_count"] = Stage.layers[2].length;
@@ -1292,11 +1741,18 @@ function checkpoint(param) {
 			localStorage["l2_"+i+"_id"] = Stage.layers[2][i].canvas.id;
 			localStorage["l2_"+i+"_src"] = Stage.layers[2][i].image.src;
 			localStorage["l2_"+i+"_alpha"] = Stage.layers[2][i].alpha;
+			localStorage["l2_"+i+"_visible"] = Stage.layers[2][i].visible;
 			localStorage["l2_"+i+"_effects"] = Stage.layers[2][i].effects;
 			localStorage["l2_"+i+"_time"] = Stage.layers[2][i].transTime;
 			localStorage["l2_"+i+"_scroll"] = Stage.layers[2][i].scroll;
 			localStorage["l2_"+i+"_offset_x"] = Stage.layers[2][i].offset[0];
 			localStorage["l2_"+i+"_offset_y"] = Stage.layers[2][i].offset[1];
+			if (Stage.layers[2][i].posMode != '')
+				localStorage["l2_"+i+"_posMode"] = Stage.layers[2][i].posMode;
+			else
+				localStorage["l2_"+i+"_posMode"] = "undefined";
+			localStorage["l2_"+i+"_orientation"] = Stage.layers[2][i].orientation;
+			localStorage["l2_"+i+"_size"] = Stage.layers[2][i].size;
 		}
 		// Store layer 3
 		localStorage["l3_count"] = Stage.layers[3].length;
@@ -1305,6 +1761,7 @@ function checkpoint(param) {
 			localStorage["l3_"+i+"_type"] = Stage.layers[3][i].type;
 			localStorage["l3_"+i+"_count"] = Stage.layers[3][i].numParticles;
 			localStorage["l3_"+i+"_action"] = Stage.layers[3][i].action;
+			localStorage["l3_"+i+"_visible"] = Stage.layers[3][i].visible;
 		}
 		// Store layer 4
 		localStorage["l4_count"] = Stage.layers[4].length;
@@ -1334,9 +1791,12 @@ function checkpoint(param) {
 				localStorage["l4_"+i+"_tagWeight"] = Stage.layers[4][i].tagWeight;
 				localStorage["l4_"+i+"_tagColor"] = Stage.layers[4][i].tagColor;
 				localStorage["l4_"+i+"_timeout"] = Stage.layers[4][i].timeout;
+				localStorage["l4_"+i+"_textAlign"] = Stage.layers[4][i].textAlign;
 				localStorage["l4_"+i+"_offset_x"] = Stage.layers[4][i].textOffset.x;
 				localStorage["l4_"+i+"_offset_y"] = Stage.layers[4][i].textOffset.y;
 				localStorage["l4_"+i+"_inputFocus"] = Stage.layers[4][i].inputFocus;
+				localStorage["l4_"+i+"_alpha"] = Stage.layers[4][i].alpha;
+				localStorage["l4_"+i+"_effects"] = Stage.layers[4][i].effects;
 				localStorage["l4_"+i+"_jumpTo_count"] = Stage.layers[4][i].jumpTo.length;
 				for (var j=0; j<Stage.layers[4][i].jumpTo.length; j++) {
 					localStorage["l4_"+i+"jumpTo"+j+"hotspot_x"] = Stage.layers[4][i].jumpTo[j].hotspot[0];
@@ -1358,6 +1818,10 @@ function checkpoint(param) {
 				localStorage["l4_"+i+"_link_1"] = JSON.stringify(Stage.layers[4][i].link[1]);
 				localStorage["l4_"+i+"_visible"] = Stage.layers[4][i].visible;
 				localStorage["l4_"+i+"_showText"] = Stage.layers[4][i].showText;
+				if (Stage.layers[4][i].tooltip != '')
+					localStorage["l4_"+i+"_tooltip"] = Stage.layers[4][i].tooltip;
+				else
+					localStorage["l4_"+i+"_tooltip"] = "undefined";
 				localStorage["l4_"+i+"_rect_x"] = Stage.layers[4][i].rect.x;
 				localStorage["l4_"+i+"_rect_y"] = Stage.layers[4][i].rect.y;
 				localStorage["l4_"+i+"_rect_w"] = Stage.layers[4][i].rect.w;
@@ -1417,7 +1881,16 @@ function checkpoint(param) {
 			bg.Create(localStorage["l0_"+i+"_id"], localStorage["l0_"+i+"_src"], obj);
 			bg.effects = localStorage["l0_"+i+"_effects"];
 			bg.alpha = parseFloat(localStorage["l0_"+i+"_alpha"]);
+			bg.visible = (localStorage["l0_"+i+"_visible"] == "true");
 			bg.transTime = parseFloat(localStorage["l0_"+i+"_time"]);
+			if (localStorage["l0_"+i+"_posMode"] != "undefined")
+				bg.posMode = localStorage["l0_"+i+"_posMode"];
+			else
+				bg.posMode = '';
+			bg.orientation = parseFloat(localStorage["l0_"+i+"_orientation"]);
+			bg.rotation = parseFloat(localStorage["l0_"+i+"_orientation"]);
+			bg.size = parseFloat(localStorage["l0_"+i+"_size"]);
+			bg.target_scale = parseFloat(localStorage["l0_"+i+"_size"]);
 			Stage.layers[0].push(bg);
 		}
 		// populate layer 1
@@ -1441,6 +1914,12 @@ function checkpoint(param) {
 			chr.transTime = parseFloat(localStorage["l1_"+i+"_time"]);
 			chr.visible = (localStorage["l1_"+i+"_visible"] == "true");
 			chr.pendingRemoval = (localStorage["l1_"+i+"_pending"] == "true");
+			chr.posMode = localStorage["l1_"+i+"_posMode"];
+			//chr.fxparam = localStorage["l1_"+i+"_fxparam"];
+			chr.orientation = parseFloat(localStorage["l1_"+i+"_orientation"]);
+			chr.rotation = parseFloat(localStorage["l1_"+i+"_orientation"]);
+			chr.size = parseFloat(localStorage["l1_"+i+"_size"]);
+			chr.target_scale = parseFloat(localStorage["l1_"+i+"_size"]);
 			Stage.layers[1].push(chr);
 		}
 		// populate layer 2
@@ -1450,9 +1929,18 @@ function checkpoint(param) {
 			ovl.Create(localStorage["l2_"+i+"_id"], localStorage["l2_"+i+"_src"], null);
 			ovl.effects = localStorage["l2_"+i+"_effects"];
 			ovl.alpha = parseFloat(localStorage["l2_"+i+"_alpha"]);
+			ovl.visible = (localStorage["l2_"+i+"_visible"] == "true");
 			ovl.transTime = parseFloat(localStorage["l2_"+i+"_time"]);
 			ovl.scroll = (localStorage["l2_"+i+"_scroll"] == "true");
 			ovl.offset = [parseInt(localStorage["l2_"+i+"_offset_x"]), parseInt(localStorage["l2_"+i+"_offset_y"])];
+			if (localStorage["l2_"+i+"_posMode"] != "undefined")
+				ovl.posMode = localStorage["l2_"+i+"_posMode"];
+			else
+				ovl.posMode = '';
+			ovl.orientation = parseFloat(localStorage["l2_"+i+"_orientation"]);
+			ovl.rotation = parseFloat(localStorage["l2_"+i+"_orientation"]);
+			ovl.size = parseFloat(localStorage["l2_"+i+"_size"]);
+			ovl.target_scale = parseFloat(localStorage["l2_"+i+"_size"]);
 			Stage.layers[2].push(ovl);
 		}
 		// populate layer 3
@@ -1462,6 +1950,7 @@ function checkpoint(param) {
 			atm.Create(localStorage["l3_"+i+"_id"]);
 			atm.Init(localStorage["l3_"+i+"_type"], parseInt(localStorage["l3_"+i+"_count"]));
 			atm.action = localStorage["l3_"+i+"_action"];
+			atm.visible = (localStorage["l3_"+i+"_visible"] == "true");
 			Stage.layers[3].push(atm);
 		}
 		// populate layer 4
@@ -1484,7 +1973,7 @@ function checkpoint(param) {
 				}
 				else 
 					sb.psrc = '';
-				sb.cont = localStorage["l4_"+i+"_cont"];
+				sb.cont = (localStorage["l4_"+i+"_cont"] == "true");
 				sb.fontFamily = localStorage["l4_"+i+"_fontFamily"];
 				sb.fontSize = localStorage["l4_"+i+"_fontSize"];
 				sb.lineHeight = localStorage["l4_"+i+"_lineHeight"];
@@ -1495,9 +1984,12 @@ function checkpoint(param) {
 				sb.tagWeight = localStorage["l4_"+i+"_tagWeight"];
 				sb.tagColor = localStorage["l4_"+i+"_tagColor"];
 				sb.timeout = parseFloat(localStorage["l4_"+i+"_timeout"]);
+				sb.textAlign = localStorage["l4_"+i+"_textAlign"];
 				sb.textOffset.x = parseInt(localStorage["l4_"+i+"_offset_x"]);
 				sb.textOffset.y = parseInt(localStorage["l4_"+i+"_offset_y"]);
 				sb.inputFocus = (localStorage["l4_"+i+"_inputFocus"] == "true");
+				sb.alpha = parseFloat(localStorage["l4_"+i+"_alpha"]);
+				sb.effects = localStorage["l4_"+i+"_effects"];
 				for (var j=0; j<parseInt(localStorage["l4_"+i+"_jumpTo_count"]); j++) {
 					var menuItem = {hotspot:[], link:''};
 					menuItem.link = localStorage["l4_"+i+"jumpTo"+j+"link"];
@@ -1527,7 +2019,10 @@ function checkpoint(param) {
 					bt.group = localStorage["l4_"+i+"_group"];
 				else
 					bt.group = '';
-				// TODO: link
+				if (localStorage["l4_"+i+"_tooltip"] != "undefined")
+					bt.tooltip = localStorage["l4_"+i+"_tooltip"];
+				else
+					bt.tooltip = '';
 				var link = new Array();
 				link.push(eval(localStorage["l4_"+i+"_link_0"]));
 				link.push(JSON.parse(localStorage["l4_"+i+"_link_1"]));
@@ -1574,7 +2069,8 @@ function checkpoint(param) {
 		}
 		// populate Config
 		Config = JSON.parse(localStorage["Config"]);
-		
+		// populate frameStack
+		Stage.script.frameStack = JSON.parse(localStorage["frameStack"])
 		// then jump to checkpoint location
 		//alert (localStorage["sequence"] +" "+localStorage["frame"]);
 		if (localStorage["sequence"] != '')
@@ -1656,7 +2152,10 @@ function Sounds() {
 					this.audio.volume = (Config.volumeAudio != null) ? Config.volumeAudio : 1;
 					if (!this.isPaused) {
 						if (this.delay > 0)
-							setTimeout((function(self) { return function () { self.audio.play(); }; })(this), this.delay * 1000);
+							setTimeout(function() {
+								if (!snd.isPaused && !snd.isStopping)
+									snd.audio.play();
+							}, this.delay * 1000);
 						else
 							this.audio.play();
 					}
@@ -1666,7 +2165,10 @@ function Sounds() {
 					this.audio.volume = (Config.volumeAudio != null) ? Config.volumeAudio : 1;
 					this.isPaused = false;
 					if (this.delay > 0)
-						setTimeout((function(self) { return function () { self.audio.play(); }; })(this), this.delay * 1000);
+						setTimeout(function() {
+							if (!snd.isPaused && !snd.isStopping)
+								snd.audio.play();
+						}, this.delay * 1000);
 					else
 						this.audio.play();
 				}
@@ -1815,17 +2317,29 @@ function Backdrop() {
 		context: 0,
 		image: 0,
 		origin: {x:0, y:0},		// backdrop's origin is center
+		pos: {x:0, y:0},
 		isready: false,
 		effects: 'none',
+		fxparam: '',
 		alpha: 0,
+		target_alpha: 1,
+		rotation: 0,
+		target_rotation: 0,
+		orientation: 0,
+		scale: 1,
+		target_scale: 1,
+		size: 1,
 		transTime: 1,	//#secs transition time
 		redraw: true,
 		drawn: false,
+		visible: true,
 		update: false,
 		objects: new Array(),
 		loaded: 0,
 		scroll: false,
 		offset:[0,0],
+		backdropDim: {w:0, h:0},
+		posMode: '',
 		
 		Create: function(id, file, obj) {
 			this.canvas = document.createElement('canvas');
@@ -1849,11 +2363,21 @@ function Backdrop() {
 				this.loaded = 1;
 			this.image = new Image();
 			this.image.onload = function() {
-				bg.canvas.setAttribute('width', bg.image.width);
-				bg.canvas.setAttribute('height', bg.image.height);
-				bg.origin.x = bg.image.width/2;
-				bg.origin.y = bg.image.height/2;
-				//bg.isready = true;
+				//bg.canvas.setAttribute('width', bg.image.width);
+				//bg.canvas.setAttribute('height', bg.image.height);
+				//bg.origin.x = bg.image.width/2;
+				//bg.origin.y = bg.image.height/2;
+				////bg.isready = true;
+				//bg.IsLoaded();
+
+				// use larger canvas to support sprite rotation
+				bg.backdropDim.w = bg.image.width;
+				bg.backdropDim.h = bg.image.height;
+				var dim = Math.ceil(Math.sqrt(bg.backdropDim.w*bg.backdropDim.w + bg.backdropDim.h*bg.backdropDim.h));
+				bg.canvas.setAttribute('width', dim);
+				bg.canvas.setAttribute('height', dim);
+				bg.origin.x = dim/2;
+				bg.origin.y = dim/2;
 				bg.IsLoaded();
 			}
 			this.image.src = file;
@@ -1864,6 +2388,7 @@ function Backdrop() {
 			}
 			
 			this.update = false;
+			this.Reset(true);
 			return this.canvas.id;
 		},
 		
@@ -1872,50 +2397,18 @@ function Backdrop() {
 				this.isready = true;
 		},
 		
+		Reset: function(init) {
+			if ((init) || (!this.visible)) {
+				this.pos.x = Stage.canvas.width/2;
+				this.pos.y = Stage.canvas.height/2;
+			}
+			this.visible = true;
+			this.redraw = true;
+		},
+		
 		Update: function(elapsed) {
 			if (this.isready) {
-				switch (this.effects) {
-					case 'fadein':
-					case 'dissolvein':
-						if (this.alpha >= 1.0) {
-							this.effects = 'done';
-							this.drawn = true;
-						}
-						else {
-							this.alpha += elapsed/(this.transTime * 1000);
-						}
-						this.redraw = true;
-						break;
-					case 'fadeout':
-					case 'dissolveout':
-						if (this.alpha <= 0.0) {
-							this.effects = 'done';
-							this.drawn = true;
-						}
-						else {
-							this.alpha -= elapsed/(this.transTime * 1000);
-						}
-						this.redraw = true;
-						break;
-					case 'nonein':
-					case 'in':
-						this.alpha = 1.0;
-						this.effects = 'done';
-						this.drawn = true;
-						this.redraw = true;
-						break;
-					case 'noneout':
-					case 'out':
-						this.alpha = 0.0;
-						this.effects = 'done';
-						this.drawn = true;
-						this.redraw = true;
-						break;
-					case 'done':
-					default:
-						this.drawn = true;
-						break;
-				}
+				Helper.processEffects(this, elapsed);
 			}
 			return this.update;
 		},
@@ -1923,14 +2416,28 @@ function Backdrop() {
 		Draw: function() {
 			if (!this.isready) return false;
 			if (!this.redraw) return false;
+			
+			if (this.visible) {
+				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);		
+				this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));		
+				if (this.rotation != 0) {
+					this.context.translate(this.canvas.width/2, this.canvas.height/2);
+					this.context.rotate(this.rotation * Math.PI/180);
+					this.context.translate(-this.canvas.width/2, -this.canvas.height/2);
+					this.rotation = 0.0;
+				}
+				this.context.drawImage(this.image, 
+									(this.canvas.width - this.backdropDim.w)/2,
+									(this.canvas.height - this.backdropDim.h)/2);
 
-			this.context.clearRect(0,0,this.canvas.width,this.canvas.height);		
-			this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));		
-			this.context.drawImage(this.image, 0, 0);
-			if (this.objects.length > 0) {
-				for (var i in this.objects)
-					this.context.drawImage(this.objects[i].img, this.objects[i].x, this.objects[i].y)
+				if (this.objects.length > 0) {
+					for (var i in this.objects)
+						this.context.drawImage(this.objects[i].img, 
+											this.objects[i].x + (this.canvas.width - this.backdropDim.w)/2,
+											this.objects[i].y + (this.canvas.height - this.backdropDim.h)/2);
+				}
 			}
+
 			this.redraw = false;
 			if (this.drawn) this.update = true;
 			return true;
@@ -1951,7 +2458,7 @@ function ActiveImage() {
 		update: false,
 		sprites: new Array(),
 		loaded: 0,
-		inputFocus: true,
+		inputFocus: false,
 		text: '',
 		link: '',
 		origin: {x:0, y:0},
@@ -1960,6 +2467,8 @@ function ActiveImage() {
 		prev_state: '',
 		visible: true,
 		showText: true,
+		
+		tooltip: '',
 		
 		Create: function(id, rect, obj) {
 			this.canvas = document.createElement('canvas');
@@ -1981,6 +2490,8 @@ function ActiveImage() {
 					this.sprites.push(item);
 				}
 			}
+			
+			
 		},
 		IsLoaded: function() {
 			if (--this.loaded <= 0) {
@@ -1993,15 +2504,31 @@ function ActiveImage() {
 				if (this.rect.h == 0) {
 					this.canvas.setAttribute('height',this.sprites[0].height);
 					this.rect.h = this.sprites[0].height;
-				}
+				}			
 			}
 		},
 		Update: function(elapsed) {
 			if (this.isready) {
-				if (this.prev_state != this.state) {
+				if (!this.visible)
+					this.inputFocus = false;
+				else if (this.prev_state != this.state) {
 					this.prev_state = this.state;
-					this.redraw = true;				
+					this.redraw = true;	
+					if ((this.state == 'hover') || (this.state == 'clicked')) {
+						this.inputFocus = true;
+						if (this.tooltip != '') Stage.Transition('show_tooltip');
+					}
+					else
+						this.inputFocus = false;
 				}
+				if (Stage.mouseClick && this.inputFocus) {
+					if (this.link != '') {
+						this.link[0].call(this, this.link[1]);
+						Stage.pause = false;
+					}
+					this.redraw = true;
+				}
+				/*
 				if (Stage.mouseClick && this.inputFocus && 
 				   ((this.state == 'hover') || (this.state == 'clicked'))) {
 					if (this.link != '') {
@@ -2015,6 +2542,7 @@ function ActiveImage() {
 					}
 					this.redraw = true;
 				}
+				*/
 			}
 			return this.update;
 		},
@@ -2022,8 +2550,8 @@ function ActiveImage() {
 			if (!this.isready) return false;
 			if (!this.redraw) return false;
 
-			this.context.clearRect(0,0,this.canvas.width,this.canvas.height);
 			if (this.visible) {
+				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);
 				if ((this.sprites.length>1) && (this.state=='hover'))
 					this.context.drawImage(this.sprites[1],0,0);
 				else if ((this.sprites.length>=3) && (this.state=='clicked')) 
@@ -2076,6 +2604,7 @@ function ScriptBox() {
 		
 		isready: true,				// flow control
 		changed: true,
+		fxupdate: false,
 		cont: false,
 		timeout: 0,
 		jumpTo: new Array(),
@@ -2086,6 +2615,10 @@ function ScriptBox() {
 		prompt: new Image(),
 		psrc: '',
 		menuHover: -1,
+		alpha: 1,
+		scrollOffsetY: 0,
+		effects: 'none',
+		curLineCount: 0,
 		
 		fontFamily: 'Verdana',		// font properties
 		fontColor: 'white',
@@ -2093,6 +2626,7 @@ function ScriptBox() {
 		fontWeight: 'normal',
 		lineHeight: '18',
 		textOffset: {x:10, y:20},
+		textAlign: 'start',
 		tagFamily: 'Verdana',
 		tagColor: '#c8ffc8',
 		tagSize: '14px',
@@ -2112,116 +2646,103 @@ function ScriptBox() {
 			this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
 			this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
 			
-			// configure font style
-			if (Config.boxFontStyle) { 
-				var subs = Helper.parseFontString(Config.boxFontStyle);
-				
-				if (subs.length > 0) this.fontWeight = subs[0];
-				if (subs.length > 1) {
-					this.fontSize = subs[1];
-					this.lineHeight = eval(subs[1].substring(0,subs[1].length-2)) + 4;
-				}			
-				if (subs.length > 2) this.fontFamily = subs[2].replace(/\'/g,'');
-				if (subs.length > 3) this.fontColor = subs[3];
-			}
-			if (Config.boxTagStyle) {
-				var subs = Helper.parseFontString(Config.boxTagStyle);
-				
-				if (subs.length > 0) this.tagWeight = subs[0];
-				if (subs.length > 1) this.tagSize = subs[1];
-				if (subs.length > 2) this.tagFamily = subs[2].replace(/\'/g,'');
-				if (subs.length > 3) this.tagColor = subs[3];
-			}
+			//Helper.configUpdate("activeTheme");
 
-			// configure CanvasText
-			this.canvasText.config({
-		        canvas: this.canvas,
-		        context: this.context,
-		        fontFamily: this.fontFamily,
-		        fontSize: this.fontSize,
-		        fontWeight: this.fontWeight,
-		        fontColor: this.fontColor,
-		        lineHeight: this.lineHeight
-		    });			
-			this.canvasText.defineClass("menu", {
-		        fontFamily: this.fontFamily,
-		        fontSize: this.fontSize,
-		        fontWeight: this.fontWeight,
-		        fontColor: this.fontColor,
-				fontStyle: "italic"
-			});
-			
 			// create prompt images
 			//this.isready = false;
 			this.prompt.onload = function() {
 					box.isready = true;
 			}
-			this.prompt.src = this.psrc;
-			
-			// configure dim style
-			if (Config.boxDimStyle) {
-				var subs = Config.boxDimStyle.split(' ');
-				for (var idx in subs)
-					this.dimStyle.push(subs[idx]);
-			}
+			this.prompt.src = this.psrc;			
 		},
 		
 		Update: function(elapsed) {
-			if (this.changed) {
-				switch (this.pos) {
-					case 'bottom':
-						this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
-						this.origin.y = this.vpheight * (1-Config.boxHeight);
-						this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-						this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
-						break;
-					case 'center':
-						this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
-						this.origin.y = this.vpheight * (1-Config.boxHeight)/2;
-						this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-						this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
-						break;
-					case 'top':
-						this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
-						this.origin.y = 0;
-						this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-						this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
-						break;
-					case 'full':
-						this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
-						this.origin.y = this.vpheight * (1-Config.boxFullHeight)/2;
-						this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-						this.canvas.setAttribute('height', this.vpheight * Config.boxFullHeight)
-						break;
+			if (this.changed || this.fxupdate) {
+				if (this.changed) {
+					switch (this.pos) {
+						case 'bottom':
+							this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
+							this.origin.y = this.vpheight * (1-Config.boxHeight);
+							this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+							this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+							break;
+						case 'center':
+							this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
+							this.origin.y = this.vpheight * (1-Config.boxHeight)/2;
+							this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+							this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+							break;
+						case 'top':
+							this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
+							this.origin.y = 0;
+							this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+							this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+							break;
+						case 'full':
+							this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
+							this.origin.y = this.vpheight * (1-Config.boxFullHeight)/2;
+							this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+							this.canvas.setAttribute('height', this.vpheight * Config.boxFullHeight)
+							break;
+					}
+					switch (this.back) {
+						case 'image':
+							this.image = new Image();
+							this.isready = false;
+							this.image.onload = function() {
+								box.isready = true;
+							}
+							this.image.src = this.src;
+							this.update = false;
+							break;
+						case 'none':
+						case 'dim':
+						default:
+							break;
+					}
+					
+					this.canvasText.config({
+				        canvas: this.canvas,
+				        context: this.context,
+				        fontFamily: this.fontFamily,
+				        fontSize: this.fontSize,
+				        fontWeight: this.fontWeight,
+				        fontColor: this.fontColor,
+				        lineHeight: this.lineHeight
+				    });
+					this.canvasText.updateCanvas(this.canvas);
 				}
-				switch (this.back) {
-					case 'image':
-						this.image = new Image();
-						this.isready = false;
-						this.image.onload = function() {
-							box.isready = true;
+				switch (this.effects) {
+					case 'fade':
+						if (this.alpha >= 1) {
+							this.effects = 'none';
 						}
-						this.image.src = this.src;
+						else {
+							this.alpha += elapsed/(Config.transTime * 1000);
+							this.fxupdate = true;
+						}
+						this.update = false;
+						break;
+					case 'scroll':
+						if (this.scrollOffsetY <= -(this.curLineCount+1) * this.lineHeight) {
+							this.effects = 'none';
+							//this.scrollOffsetY = 0;
+							this.timeout = 0.1;	// setup timer once scroll is finished
+						}
+						else {
+							this.scrollOffsetY -= Config.boxScrollSpeed * elapsed/(Config.transTime * 25);
+							this.fxupdate = true;
+							this.timeout = 0;	// disable timer if enabled
+						}
 						this.update = false;
 						break;
 					case 'none':
-					case 'dim':
 					default:
+						this.fxupdate = false;
 						break;
 				}
 				
-				this.canvasText.config({
-			        canvas: this.canvas,
-			        context: this.context,
-			        fontFamily: this.fontFamily,
-			        fontSize: this.fontSize,
-			        fontWeight: this.fontWeight,
-			        fontColor: this.fontColor,
-			        lineHeight: this.lineHeight
-			    });
-				this.canvasText.updateCanvas(this.canvas);
-
-				this.changed = false;
+				this.changed = false;			
 				this.redraw = true;
 			}
 			if (this.CheckHoverOnHotspot()) {
@@ -2243,9 +2764,9 @@ function ScriptBox() {
 			if (!this.redraw) return false;
 			
 			//alert('ScriptBox.Draw()');
-			this.context.clearRect(0,0,this.canvas.width,this.canvas.height);	
-			//this.canvas.width = this.canvas.width;
 			if (this.visible == true) {
+				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);	
+				//this.canvas.width = this.canvas.width;
 				if (this.back == 'dim') {
 					//alert("image dim");
 					this.context.globalAlpha = 0.5;
@@ -2281,14 +2802,18 @@ function ScriptBox() {
 					var ret = this.canvasText.drawText({
 						text:this.text,
 						x: this.textOffset.x + avatarOffsetX,
-						y: this.textOffset.y,
+						y: this.textOffset.y, // + this.scrollOffsetY,
+						align: this.textAlign,
+						alpha: this.alpha,
 						boxWidth:this.canvas.width-2*this.textOffset.x - avatarOffsetX,
+						scroll: [(this.effects == 'scroll'), this.scrollOffsetY],
 					});
 					// draw the prompt icon
 					if (typeof ret == "object") {
-						//vncanvas doesn't use cache or return image, so this should be array
+						//vncanvas doesn't use cache or return image
+						this.curLineCount = ret.linecount;
 						if (ret.hotspot.length == 0) {
-							if (this.psrc != '')
+							if ((this.effects == 'none') && (this.psrc != ''))
 								this.context.drawImage(this.prompt, ret.endpt[0], ret.endpt[1] - this.prompt.height);
 						}
 						else {
@@ -2300,7 +2825,7 @@ function ScriptBox() {
 					// draw hover
 					if (this.menuHover != -1) {
 						this.context.globalAlpha = 0.25;						
-						this.context.fillStyle = Config.boxMenuHilite;
+						this.context.fillStyle = Config.activeTheme.boxMenuHilite;
 						this.context.fillRect(5,this.jumpTo[this.menuHover].hotspot[1] - this.lineHeight + 4,
 												this.canvas.width - 10,this.lineHeight);
 					}
@@ -2308,7 +2833,7 @@ function ScriptBox() {
 				
 				// Pauses script box
 				Stage.pause = true;
-				if (this.timeout > 0) {
+				if (!Stage.utimerOn && (this.timeout > 0)) {
 					Stage.utimer = setTimeout(function() { 
 						Stage.pause = false; 
 						Stage.utimerOn = false;
@@ -2320,7 +2845,7 @@ function ScriptBox() {
 			else {
 				Stage.pause = false;
 			}
-			this.update = true;
+			if (!this.changed) this.update = true;
 			this.redraw = false;
 			return true;
 		},
@@ -2348,12 +2873,12 @@ function Script() {
 	var scr = {
 		sequence: 0,		// story board, composed of object-value pairs
 		frame: 0,			// sequence counter
+		frameStack: new Array(),
 		
 		Init: function(name) {
 			this.sequence = name;
 			this.frame = 0;
 		},
-		
 		Update: function() {
 			if (this.sequence.length > this.frame) {
 				if (typeof(this.sequence[this.frame]) == "function") {
@@ -2367,7 +2892,6 @@ function Script() {
 				Stage.pause = true;
 			}
 		},
-		
 		SetFrame: function(locator) {
 			var idx = locator.indexOf('#',0);
 			if (idx != -1) {
@@ -2381,6 +2905,22 @@ function Script() {
 				}
 			}
 			return false;
+		},
+		PushFrame: function() {
+			var seq_name = '';
+			if (this.sequence[0] == label)
+				seq_name = this.sequence[1];
+			// TODO: limit stack to 8 
+			while (this.frameStack.length >= 8)
+				this.frameStack.shift();
+			this.frameStack.push([seq_name, this.frame-2]);
+		},
+		PopFrame: function() {
+			if (this.frameStack.length > 0) {
+				var ret_frame = this.frameStack.pop();
+				this.sequence = eval(ret_frame[0]);
+				this.frame = ret_frame[1];
+			}
 		}
 	}
 	return scr;
@@ -2396,19 +2936,30 @@ function Character() {
 		drawn: false,
 		update: false,
 		sprites: new Array(),
+		spriteDim: {w:0, h:0},
 		activeSprite: 0,
 		prevSprite: -1,
 		alpha: 0,
+		target_alpha: 0,
+		rotation: 0,
+		target_rotation: 0,
+		orientation: 0,
+		scale: 1,
+		target_scale: 1,
+		size: 1,
 		transTime: 1,
 		avatar: null,
 		
 		canvas: 0,
 		context: 0,
 		origin: {x:0, y:0},		// actor origin is bottom center
-		pos: {x:-1, y:-1},		// relative to main canvas
+		pos: {x:0, y:0},
+		offset: [0, 0],			// dummy
+		posMode: 'auto',
 		
 		effects: 'none',
 		prevFx: 'none',
+		fxparam: '',
 		visible: true,
 		pendingRemoval: false,
 		activeSpriteRemoval: false,
@@ -2424,7 +2975,8 @@ function Character() {
 				this.transTime = (Config.transTime > 0) ? Config.transTime : 0.01;
 			}
 			this.isready = true;
-			this.update = false;		
+			this.update = false;
+			this.Reset(true);
 			return this.canvas.id;
 		},
 		
@@ -2462,10 +3014,18 @@ function Character() {
 			}
 			
 			this.sprites[this.sprites.length-1].src.onload = function() {
-				chr.canvas.setAttribute('width', chr.sprites[chr.sprites.length-1].src.width);
-				chr.canvas.setAttribute('height', chr.sprites[chr.sprites.length-1].src.height);
-				chr.origin.x = chr.sprites[chr.sprites.length-1].src.width/2;
-				chr.origin.y = chr.sprites[chr.sprites.length-1].src.height;
+				// use larger canvas to support sprite rotation
+				chr.spriteDim.w = chr.sprites[chr.sprites.length-1].src.width;
+				chr.spriteDim.h = chr.sprites[chr.sprites.length-1].src.height;
+				//chr.canvas.setAttribute('width', chr.spriteDim.w);
+				//chr.canvas.setAttribute('height', chr.spriteDim.h);
+				//chr.origin.x = chr.spriteDim.w/2;
+				//chr.origin.y = chr.spriteDim.h;
+				var dim = Math.ceil(Math.sqrt(chr.spriteDim.w*chr.spriteDim.w + chr.spriteDim.h*chr.spriteDim.h));
+				chr.canvas.setAttribute('width', dim);
+				chr.canvas.setAttribute('height', dim);
+				chr.origin.x = dim/2;
+				chr.origin.y = dim/2 + chr.spriteDim.h/2;
 				chr.isready = true;
 			}
 			this.sprites[this.sprites.length-1].src.src = file;
@@ -2496,10 +3056,10 @@ function Character() {
 		},
 		
 		AddAvatar: function(file) {
-			this.isready = false;
 			if (file != '') {
+				this.isready = false;
 				this.avatar = new Image();
-				this.avatar.src.onload = function() {
+				this.avatar.onload = function() {
 					chr.isready = true;
 				}
 				this.avatar.src = file;
@@ -2510,54 +3070,19 @@ function Character() {
 			}
 		},
 		
+		Reset: function (init) {
+			if ((init) || (!this.visible)) {
+				this.pos.x = Stage.canvas.width/2;
+				this.pos.y = Stage.canvas.height*Config.actorYPosition;
+				//this.posMode = 'auto';
+			}
+			this.visible = true;
+			this.redraw = true;
+		},
+		
 		Update: function(elapsed) {
 			if (this.isready) {
-				switch (this.effects) {
-					case 'fadein':
-					case 'dissolvein':
-						this.visible = true;
-						if (this.alpha >= 1.0) {
-							this.effects = 'done';
-							this.drawn = true;
-						}
-						else {
-							this.alpha += elapsed/(this.transTime * 1000);
-						}
-						this.redraw = true;
-						break;
-					case 'fadeout':
-					case 'dissolveout':
-						if (this.alpha <= 0.0) {
-							this.effects = 'done';
-							this.drawn = true;
-							this.visible = false;
-						}
-						else {
-							this.alpha -= elapsed/(this.transTime * 1000);
-						}
-						this.redraw = true;
-						break;
-					case 'nonein':
-					case 'in':
-						this.alpha = 1.0;
-						this.effects = 'done';
-						this.drawn = true;
-						this.redraw = true;
-						this.visible = true;
-						break;
-					case 'noneout':
-					case 'out':
-						this.alpha = 0.0;
-						this.effects = 'done';
-						this.drawn = true;
-						this.redraw = true;
-						this.visible = false;
-						break;
-					case 'done':
-					default:
-						this.drawn = true;
-						break;
-				}
+				Helper.processEffects(this, elapsed);
 			}
 			return this.update;
 		},
@@ -2566,19 +3091,33 @@ function Character() {
 			if (!this.isready) return false;
 			if (!this.redraw) return false;
 			if (this.activeSprite > this.sprites.length-1) return false;
-
-			this.context.clearRect(0,0,this.canvas.width,this.canvas.height);		
-			if (this.prevSprite >= 0) {
-				this.context.globalAlpha = Math.max(0, Math.min(1, 1-this.alpha));
-				this.context.drawImage(this.sprites[this.prevSprite].src, 0, 0);
-				if (1 - this.alpha <= 0) this.prevSprite = -1;
-			}
-			this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
-			this.context.drawImage(this.sprites[this.activeSprite].src, 0, 0);
-			if (this.activeSpriteRemoval && (this.alpha <= 0)) {
-				this.sprites.splice(this.activeSprite, 1);
-				this.activeSprite = Math.max(this.activeSprite-1, 0);
-				this.activeSpriteRemoval = false;
+			
+			if (this.visible) {
+				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);		
+				if (this.prevSprite >= 0) {
+					this.context.globalAlpha = Math.max(0, Math.min(1, this.target_alpha-this.alpha));
+					//this.context.drawImage(this.sprites[this.prevSprite].src, 0, 0);
+					this.context.drawImage(this.sprites[this.prevSprite].src, 								   
+										(this.canvas.width - this.spriteDim.w)/2,
+										(this.canvas.height - this.spriteDim.h)/2);
+					if (this.target_alpha - this.alpha <= 0) this.prevSprite = -1;
+				}
+				this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
+				//this.context.drawImage(this.sprites[this.activeSprite].src, 0, 0);
+				if (this.rotation != 0) {
+					this.context.translate(this.canvas.width/2, this.canvas.height/2);
+					this.context.rotate(this.rotation * Math.PI/180);
+					this.context.translate(-this.canvas.width/2, -this.canvas.height/2);
+					this.rotation = 0.0;
+				}
+				this.context.drawImage(this.sprites[this.activeSprite].src,
+									   (this.canvas.width - this.spriteDim.w)/2,
+									   (this.canvas.height - this.spriteDim.h)/2);
+				if (this.activeSpriteRemoval && (this.alpha <= 0)) {
+					this.sprites.splice(this.activeSprite, 1);
+					this.activeSprite = Math.max(this.activeSprite-1, 0);
+					this.activeSpriteRemoval = false;
+				}
 			}
 					
 			this.redraw = false;
@@ -2671,6 +3210,7 @@ function Atmosphere() {
 					this.particles[i] = new Particle();
 					this.particles[i].Create(this.canvas);
 				}
+				this.visible = true;
 			}
 		},
 
@@ -2687,6 +3227,7 @@ function Atmosphere() {
 						// free some memory by clearing particles, we'll add later if needed again
 						this.particles.splice(0, this.numParticles);
 						this.numParticles = 0;
+						this.visible = false;
 					}
 					else if (!this.redraw && (this.numParticles<=0)) {
 						this.update = true;
@@ -2700,13 +3241,15 @@ function Atmosphere() {
 			if (!this.isready) return false;
 			if (!this.redraw) return false;
 
-			this.context.clearRect(0,0,this.canvas.width,this.canvas.height);		
-			this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
-			if (this.type == 'rain') {
-				this.context.lineWidth = "1";
-				this.context.strokeStyle = "rgb(255, 255, 255)";
-				for (var i=0; i<this.numParticles; i++) {
-					this.particles[i].Draw(this.context);
+			if (this.visible) {
+				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);		
+				this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
+				if (this.type == 'rain') {
+					this.context.lineWidth = "1";
+					this.context.strokeStyle = "rgb(255, 255, 255)";
+					for (var i=0; i<this.numParticles; i++) {
+						this.particles[i].Draw(this.context);
+					}
 				}
 			}
 					
@@ -2871,6 +3414,7 @@ var Stage = {
 		var sb = new ScriptBox();
 		sb.Create(width, height);
 		this.layers[4].push(sb);
+		Helper.configUpdate("activeTheme");
 		
 		// create the sounds playlist
 		this.sounds[0] = new Array();
@@ -2881,8 +3425,8 @@ var Stage = {
 		this.script = new Script();
 		
 		// setup default forms theme
-		if (Config.formFontStyle) {
-			var subs = Helper.parseFontString(Config.formFontStyle);
+		if (Config.activeTheme.formFontStyle) {
+			var subs = Helper.parseFontString(Config.activeTheme.formFontStyle);
 			if (subs.length >= 4) {
 				this.formStyle.push(subs.slice(0,3).join(' '));
 				this.formStyle.push(subs.slice(3).join(' '));
@@ -2988,22 +3532,20 @@ var Stage = {
 		// draw background here
 		if (this.layers[0].length > 0) {
 			for(var i in this.layers[0]) {
-				var ret = this.layers[0][i].Draw();
-				if (ret) running_draw = true;
+				if (this.layers[0][i].Draw()) running_draw = true;
 				if (this.redraw) {
-					this.context.drawImage(this.layers[0][i].canvas,
-									   this.canvas.width/2 - this.layers[0][i].origin.x + this.AddDepth(0, this.canvas.width/2 - this.coord.x),
-									   this.canvas.height/2 - this.layers[0][i].origin.y + this.AddDepth(0, this.canvas.height/2 - this.coord.y)/2);
+					if (Helper.drawElements(this.layers[0][i], 0, [1/2, 1/2])) 
+						running_draw = true;
 				}
 			}
 		}
 		
 		// draw foreground here
 		if (this.layers[1].length > 0) {
-			// get number of visible actore
+			// get number of visible & auto actors
 			var count = 1;
 			for(var i in this.layers[1]) {
-				if (this.layers[1][i].visible) count++;
+				if ((this.layers[1][i].visible) && (this.layers[1][i].posMode == 'auto')) count++;
 			}
 			// compute auto-positioning
 			var spritepos = new Array();
@@ -3017,27 +3559,12 @@ var Stage = {
 			}
 			// display actors
 			for(var i in this.layers[1]) {
-				var ret = this.layers[1][i].Draw();
-				if (ret) running_draw = true;
+				if (this.layers[1][i].Draw()) running_draw = true;
 				if (this.redraw) {
 					if (this.layers[1][i].visible) {
-						var positionX, positionY;
-						var factor = spritepos.shift();
-						if ((this.layers[1][i].pos.x<0) || (this.layers[1][i].pos.y<0) || (this.transTime <= 0)) {
-							positionX = this.canvas.width*factor;
-							positionY = this.canvas.height*9/8;
-							this.layers[1][i].pos.x = positionX;
-							this.layers[1][i].pos.y = positionY;
-						}
-						else {
-							positionX = this.transTime * this.layers[1][i].pos.x + (1-this.transTime) * this.canvas.width*factor;
-							positionY = this.transTime * this.layers[1][i].pos.y + (1-this.transTime) * this.canvas.height*9/8;
+						if (Helper.drawElements(this.layers[1][i], 1, 
+							[(this.layers[1][i].posMode == 'auto') ? spritepos.shift() : 1/2, Config.actorYPosition]))
 							running_draw = true;
-						}
-					
-						this.context.drawImage(this.layers[1][i].canvas,
-									   positionX - this.layers[1][i].origin.x + this.AddDepth(1, this.canvas.width/2 - this.coord.x),
-									   positionY - this.layers[1][i].origin.y + this.AddDepth(1, this.canvas.height/2 - this.coord.y)/2);
 					}
 					else if (this.layers[1][i].pendingRemoval) {
 						this.layers[1].splice(i, 1);
@@ -3049,17 +3576,23 @@ var Stage = {
 		// draw overlay/closeup here
 		if (this.layers[2].length > 0) {
 			for(var i in this.layers[2]) {
-				var ret = this.layers[2][i].Draw();
-				if (ret) running_draw = true;
-				if (this.redraw) {
-					if (this.layers[2][i].scroll)
+				if (this.layers[2][i].Draw()) running_draw = true;
+				if (this.redraw && this.layers[2][i].visible) {
+					if (this.layers[2][i].scroll) {
 						this.context.drawImage(this.layers[2][i].canvas,
-										   (0.98*this.coord.x/this.canvas.width + 0.01)*(this.canvas.width-2*this.layers[2][i].origin.x),
-										   (0.98*this.coord.y/this.canvas.height + 0.01)*(this.canvas.height-2*this.layers[2][i].origin.y));
-					else
-						this.context.drawImage(this.layers[2][i].canvas,
-										   this.canvas.width/2 - this.layers[2][i].origin.x + this.layers[2][i].offset[0],
-										   this.canvas.height/2 - this.layers[2][i].origin.y + this.layers[2][i].offset[1]);
+										   //(0.98*this.coord.x/this.canvas.width + 0.01)*(this.canvas.width-2*this.layers[2][i].origin.x),
+										   //(0.98*this.coord.y/this.canvas.height + 0.01)*(this.canvas.height-2*this.layers[2][i].origin.y));
+										   -this.layers[2][i].target_scale*(this.layers[2][i].canvas.width-this.layers[2][i].backdropDim.w)/2 
+										   -(this.layers[2][i].target_scale*this.layers[2][i].backdropDim.w-this.canvas.width)*(this.coord.x/this.canvas.width),
+										   -this.layers[2][i].target_scale*(this.layers[2][i].canvas.height-this.layers[2][i].backdropDim.h)/2
+										   -(this.layers[2][i].target_scale*this.layers[2][i].backdropDim.h-this.canvas.height)*(this.coord.y/this.canvas.height),
+										   this.layers[2][i].canvas.width * this.layers[2][i].target_scale,
+										   this.layers[2][i].canvas.height * this.layers[2][i].target_scale);
+					}
+					else {
+						if (Helper.drawElements(this.layers[2][i], 2, [1/2, 1/2])) 
+							running_draw = true;
+					}
 				}
 			}
 		}
@@ -3067,9 +3600,8 @@ var Stage = {
 		// draw atmosphere effects here
 		if (this.layers[3].length > 0) {
 			for (var i in this.layers[3]) {
-				var ret = this.layers[3][i].Draw();
-				if (ret) running_draw = true;
-				if (this.redraw) {
+				if (this.layers[3][i].Draw()) running_draw = true;
+				if (this.redraw && this.layers[3][i].visible) {
 					this.context.drawImage(this.layers[3][i].canvas, 0, 0);
 				}
 			}
@@ -3078,11 +3610,18 @@ var Stage = {
 		// draw gui here
 		if (this.layers[4].length > 0) {
 			for (var i in this.layers[4]) {
-				var ret = this.layers[4][i].Draw();
-				if (ret) running_draw = true;
-				if (this.redraw) {
+				if (this.layers[4][i].Draw()) running_draw = true;
+				if (this.redraw && this.layers[4][i].visible) {
 					this.context.drawImage(this.layers[4][i].canvas, this.layers[4][i].origin.x, this.layers[4][i].origin.y);
-					//alert('Stage.Draw():' + ret + ' ' + this.redraw);
+				}
+			}
+			// draw tooltips if any
+			for (var i in this.layers[4]) {
+				if (this.redraw && this.layers[4][i].visible) {
+					if ((this.layers[4][i].state == 'hover') && (this.layers[4][i].tooltip)){
+						if (this.transTime <= 0)
+							Helper.showTooltip(this.layers[4][i].tooltip);
+					}
 				}
 			}
 		}
@@ -3130,6 +3669,7 @@ var Stage = {
 	},
 	
 	AddDepth: function(layer, dist) {
+		if (!Config.actorPerspective) return 0;
 		//if (!this.inputFocus) return 0;
 		switch(layer) {
 			case 0:		// this is background layer
@@ -3137,10 +3677,10 @@ var Stage = {
 			case 1:		// this is foreground layer
 				return 0.2 * dist;
 			case 2:		// this is overlay layer
-				break;
 			default:
 				break;
 		}
+		return 0;
 	},
 	
 	GetMousePosition: function(obj, event) {
@@ -3156,7 +3696,7 @@ var Stage = {
 	
 	GetTouchPosition: function(obj, event) {
 		var pos = {x:0, y:0};
-		if (event.touches !== undefined && event.touches.length == 1) {
+		if ((event.touches != null) && (event.touches.length == 1)) {
 			pos.x = event.touches[0].clientX - obj.offsetLeft + window.pageXOffset;
 			pos.y = event.touches[0].clientY - obj.offsetTop + window.pageYOffset;
 			pos.x = Math.max(0, Math.min(this.canvas.width, pos.x));
@@ -3219,7 +3759,10 @@ var Stage = {
 	},
 	
 	Transition: function(type) {
-		if (type == 'show_actor')
+		if ((type == 'show_actor') || 
+			(type == 'show_overlay') ||
+			(type == 'show_backdrop') || 
+			(type == 'show_tooltip'))
 			this.transTime = (Config.transTime != null) ? Config.transTime : 0.01;
 	},
 	
