@@ -43,6 +43,13 @@
 ******************************************************************************/
 /******************************************************************************
 Revision history:
+01.25.12 - Added macro for custom javascript
+01.12.12 - Updated scene and overlay to accept HTML color
+		 - Updated button (cform) to accept HTML color
+		 - Optimized memory footprint (a bit)
+01.11.12 - Added word filter
+		 - Added URL jump
+		 - Simplified atmosphere, added cloud and beam
 01.09.12 - Added themes
 		 - Forms can be instantiated in-game
 01.06.12 - Implemented text effects
@@ -170,7 +177,7 @@ var Helper = {
 				}
 				// configure CanvasText
 				Stage.layers[4][0].canvasText.config({
-			        canvas: Stage.layers[4][0].canvas,
+			        canvas: Stage.layers[4][0].context.canvas,
 			        context: Stage.layers[4][0].context,
 			        fontFamily: Stage.layers[4][0].fontFamily,
 			        fontSize: Stage.layers[4][0].fontSize,
@@ -232,6 +239,11 @@ var Helper = {
 			}
 		}
 		return subs;
+	},
+	// Helper function to check for image file
+	checkIfImage: function(src) {
+		// crude way of checking if src is an image
+		return (/jpg|jpeg|bmp|png|gif/i.test(src));
 	},
 	// Helper function to process effects
 	processEffects: function (obj, elapsed) {
@@ -318,7 +330,7 @@ var Helper = {
 				obj.drawn = true;
 				obj.alpha = 1.0;
 				obj.effects = 'done'
-				obj.pos.x = -obj.canvas.width;
+				obj.pos.x = -obj.context.canvas.width;
 				break;
 			case 'right':
 			case 'rightin':
@@ -326,7 +338,7 @@ var Helper = {
 				obj.drawn = true;
 				obj.alpha = 1.0;
 				obj.effects = 'done'
-				obj.pos.x = Stage.canvas.width + obj.canvas.width;
+				obj.pos.x = Stage.canvas.width + obj.context.canvas.width;
 				break;
 			case 'bottom':
 			case 'bottomin':
@@ -334,7 +346,7 @@ var Helper = {
 				obj.drawn = true;
 				obj.alpha = 1.0;
 				obj.effects = 'done';
-				obj.pos.y = Stage.canvas.height + obj.canvas.height;
+				obj.pos.y = Stage.canvas.height + obj.context.canvas.height;
 				break;
 			case 'top':
 			case 'topin':
@@ -342,7 +354,7 @@ var Helper = {
 				obj.drawn = true;
 				obj.alpha = 1.0;
 				obj.effects = 'done';
-				obj.pos.y = -obj.canvas.height;
+				obj.pos.y = -obj.context.canvas.height;
 				break;
 			case 'leftout':
 			case 'rightout':
@@ -369,10 +381,10 @@ var Helper = {
 		switch (obj.posMode) {
 			case 'left': factorX = 1/4; break;
 			case 'right': factorX = 3/4; break;
-			case 'leftout': factorX = -(obj.canvas.width/Stage.canvas.width); break;
-			case 'rightout': factorX = 1+(obj.canvas.width/Stage.canvas.width); break;
-			case 'bottomout': factorY = 1+(obj.canvas.height/Stage.canvas.height); break;
-			case 'topout': factorY = -(obj.canvas.height/Stage.canvas.height); break;
+			case 'leftout': factorX = -(obj.context.canvas.width/Stage.canvas.width); break;
+			case 'rightout': factorX = 1+(obj.context.canvas.width/Stage.canvas.width); break;
+			case 'bottomout': factorY = 1+(obj.context.canvas.height/Stage.canvas.height); break;
+			case 'topout': factorY = -(obj.context.canvas.height/Stage.canvas.height); break;
 			case 'center':
 			case 'auto':
 			default: break;
@@ -394,13 +406,13 @@ var Helper = {
 			running_draw = true;
 		}
 
-		Stage.context.drawImage(obj.canvas,
+		Stage.context.drawImage(obj.context.canvas,
 						   positionX - obj.target_scale * obj.origin.x + obj.offset[0] + 
 								Stage.AddDepth(layer, Stage.canvas.width/2 - Stage.coord.x),
 						   positionY - obj.target_scale * obj.origin.y + obj.offset[1] + 
 								Stage.AddDepth(layer, Stage.canvas.height/2 - Stage.coord.y)/2,
-						   obj.canvas.width * obj.target_scale,
-						   obj.canvas.height * obj.target_scale);	
+						   obj.context.canvas.width * obj.target_scale,
+						   obj.context.canvas.height * obj.target_scale);	
 		return running_draw;
 	},
 	// Helper function to get current speaker
@@ -447,7 +459,8 @@ var Helper = {
 		}
 		if (text != null)
 			dialog += text.replace(/\n/g,"<br/>");
-		return dialog;
+		
+		return Helper.filterBadWords(dialog);
 	},
 	showTooltip: function(tip) {
 		Stage.context.save();
@@ -470,6 +483,14 @@ var Helper = {
 		Stage.context.fillText(tip, x, y + h);
 		Stage.context.restore();
 	},
+	filterBadWords: function (str) {
+		if (Config.gameMatureFilter) {
+			var pattern = "/"+Config.gameBadWords.join('|')+"/ig";
+			return str.replace(eval(pattern), Config.gameAltWord);
+		}
+		else
+			return str;
+	}
 }
 // Function to determine optimal animation frame
 window.requestAnimFrame = (function(callback){
@@ -509,6 +530,10 @@ function wait(param) {
 		}, param * 1000);
 		Stage.utimerOn = true;
 	}
+}
+// macro - execute a user function
+function macro(param) {
+	eval(param).call(this);
 }
 // set - sets a user variable
 function set(param) {
@@ -575,6 +600,9 @@ function jump(param) {
 		if (param == 'return') {
 			Stage.script.PopFrame();
 			Stage.pause = true;
+		}
+		else if (param.indexOf("http") != -1) {
+			window.open(param);
 		}
 		else {
 			Stage.script.PushFrame();
@@ -653,7 +681,7 @@ function scene(param) {
 			Stage.layers[0][0].effects = 'out';
 		Stage.layers[0][0].drawn = false;
 		Stage.layers[0][0].update = false;
-		nextid = parseInt(Stage.layers[0][0].canvas.id.substr(2))+1;
+		nextid = parseInt(Stage.layers[0][0].context.canvas.id.substr(2))+1;
 	}
 	// add the new background layer
 	var bg = new Backdrop();
@@ -668,7 +696,7 @@ function scene(param) {
 			obj.push(item);
 		}
 	}
-	bg.Create('bg' + nextid, param.image, obj);
+	bg.Create('bg' + nextid, param.src, obj);
 	if (param.effect) {
 		if ((param.effect.indexOf('scale') != -1) || 
 			(param.effect.indexOf('rotate') != -1)) {
@@ -919,7 +947,7 @@ function overlay(param) {
 		while (Stage.layers[2].length > 1) {
 			Stage.layers[2].shift();
 		}
-		if (!param.image && (param.show != false)) {
+		if (!param.src && (param.show != false)) {
 			// show the previous overlay
 			if (param.effect) {
 				if ((param.effect.indexOf('scale') != -1) || 
@@ -951,16 +979,16 @@ function overlay(param) {
 			Stage.layers[2][0].effects = 'out';
 		Stage.layers[2][0].drawn = false;
 		Stage.layers[2][0].update = false;
-		nextid = parseInt(Stage.layers[2][0].canvas.id.substr(3))+1;
+		nextid = parseInt(Stage.layers[2][0].context.canvas.id.substr(3))+1;
 		
-		if ((!param.image) && (param.show == false)) {
+		if ((!param.src) && (param.show == false)) {
 			// just hiding the previous overlay
 			return;
 		}
 	}
 	// add the new overlay layer
 	var ovl = new Backdrop();
-	ovl.Create('ovl' + nextid, param.image, null);
+	ovl.Create('ovl' + nextid, param.src, null);
 	if (param.effect) {
 		if ((param.effect.indexOf('scale') != -1) || 
 			(param.effect.indexOf('rotate') != -1)) {
@@ -1001,39 +1029,82 @@ function overlay(param) {
 }
 // atmosphere - create atmosphere effects (layer 3)
 function atmosphere(param) {
+	var str_param = JSON.stringify(param);
+	var arr_param = str_param.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
+	var type, count, src, action;
+	for (var i=0; i<arr_param.length; i+=2) {
+		arr_param[i] = eval(arr_param[i]);
+		arr_param[i+1] = eval(arr_param[i+1]);
+		if ((arr_param[i] == "rain") || 
+			(arr_param[i] == "beam")) {
+			type = arr_param[i];
+			if (typeof arr_param[i+1] == 'number') {
+				count = arr_param[i+1];
+				action = 'start';
+			}
+			else
+				action = arr_param[i+1];
+		}
+		else if (arr_param[i] == "cloud") {
+			type = arr_param[i];
+			if ((arr_param[i+1] == 'start') || (arr_param[i+1] == 'stop'))
+				action = arr_param[i+1];
+			else {
+				src = arr_param[i+1];
+				action = 'start';
+			}
+		}
+	}
+
 	var idx = -1;
 	var nextid = 0;
 	if (Stage.layers[3].length > 0) {
 		// look for existing fx
 		for (var i=0; i<Stage.layers[3].length; i++ ) {
-			if (Stage.layers[3][i].type == param.type) {
+			if (Stage.layers[3][i].type == type) {
 				idx = i;
 				break;
 			}
 		}
 		if (idx != -1) {
-			if (param.action)
-				Stage.layers[3][idx].action = param.action;
+			if (action)
+				Stage.layers[3][idx].action = action;
 			else
 				Stage.layers[3][idx].action = 'start';
 			if (Stage.layers[3][idx].action == 'start') {
-				if (param.count != null)
-					Stage.layers[3][idx].Init(param.type, param.count);
-				else
-					Stage.layers[3][idx].Init(param.type, 0);
+				if ((type == "rain") || (type == "beam")) {
+					if (count != null)
+						Stage.layers[3][idx].Init(type, count);
+					else
+						Stage.layers[3][idx].Init(type, 0);
+					if (param.mask)
+						Stage.layers[3][idx].mask = param.mask;
+				}
+				else if (type == "cloud") {
+					if (src)
+						Stage.layers[3][idx].src = src;
+					if (param.direction != null)
+						Stage.layers[3][idx].Init(type, param.direction);
+					else
+						Stage.layers[3][idx].Init(type, Stage.layers[3][idx].direction);
+				}
 			}
 			return;
 		}
-		nextid = parseInt(Stage.layers[3][Stage.layers[3].length-1].canvas.id.substr(3))+1;
+		nextid = parseInt(Stage.layers[3][Stage.layers[3].length-1].context.canvas.id.substr(3))+1;
 	}
 	// this is new fx type
 	var atm = new Atmosphere();
 	atm.Create('atm' + nextid);
-	if (param.count != null)
-		atm.Init(param.type, param.count);
+	if (src) atm.src = src;
+	if (count != null)
+		atm.Init(type, count);
+	else if (param.direction != null)
+		atm.Init(type, param.direction);
 	else
-		atm.Init(param.type, 0);
-	if (param.action) atm.action = param.action;
+		atm.Init(type, 0);
+	if (param.mask) atm.mask = param.mask;
+	if (action) atm.action = action;
 	Stage.layers[3].push(atm);
 }
 // box - configures script box (layer 4)
@@ -1083,7 +1154,8 @@ function text(param) {
 		}
 		else {
 			Stage.layers[4][0].text = param.replace(/\n/g,"<br/>");
-		}	
+		}
+		Stage.layers[4][0].text = Helper.filterBadWords(Stage.layers[4][0].text);
 		//alert(Stage.layers[4][0].text);
 	}
 	else {
@@ -1106,7 +1178,7 @@ function text(param) {
 			if (param.effect == "fade")
 				Stage.layers[4][0].alpha = 0;
 			if (param.effect == "scroll")
-				Stage.layers[4][0].scrollOffsetY = Stage.layers[4][0].canvas.height;
+				Stage.layers[4][0].scrollOffsetY = Stage.layers[4][0].context.canvas.height;
 			Stage.layers[4][0].effects = param.effect;
 		}
 			
@@ -1174,6 +1246,8 @@ function button(param) {
 	// or new button
 	var bt = new ActiveImage();
 	var rect = {x:param.x, y:param.y, w:0, h:0};
+	if (param.w) rect.w = param.w;
+	if (param.h) rect.h = param.h;
 	var obj = new Array();
 	if (param.base) obj.push(param.base);
 	if (param.hover) 
@@ -1690,8 +1764,11 @@ function checkpoint(param) {
 		// Store layer 0
 		localStorage["l0_count"] = Stage.layers[0].length;
 		for (var i=0; i<Stage.layers[0].length; i++) {
-			localStorage["l0_"+i+"_id"] = Stage.layers[0][i].canvas.id;
-			localStorage["l0_"+i+"_src"] = Stage.layers[0][i].image.src;
+			localStorage["l0_"+i+"_id"] = Stage.layers[0][i].context.canvas.id;
+			if (typeof Stage.layers[0][i].image == 'string')
+				localStorage["l0_"+i+"_src"] = Stage.layers[0][i].image;
+			else
+				localStorage["l0_"+i+"_src"] = Stage.layers[0][i].image.src;
 			localStorage["l0_"+i+"_obj_count"] = Stage.layers[0][i].objects.length;
 			for (var j=0; j<Stage.layers[0][i].objects.length; j++) {
 				localStorage["l0_"+i+"_obj_"+j+"_src"] = Stage.layers[0][i].objects[j].img.src;
@@ -1738,8 +1815,11 @@ function checkpoint(param) {
 		// Store layer 2
 		localStorage["l2_count"] = Stage.layers[2].length;
 		for (var i=0; i<Stage.layers[2].length; i++) {
-			localStorage["l2_"+i+"_id"] = Stage.layers[2][i].canvas.id;
-			localStorage["l2_"+i+"_src"] = Stage.layers[2][i].image.src;
+			localStorage["l2_"+i+"_id"] = Stage.layers[2][i].context.canvas.id;
+			if (typeof Stage.layers[2][i].image == 'string')
+				localStorage["l2_"+i+"_src"] = Stage.layers[2][i].image;
+			else
+				localStorage["l2_"+i+"_src"] = Stage.layers[2][i].image.src;
 			localStorage["l2_"+i+"_alpha"] = Stage.layers[2][i].alpha;
 			localStorage["l2_"+i+"_visible"] = Stage.layers[2][i].visible;
 			localStorage["l2_"+i+"_effects"] = Stage.layers[2][i].effects;
@@ -1757,11 +1837,21 @@ function checkpoint(param) {
 		// Store layer 3
 		localStorage["l3_count"] = Stage.layers[3].length;
 		for (var i=0; i<Stage.layers[3].length; i++) {
-			localStorage["l3_"+i+"_id"] = Stage.layers[3][i].canvas.id;
+			localStorage["l3_"+i+"_id"] = Stage.layers[3][i].context.canvas.id;
 			localStorage["l3_"+i+"_type"] = Stage.layers[3][i].type;
 			localStorage["l3_"+i+"_count"] = Stage.layers[3][i].numParticles;
 			localStorage["l3_"+i+"_action"] = Stage.layers[3][i].action;
 			localStorage["l3_"+i+"_visible"] = Stage.layers[3][i].visible;
+			if (Stage.layers[3][i].src != '')
+				localStorage["l3_"+i+"_src"] = Stage.layers[3][i].src;
+			else
+				localStorage["l3_"+i+"_src"] = "undefined";
+			if (Stage.layers[3][i].direction != '')
+				localStorage["l3_"+i+"_direction"] = Stage.layers[3][i].direction;
+			else
+				localStorage["l3_"+i+"_direction"] = Stage.layers[3][i].undefined;
+			localStorage["l3_"+i+"_radius"] = Stage.layers[3][i].radius;
+			localStorage["l3_"+i+"_mask"] = Stage.layers[3][i].mask;
 		}
 		// Store layer 4
 		localStorage["l4_count"] = Stage.layers[4].length;
@@ -1811,7 +1901,10 @@ function checkpoint(param) {
 					localStorage["l4_"+i+"_group"] = "undefined";
 				localStorage["l4_"+i+"_sprites_count"] = Stage.layers[4][i].sprites.length;
 				for (var j=0; j<Stage.layers[4][i].sprites.length; j++) {
-					localStorage["l4_"+i+"_sprites_"+j] = Stage.layers[4][i].sprites[j].src;
+					if (typeof Stage.layers[4][i].sprites[j] == 'string')
+						localStorage["l4_"+i+"_sprites_"+j] = Stage.layers[4][i].sprites[j];
+					else
+						localStorage["l4_"+i+"_sprites_"+j] = Stage.layers[4][i].sprites[j].src;
 				}
 				localStorage["l4_"+i+"_text"] = Stage.layers[4][i].text;
 				localStorage["l4_"+i+"_link_0"] = Stage.layers[4][i].link[0].toString().split(/[' '|(|)|{|}]/g, 2)[1];
@@ -1948,7 +2041,18 @@ function checkpoint(param) {
 		for (var i=0; i<parseInt(localStorage["l3_count"]); i++) {
 			var atm = new Atmosphere();
 			atm.Create(localStorage["l3_"+i+"_id"]);
-			atm.Init(localStorage["l3_"+i+"_type"], parseInt(localStorage["l3_"+i+"_count"]));
+			if ((localStorage["l3_"+i+"_type"] == "rain") || 
+				(localStorage["l3_"+i+"_type"] == "beam")) {
+				atm.Init(localStorage["l3_"+i+"_type"], parseInt(localStorage["l3_"+i+"_count"]));
+				atm.mask = localStorage["l3_"+i+"_mask"];
+				atm.radius = parseInt(localStorage["l3_"+i+"_radius"]);
+			}
+			else if (localStorage["l3_"+i+"_type"] == "cloud") {
+				atm.src = (localStorage["l3_"+i+"_src"] != "undefined") ? localStorage["l3_"+i+"_src"] : '';
+				atm.Init(localStorage["l3_"+i+"_type"], 
+					(localStorage["l3_"+i+"_direction"]!= "undefined") ? localStorage["l3_"+i+"_direction"] : '');
+			}
+			//atm.Init(localStorage["l3_"+i+"_type"], parseInt(localStorage["l3_"+i+"_count"]));
 			atm.action = localStorage["l3_"+i+"_action"];
 			atm.visible = (localStorage["l3_"+i+"_visible"] == "true");
 			Stage.layers[3].push(atm);
@@ -2313,7 +2417,7 @@ function Form() {
 // Background/Overlay image
 function Backdrop() {
 	var bg = {
-		canvas: 0,
+		//canvas: 0,
 		context: 0,
 		image: 0,
 		origin: {x:0, y:0},		// backdrop's origin is center
@@ -2342,9 +2446,9 @@ function Backdrop() {
 		posMode: '',
 		
 		Create: function(id, file, obj) {
-			this.canvas = document.createElement('canvas');
-			this.canvas.id = escape(id);
-			this.context = this.canvas.getContext('2d');
+			var canvas = document.createElement('canvas');
+			canvas.id = escape(id);
+			this.context =  canvas.getContext('2d');
 
 			if (obj) {
 				this.loaded = obj.length + 1;	// total number of images to load
@@ -2361,26 +2465,30 @@ function Backdrop() {
 			}
 			else
 				this.loaded = 1;
-			this.image = new Image();
-			this.image.onload = function() {
-				//bg.canvas.setAttribute('width', bg.image.width);
-				//bg.canvas.setAttribute('height', bg.image.height);
-				//bg.origin.x = bg.image.width/2;
-				//bg.origin.y = bg.image.height/2;
-				////bg.isready = true;
-				//bg.IsLoaded();
-
-				// use larger canvas to support sprite rotation
-				bg.backdropDim.w = bg.image.width;
-				bg.backdropDim.h = bg.image.height;
-				var dim = Math.ceil(Math.sqrt(bg.backdropDim.w*bg.backdropDim.w + bg.backdropDim.h*bg.backdropDim.h));
-				bg.canvas.setAttribute('width', dim);
-				bg.canvas.setAttribute('height', dim);
-				bg.origin.x = dim/2;
-				bg.origin.y = dim/2;
-				bg.IsLoaded();
+			if (Helper.checkIfImage(file)) {
+				this.image = new Image();
+				this.image.onload = function() {
+					// use larger canvas to support sprite rotation
+					bg.backdropDim.w = bg.image.width;
+					bg.backdropDim.h = bg.image.height;
+					var dim = Math.ceil(Math.sqrt(bg.backdropDim.w*bg.backdropDim.w + bg.backdropDim.h*bg.backdropDim.h));
+					bg.context.canvas.setAttribute('width', dim);
+					bg.context.canvas.setAttribute('height', dim);
+					bg.origin.x = dim/2;
+					bg.origin.y = dim/2;
+					bg.IsLoaded();
+				}
+				this.image.src = file;
 			}
-			this.image.src = file;
+			else {
+				// assume valid HTML color
+				this.image = file;
+				this.context.canvas.setAttribute('width', 1.1*Stage.canvas.width);
+				this.context.canvas.setAttribute('height', 1.1*Stage.canvas.height);
+				this.origin.x = this.context.canvas.width/2;
+				this.origin.y = this.context.canvas.height/2;
+				this.isready = true;
+			}
 			
 			// configure transition
 			if (Config.transTime != null) {
@@ -2389,7 +2497,7 @@ function Backdrop() {
 			
 			this.update = false;
 			this.Reset(true);
-			return this.canvas.id;
+			return this.context.canvas.id;
 		},
 		
 		IsLoaded: function() {
@@ -2418,23 +2526,29 @@ function Backdrop() {
 			if (!this.redraw) return false;
 			
 			if (this.visible) {
-				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);		
+				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);		
 				this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));		
 				if (this.rotation != 0) {
-					this.context.translate(this.canvas.width/2, this.canvas.height/2);
+					this.context.translate(this.context.canvas.width/2, this.context.canvas.height/2);
 					this.context.rotate(this.rotation * Math.PI/180);
-					this.context.translate(-this.canvas.width/2, -this.canvas.height/2);
+					this.context.translate(-this.context.canvas.width/2, -this.context.canvas.height/2);
 					this.rotation = 0.0;
 				}
-				this.context.drawImage(this.image, 
-									(this.canvas.width - this.backdropDim.w)/2,
-									(this.canvas.height - this.backdropDim.h)/2);
+				if (this.image.constructor == Image) {
+					this.context.drawImage(this.image, 
+										(this.context.canvas.width - this.backdropDim.w)/2,
+										(this.context.canvas.height - this.backdropDim.h)/2);
+				}
+				else {
+					this.context.fillStyle = this.image;
+					this.context.fillRect(0, 0, this.context.canvas.width, this.context.canvas.height);		
+				}
 
 				if (this.objects.length > 0) {
 					for (var i in this.objects)
 						this.context.drawImage(this.objects[i].img, 
-											this.objects[i].x + (this.canvas.width - this.backdropDim.w)/2,
-											this.objects[i].y + (this.canvas.height - this.backdropDim.h)/2);
+											this.objects[i].x + (this.context.canvas.width - this.backdropDim.w)/2,
+											this.objects[i].y + (this.context.canvas.height - this.backdropDim.h)/2);
 				}
 			}
 
@@ -2450,7 +2564,7 @@ function ActiveImage() {
 	var act = {
 		type: 'button',
 		group: '',
-		canvas: 0,
+		//canvas: 0,
 		context: 0,
 		isready: false,
 		redraw: true,
@@ -2471,9 +2585,9 @@ function ActiveImage() {
 		tooltip: '',
 		
 		Create: function(id, rect, obj) {
-			this.canvas = document.createElement('canvas');
-			this.canvas.id = escape(id);
-			this.context = this.canvas.getContext('2d');
+			var canvas = document.createElement('canvas');
+			canvas.id = escape(id);
+			this.context = canvas.getContext('2d');
 			this.text = id;
 			this.rect = rect;
 			this.origin.x = this.rect.x;
@@ -2482,12 +2596,20 @@ function ActiveImage() {
 			if (obj.length>0) {
 				this.loaded = obj.length;
 				for (var i in obj) {
-					var item = new Image();
-					item.onload = function() {
-						act.IsLoaded();
+					if (Helper.checkIfImage(obj[i])) {
+						var item = new Image();
+						item.onload = function() {
+							act.IsLoaded();
+						}
+						item.src = obj[i];
+						this.sprites.push(item);
+						this.rect.w = 0;
+						this.rect.h = 0;
 					}
-					item.src = obj[i];
-					this.sprites.push(item);
+					else {
+						this.sprites.push(obj[i])
+						this.IsLoaded();
+					}
 				}
 			}
 			
@@ -2497,14 +2619,25 @@ function ActiveImage() {
 			if (--this.loaded <= 0) {
 				this.isready = true;
 				// all sprites are assumed same size, set canvas size here
+				var idx = 0;
+				for (var i in this.sprites) {
+					if (this.sprites[i].constructor == Image) {
+						idx = i;
+						break;
+					}
+				}
 				if (this.rect.w == 0) {
-					this.canvas.setAttribute('width',this.sprites[0].width);
+					this.context.canvas.setAttribute('width',this.sprites[idx].width);
 					this.rect.w = this.sprites[0].width;
 				}
+				else 
+					this.context.canvas.setAttribute('width',this.rect.w);
 				if (this.rect.h == 0) {
-					this.canvas.setAttribute('height',this.sprites[0].height);
+					this.context.canvas.setAttribute('height',this.sprites[idx].height);
 					this.rect.h = this.sprites[0].height;
 				}			
+				else 
+					this.context.canvas.setAttribute('height',this.rect.h);
 			}
 		},
 		Update: function(elapsed) {
@@ -2551,13 +2684,32 @@ function ActiveImage() {
 			if (!this.redraw) return false;
 
 			if (this.visible) {
-				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);
-				if ((this.sprites.length>1) && (this.state=='hover'))
-					this.context.drawImage(this.sprites[1],0,0);
-				else if ((this.sprites.length>=3) && (this.state=='clicked')) 
-					this.context.drawImage(this.sprites[2],0,0);
-				else
-					this.context.drawImage(this.sprites[0],0,0);
+				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);
+				if ((this.sprites.length>1) && (this.state=='hover')) {
+					if (this.sprites[1].constructor == Image)
+						this.context.drawImage(this.sprites[1],0,0);
+					else {
+						this.context.fillStyle = this.sprites[1];
+						this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+					}
+				}
+				else if ((this.sprites.length>=3) && (this.state=='clicked')) {
+					if (this.sprites[2].constructor == Image)
+						this.context.drawImage(this.sprites[2],0,0);
+					else {
+						this.context.fillStyle = this.sprites[2];
+						this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+					}
+				}
+				else {
+					if (this.sprites[0].constructor == Image)
+						this.context.drawImage(this.sprites[0],0,0);
+					else {
+						this.context.fillStyle = this.sprites[0];
+						this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+					}
+
+				}
 				if ((this.showText) && (this.text != '')) {
 					this.context.textBaseline = 'middle';
 					this.context.textAlign = 'center';
@@ -2591,7 +2743,7 @@ function ScriptBox() {
 		back: 'dim',
 		src: 0,
 		image: 0,
-		canvas: 0,
+		//canvas: 0,
 		context: 0,
 		canvasText: new CanvasText,
 		visible: false,
@@ -2640,11 +2792,11 @@ function ScriptBox() {
 			this.origin.y = this.vpheight * (1-Config.boxHeight);	//3/4;
 			
 			// create a default script box: dim at bottom
-			this.canvas = document.createElement('canvas');
+			var canvas = document.createElement('canvas');
 			//this.canvas.id = 'sb_canvas';	// fixed id for script box
-			this.context = this.canvas.getContext('2d');
-			this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-			this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+			this.context = canvas.getContext('2d');
+			this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+			this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
 			
 			//Helper.configUpdate("activeTheme");
 
@@ -2663,26 +2815,26 @@ function ScriptBox() {
 						case 'bottom':
 							this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
 							this.origin.y = this.vpheight * (1-Config.boxHeight);
-							this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-							this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+							this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+							this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
 							break;
 						case 'center':
 							this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
 							this.origin.y = this.vpheight * (1-Config.boxHeight)/2;
-							this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-							this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+							this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+							this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
 							break;
 						case 'top':
 							this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
 							this.origin.y = 0;
-							this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-							this.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+							this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+							this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
 							break;
 						case 'full':
 							this.origin.x = this.vpwidth * (1-Config.boxWidth)/2;
 							this.origin.y = this.vpheight * (1-Config.boxFullHeight)/2;
-							this.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-							this.canvas.setAttribute('height', this.vpheight * Config.boxFullHeight)
+							this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+							this.context.canvas.setAttribute('height', this.vpheight * Config.boxFullHeight)
 							break;
 					}
 					switch (this.back) {
@@ -2702,7 +2854,7 @@ function ScriptBox() {
 					}
 					
 					this.canvasText.config({
-				        canvas: this.canvas,
+				        canvas: this.context.canvas,
 				        context: this.context,
 				        fontFamily: this.fontFamily,
 				        fontSize: this.fontSize,
@@ -2710,7 +2862,7 @@ function ScriptBox() {
 				        fontColor: this.fontColor,
 				        lineHeight: this.lineHeight
 				    });
-					this.canvasText.updateCanvas(this.canvas);
+					this.canvasText.updateCanvas(this.context.canvas);
 				}
 				switch (this.effects) {
 					case 'fade':
@@ -2765,22 +2917,22 @@ function ScriptBox() {
 			
 			//alert('ScriptBox.Draw()');
 			if (this.visible == true) {
-				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);	
+				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);	
 				//this.canvas.width = this.canvas.width;
 				if (this.back == 'dim') {
 					//alert("image dim");
 					this.context.globalAlpha = 0.5;
 					if (this.dimStyle.length > 1) {
-						var grd=this.context.createLinearGradient(0,0,0,this.canvas.height);
+						var grd=this.context.createLinearGradient(0,0,0,this.context.canvas.height);
 						grd.addColorStop(0,this.dimStyle[1]);
-						grd.addColorStop(1/this.canvas.height,this.dimStyle[0]);
+						grd.addColorStop(1/this.context.canvas.height,this.dimStyle[0]);
 						grd.addColorStop(1,this.dimStyle[1]);
 						this.context.fillStyle=grd;
 					} 
 					else {
 						this.context.fillStyle = this.dimStyle[0];
 					}
-					this.context.fillRect(0,0,this.canvas.width,this.canvas.height);
+					this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
 				}
 				if (this.back == 'image') {
 					//alert("image back");
@@ -2796,7 +2948,7 @@ function ScriptBox() {
 					if (Config.actorShowAvatar == true) {
 						if (this.avatar != null) {
 							avatarOffsetX = this.avatar.width;
-							this.context.drawImage(this.avatar, this.textOffset.x/2, (this.canvas.height - this.avatar.height)/2);
+							this.context.drawImage(this.avatar, this.textOffset.x/2, (this.context.canvas.height - this.avatar.height)/2);
 						}
 					}
 					var ret = this.canvasText.drawText({
@@ -2805,7 +2957,7 @@ function ScriptBox() {
 						y: this.textOffset.y, // + this.scrollOffsetY,
 						align: this.textAlign,
 						alpha: this.alpha,
-						boxWidth:this.canvas.width-2*this.textOffset.x - avatarOffsetX,
+						boxWidth:this.context.canvas.width-2*this.textOffset.x - avatarOffsetX,
 						scroll: [(this.effects == 'scroll'), this.scrollOffsetY],
 					});
 					// draw the prompt icon
@@ -2817,7 +2969,7 @@ function ScriptBox() {
 								this.context.drawImage(this.prompt, ret.endpt[0], ret.endpt[1] - this.prompt.height);
 						}
 						else {
-							for(var i=0; i<ret.hotspot.length; i++) {
+							for (var i=0; i<ret.hotspot.length; i++) {
 								this.jumpTo[i].hotspot = ret.hotspot[i];
 							}
 						}
@@ -2827,7 +2979,7 @@ function ScriptBox() {
 						this.context.globalAlpha = 0.25;						
 						this.context.fillStyle = Config.activeTheme.boxMenuHilite;
 						this.context.fillRect(5,this.jumpTo[this.menuHover].hotspot[1] - this.lineHeight + 4,
-												this.canvas.width - 10,this.lineHeight);
+												this.context.canvas.width - 10,this.lineHeight);
 					}
 				}
 				
@@ -2950,7 +3102,7 @@ function Character() {
 		transTime: 1,
 		avatar: null,
 		
-		canvas: 0,
+		//canvas: 0,
 		context: 0,
 		origin: {x:0, y:0},		// actor origin is bottom center
 		pos: {x:0, y:0},
@@ -2966,9 +3118,9 @@ function Character() {
 		
 		Create: function(id) {
 			this.id = id;
-			this.canvas = document.createElement('canvas');
-			this.canvas.id = escape(id);
-			this.context = this.canvas.getContext('2d');
+			var canvas = document.createElement('canvas');
+			canvas.id = escape(id);
+			this.context = canvas.getContext('2d');
 
 			// configure transition
 			if (Config.transTime != null) {
@@ -2977,7 +3129,7 @@ function Character() {
 			this.isready = true;
 			this.update = false;
 			this.Reset(true);
-			return this.canvas.id;
+			return this.context.canvas.id;
 		},
 		
 		AddSprite: function(tag, file) {
@@ -3022,8 +3174,8 @@ function Character() {
 				//chr.origin.x = chr.spriteDim.w/2;
 				//chr.origin.y = chr.spriteDim.h;
 				var dim = Math.ceil(Math.sqrt(chr.spriteDim.w*chr.spriteDim.w + chr.spriteDim.h*chr.spriteDim.h));
-				chr.canvas.setAttribute('width', dim);
-				chr.canvas.setAttribute('height', dim);
+				chr.context.canvas.setAttribute('width', dim);
+				chr.context.canvas.setAttribute('height', dim);
 				chr.origin.x = dim/2;
 				chr.origin.y = dim/2 + chr.spriteDim.h/2;
 				chr.isready = true;
@@ -3093,26 +3245,26 @@ function Character() {
 			if (this.activeSprite > this.sprites.length-1) return false;
 			
 			if (this.visible) {
-				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);		
+				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);		
 				if (this.prevSprite >= 0) {
 					this.context.globalAlpha = Math.max(0, Math.min(1, this.target_alpha-this.alpha));
 					//this.context.drawImage(this.sprites[this.prevSprite].src, 0, 0);
 					this.context.drawImage(this.sprites[this.prevSprite].src, 								   
-										(this.canvas.width - this.spriteDim.w)/2,
-										(this.canvas.height - this.spriteDim.h)/2);
+										(this.context.canvas.width - this.spriteDim.w)/2,
+										(this.context.canvas.height - this.spriteDim.h)/2);
 					if (this.target_alpha - this.alpha <= 0) this.prevSprite = -1;
 				}
 				this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
 				//this.context.drawImage(this.sprites[this.activeSprite].src, 0, 0);
 				if (this.rotation != 0) {
-					this.context.translate(this.canvas.width/2, this.canvas.height/2);
+					this.context.translate(this.context.canvas.width/2, this.context.canvas.height/2);
 					this.context.rotate(this.rotation * Math.PI/180);
-					this.context.translate(-this.canvas.width/2, -this.canvas.height/2);
+					this.context.translate(-this.context.canvas.width/2, -this.context.canvas.height/2);
 					this.rotation = 0.0;
 				}
 				this.context.drawImage(this.sprites[this.activeSprite].src,
-									   (this.canvas.width - this.spriteDim.w)/2,
-									   (this.canvas.height - this.spriteDim.h)/2);
+									   (this.context.canvas.width - this.spriteDim.w)/2,
+									   (this.context.canvas.height - this.spriteDim.h)/2);
 				if (this.activeSpriteRemoval && (this.alpha <= 0)) {
 					this.sprites.splice(this.activeSprite, 1);
 					this.activeSprite = Math.max(this.activeSprite-1, 0);
@@ -3177,7 +3329,7 @@ function Particle() {
 // Atmosphere special effects
 function Atmosphere() {
 	var atm = {
-		canvas: 0,
+		//canvas: 0,
 		context: 0,
 		type: '',
 		isready: false,
@@ -3188,18 +3340,23 @@ function Atmosphere() {
 		action: 'start',
 		particles: new Array(),
 		numParticles: 0,
-		stopped: true,
+		src: '',
+		image: null,
+		pos: {x:0, y:0},
+		direction: '',
+		radius: 0,
+		mask: 'black',
 		
 		Create: function(id, type) {
-			this.canvas = document.createElement('canvas');
-			this.canvas.id = escape(id);
-			this.context = this.canvas.getContext('2d');
-			this.canvas.setAttribute('width', Stage.canvas.width);
-			this.canvas.setAttribute('height', Stage.canvas.height);
+			var canvas = document.createElement('canvas');
+			canvas.id = escape(id);
+			this.context = canvas.getContext('2d');
+			this.context.canvas.setAttribute('width', Stage.canvas.width);
+			this.context.canvas.setAttribute('height', Stage.canvas.height);
 		
 			this.isready = true;
 			this.update = false;		
-			return this.canvas.id;
+			return this.context.canvas.id;
 		},
 		
 		Init: function(type, param) {
@@ -3208,8 +3365,25 @@ function Atmosphere() {
 				this.numParticles = param;
 				for (var i=0; i<this.numParticles; i++) {
 					this.particles[i] = new Particle();
-					this.particles[i].Create(this.canvas);
+					this.particles[i].Create(this.context.canvas);
 				}
+				this.alpha = 0.5;
+				this.visible = true;
+			}
+			if (this.type == 'cloud') {
+				this.isready = false;
+				this.image = new Image();
+				this.image.onload = function() {
+					atm.isready = true;
+					atm.visible = true;
+				}
+				this.image.src = this.src;
+				this.alpha = 0;
+				this.direction = param;
+			}
+			if (this.type == 'beam') {
+				this.radius = param;
+				this.alpha = 0;
 				this.visible = true;
 			}
 		},
@@ -3233,6 +3407,58 @@ function Atmosphere() {
 						this.update = true;
 					}
 				}
+				if (this.type == 'cloud') {
+					if (this.action == 'stop') {
+						if (this.alpha > 0) {
+							this.alpha -= elapsed/(Config.transTime * 1000)
+							this.redraw = true;
+						}
+						else {
+							this.image = null;
+							this.visible = false;
+						}
+					}
+					else {
+						if (this.alpha < 1) {
+							this.alpha += elapsed/(Config.transTime * 1000);
+							this.redraw = true;
+						}
+						// scroll it here
+						if (this.direction == 'left') {
+							this.pos.x -= elapsed/(Config.transTime * 50);
+							if (this.pos.x < -this.image.width)
+								this.pos.x = 0;
+							this.redraw = true;
+						}
+						else if (this.direction == 'right') {
+							this.pos.x += elapsed/(Config.transTime * 50);
+							if (this.pos.x > 0)
+								this.pos.x = -this.image.width;
+							this.redraw = true;
+						}
+						else {
+							this.pos.x = 0;
+							this.pos.y = 0;
+						}
+					}
+				}
+				if (this.type == 'beam') {
+					if (this.action == 'stop') {
+						if (this.alpha > 0) {
+							this.alpha -= elapsed/(Config.transTime * 1000)
+							this.redraw = true;
+						}
+						else {
+							this.visible = false;
+						}
+					}
+					else {
+						if (this.alpha < 1) {
+							this.alpha += elapsed/(Config.transTime * 1000);
+						}
+						this.redraw = true;
+					}
+				}
 			}
 			return this.update;
 		},
@@ -3242,7 +3468,7 @@ function Atmosphere() {
 			if (!this.redraw) return false;
 
 			if (this.visible) {
-				this.context.clearRect(0,0,this.canvas.width,this.canvas.height);		
+				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);		
 				this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
 				if (this.type == 'rain') {
 					this.context.lineWidth = "1";
@@ -3250,6 +3476,37 @@ function Atmosphere() {
 					for (var i=0; i<this.numParticles; i++) {
 						this.particles[i].Draw(this.context);
 					}
+				}
+				if (this.type == 'cloud') {
+					// tile it here
+					var x = this.pos.x;
+					var y = this.pos.y;
+					while (x<this.context.canvas.width) {
+						while (y<this.context.canvas.height) {
+							this.context.drawImage(this.image, x, y);
+							y+= this.image.height;
+						}
+						y = this.pos.y;
+						x += this.image.width;
+					}
+				}
+				if (this.type == 'beam') {
+					//this.context.fillStyle = 'rgba(0,0,0,1)';
+					this.context.fillStyle = this.mask;
+					this.context.fillRect(0, 0, this.context.canvas.width, this.context.canvas.height);		
+					this.context.save();
+					this.context.globalCompositeOperation = "destination-out";
+					var grd = this.context.createRadialGradient(Stage.coord.x, Stage.coord.y, 0,
+																Stage.coord.x, Stage.coord.y, this.radius);
+					grd.addColorStop(0, 'rgba(0,0,0,1)');
+					grd.addColorStop(0.6, 'rgba(0,0,0,0.8)');
+					grd.addColorStop(1, 'rgba(0,0,0,0)');
+					this.context.fillStyle = grd;
+					this.context.beginPath();
+					this.context.arc(Stage.coord.x, Stage.coord.y, this.radius, 0, 2*Math.PI);
+					this.context.closePath();
+					this.context.fill();
+					this.context.restore();
 				}
 			}
 					
@@ -3531,7 +3788,7 @@ var Stage = {
 		var running_draw = false;			
 		// draw background here
 		if (this.layers[0].length > 0) {
-			for(var i in this.layers[0]) {
+			for (var i in this.layers[0]) {
 				if (this.layers[0][i].Draw()) running_draw = true;
 				if (this.redraw) {
 					if (Helper.drawElements(this.layers[0][i], 0, [1/2, 1/2])) 
@@ -3544,7 +3801,7 @@ var Stage = {
 		if (this.layers[1].length > 0) {
 			// get number of visible & auto actors
 			var count = 1;
-			for(var i in this.layers[1]) {
+			for (var i in this.layers[1]) {
 				if ((this.layers[1][i].visible) && (this.layers[1][i].posMode == 'auto')) count++;
 			}
 			// compute auto-positioning
@@ -3558,7 +3815,7 @@ var Stage = {
 				}
 			}
 			// display actors
-			for(var i in this.layers[1]) {
+			for (var i in this.layers[1]) {
 				if (this.layers[1][i].Draw()) running_draw = true;
 				if (this.redraw) {
 					if (this.layers[1][i].visible) {
@@ -3575,19 +3832,19 @@ var Stage = {
 		
 		// draw overlay/closeup here
 		if (this.layers[2].length > 0) {
-			for(var i in this.layers[2]) {
+			for (var i in this.layers[2]) {
 				if (this.layers[2][i].Draw()) running_draw = true;
 				if (this.redraw && this.layers[2][i].visible) {
 					if (this.layers[2][i].scroll) {
-						this.context.drawImage(this.layers[2][i].canvas,
+						this.context.drawImage(this.layers[2][i].context.canvas,
 										   //(0.98*this.coord.x/this.canvas.width + 0.01)*(this.canvas.width-2*this.layers[2][i].origin.x),
 										   //(0.98*this.coord.y/this.canvas.height + 0.01)*(this.canvas.height-2*this.layers[2][i].origin.y));
-										   -this.layers[2][i].target_scale*(this.layers[2][i].canvas.width-this.layers[2][i].backdropDim.w)/2 
+										   -this.layers[2][i].target_scale*(this.layers[2][i].context.canvas.width-this.layers[2][i].backdropDim.w)/2 
 										   -(this.layers[2][i].target_scale*this.layers[2][i].backdropDim.w-this.canvas.width)*(this.coord.x/this.canvas.width),
-										   -this.layers[2][i].target_scale*(this.layers[2][i].canvas.height-this.layers[2][i].backdropDim.h)/2
+										   -this.layers[2][i].target_scale*(this.layers[2][i].context.canvas.height-this.layers[2][i].backdropDim.h)/2
 										   -(this.layers[2][i].target_scale*this.layers[2][i].backdropDim.h-this.canvas.height)*(this.coord.y/this.canvas.height),
-										   this.layers[2][i].canvas.width * this.layers[2][i].target_scale,
-										   this.layers[2][i].canvas.height * this.layers[2][i].target_scale);
+										   this.layers[2][i].context.canvas.width * this.layers[2][i].target_scale,
+										   this.layers[2][i].context.canvas.height * this.layers[2][i].target_scale);
 					}
 					else {
 						if (Helper.drawElements(this.layers[2][i], 2, [1/2, 1/2])) 
@@ -3602,7 +3859,7 @@ var Stage = {
 			for (var i in this.layers[3]) {
 				if (this.layers[3][i].Draw()) running_draw = true;
 				if (this.redraw && this.layers[3][i].visible) {
-					this.context.drawImage(this.layers[3][i].canvas, 0, 0);
+					this.context.drawImage(this.layers[3][i].context.canvas, 0, 0);
 				}
 			}
 		}
@@ -3612,7 +3869,7 @@ var Stage = {
 			for (var i in this.layers[4]) {
 				if (this.layers[4][i].Draw()) running_draw = true;
 				if (this.redraw && this.layers[4][i].visible) {
-					this.context.drawImage(this.layers[4][i].canvas, this.layers[4][i].origin.x, this.layers[4][i].origin.y);
+					this.context.drawImage(this.layers[4][i].context.canvas, this.layers[4][i].origin.x, this.layers[4][i].origin.y);
 				}
 			}
 			// draw tooltips if any

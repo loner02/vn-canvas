@@ -69,5 +69,8 @@ Config = {
 	// Gameplay Settings
 	// 	this setting filters mature content
 	gameMatureFilter:	true,
-
+	//	list of filtered words if gameMatureFilter is on
+	gameBadWords:		["fuck", "wank", "shit", "pussy", "cunt", "dick"],
+	//	replacement text for auto filtered words
+	gameAltWord:		"****",
 }
