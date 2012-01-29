@@ -43,6 +43,10 @@
 ******************************************************************************/
 /******************************************************************************
 Revision history:
+01.28.12 - Bugfix for non-modal dialog while checkpoint loading
+		 - Bugfix for cross-browser compatibility (re:image constructor)
+		 - Added timer cform element
+		 - Added animated picture cform element
 01.25.12 - Added macro for custom javascript
 01.12.12 - Updated scene and overlay to accept HTML color
 		 - Updated button (cform) to accept HTML color
@@ -457,8 +461,14 @@ var Helper = {
 				dialog += Stage.layers[4][0].text;
 			dialog += '\n';
 		}
-		if (text != null)
-			dialog += text.replace(/\n/g,"<br/>");
+		if (text != null) {
+			var idx = Helper.findVar(text);
+			if (idx == -1)
+				dialog += text.replace(/\n/g,"<br/>");
+			else {
+				dialog += Helper.getValue(text).toString().replace(/\n/g,"<br/>");
+			}
+		}
 		
 		return Helper.filterBadWords(dialog);
 	},
@@ -490,6 +500,16 @@ var Helper = {
 		}
 		else
 			return str;
+	},
+	convertTime: function (val) {
+		var sec = val % 60;
+		var min = (val - sec) / 60;
+		min %= 60;
+		var hr = (val - sec - 60*min) / 3600;
+		if (hr > 0)
+			return (hr.toString() + ':' + ((min<10)?'0':'') + min.toString() + ':' + ((sec<10)?'0':'') + sec.toString());
+		else
+			return (min.toString() + ':' + ((sec<10)?'0':'') + sec.toString());
 	}
 }
 // Function to determine optimal animation frame
@@ -654,6 +674,7 @@ function jump(param) {
 			}
 		}
 	}
+	Stage.layers[4][0].jumpTo.splice(0,Stage.layers[4][0].jumpTo.length);
 }
 // scene - displays a background (layer 0)
 function scene(param) {
@@ -1266,6 +1287,30 @@ function button(param) {
 		bt.tooltip = param.tip;
 	Stage.layers[4].push(bt);
 	//Stage.pause = true;
+}
+// timer - create a canvas form timer (layer 4)
+function timer(param) {
+	var tm = new ActiveImage();
+	tm.type = "animText";
+	tm.fps = 1;
+	if (param.timeout) tm.timeout = param.timeout;
+	if (param.link) tm.link = param.link;
+	var rect = {x:param.x, y:param.y, w:param.w, h:param.h};
+	tm.Create(param.name, rect, null);
+	Stage.layers[4].push(tm);
+}
+// picture - create a canvas form animated image (layer 4)
+function picture(param) {
+	var pic = new ActiveImage();
+	pic.type = "animImage";
+	pic.fps = (param.fps > 1) ? param.fps : 1;
+	var rect = {x:param.x, y:param.y, w:0, h:0};
+	var obj = new Array();
+	for (var i in param.frames) 
+		obj.push(param.frames[i]);
+	pic.Create(param.name, rect, obj);
+	pic.showText = false;
+	Stage.layers[4].push(pic);
 }
 // form - container for canvas form elements such as buttons (layer 4)
 function cform(param) {
@@ -1920,6 +1965,31 @@ function checkpoint(param) {
 				localStorage["l4_"+i+"_rect_w"] = Stage.layers[4][i].rect.w;
 				localStorage["l4_"+i+"_rect_h"] = Stage.layers[4][i].rect.h;
 			}
+			if (Stage.layers[4][i].type == "animText") {
+				localStorage["l4_"+i+"_id"] = Stage.layers[4][i].context.canvas.id;
+				if (Stage.layers[4][i].group != '')
+					localStorage["l4_"+i+"_group"] = Stage.layers[4][i].group;
+				else
+					localStorage["l4_"+i+"_group"] = "undefined";
+				localStorage["l4_"+i+"_text"] = Stage.layers[4][i].text;
+				if ((Stage.layers[4][i].link != '') && (Stage.layers[4][i].link.length > 0)) {
+					localStorage["l4_"+i+"_link_0"] = Stage.layers[4][i].link[0].toString().split(/[' '|(|)|{|}]/g, 2)[1];
+					localStorage["l4_"+i+"_link_1"] = JSON.stringify(Stage.layers[4][i].link[1]);
+				}
+				else {
+					localStorage["l4_"+i+"_link_0"] = "undefined";
+					localStorage["l4_"+i+"_link_1"] = "undefined";
+				}
+				localStorage["l4_"+i+"_visible"] = Stage.layers[4][i].visible;
+				localStorage["l4_"+i+"_showText"] = Stage.layers[4][i].showText;
+				localStorage["l4_"+i+"_rect_x"] = Stage.layers[4][i].rect.x;
+				localStorage["l4_"+i+"_rect_y"] = Stage.layers[4][i].rect.y;
+				localStorage["l4_"+i+"_rect_w"] = Stage.layers[4][i].rect.w;
+				localStorage["l4_"+i+"_rect_h"] = Stage.layers[4][i].rect.h;
+				localStorage["l4_"+i+"_fps"] = Stage.layers[4][i].fps;
+				localStorage["l4_"+i+"_countup"] = Stage.layers[4][i].countup;
+				localStorage["l4_"+i+"_timeout"] = Stage.layers[4][i].timeout;
+			}
 			// TODO: other GUI types
 		}
 		// Store sounds
@@ -2117,7 +2187,7 @@ function checkpoint(param) {
 				bt.Create(localStorage["l4_"+i+"_text"], rect, obj);
 						  
 				bt.visible = (localStorage["l4_"+i+"_visible"] == "true");
-				bt.inputFocus = bt.visible;
+				//bt.inputFocus = bt.visible;
 				bt.showText = (localStorage["l4_"+i+"_showText"] == "true");
 				if (localStorage["l4_"+i+"_group"] != "undefined")
 					bt.group = localStorage["l4_"+i+"_group"];
@@ -2132,6 +2202,35 @@ function checkpoint(param) {
 				link.push(JSON.parse(localStorage["l4_"+i+"_link_1"]));
 				bt.link = link;
 				Stage.layers[4].push(bt);
+			}
+			if (localStorage["l4_"+i+"_type"] == 'animText') {
+				var at = new ActiveImage();
+				var rect = {x:0, y:0, w:0, h:0};
+				rect.x = parseInt(localStorage["l4_"+i+"_rect_x"]);
+				rect.y = parseInt(localStorage["l4_"+i+"_rect_y"]);
+				rect.w = parseInt(localStorage["l4_"+i+"_rect_w"]);
+				rect.h = parseInt(localStorage["l4_"+i+"_rect_h"]);
+				at.timeout = parseInt(localStorage["l4_"+i+"_timeout"]);
+				at.type = localStorage["l4_"+i+"_type"];
+				at.Create(localStorage["l4_"+i+"_id"], rect, null);
+
+				at.text = localStorage["l4_"+i+"_text"];
+				at.fps = parseInt(localStorage["l4_"+i+"_fps"]);
+				at.countup = (localStorage["l4_"+i+"_countup"] == "true");
+				at.visible = (localStorage["l4_"+i+"_visible"] == "true");
+				at.showText = (localStorage["l4_"+i+"_showText"] == "true");
+				if (localStorage["l4_"+i+"_group"] != "undefined")
+					at.group = localStorage["l4_"+i+"_group"];
+				else
+					at.group = '';
+				if ((localStorage["l4_"+i+"_link_0"] != "undefined") && 
+					(localStorage["l4_"+i+"_link_1"] != "undefined")) {
+					var link = new Array();
+					link.push(eval(localStorage["l4_"+i+"_link_0"]));
+					link.push(JSON.parse(localStorage["l4_"+i+"_link_1"]));
+					at.link = link;
+				}
+				Stage.layers[4].push(at);
 			}
 			// TODO: other gui
 		}
@@ -2534,7 +2633,7 @@ function Backdrop() {
 					this.context.translate(-this.context.canvas.width/2, -this.context.canvas.height/2);
 					this.rotation = 0.0;
 				}
-				if (this.image.constructor == Image) {
+				if ((this.image.constructor == HTMLImageElement) || (this.image.constructor == Image)) {
 					this.context.drawImage(this.image, 
 										(this.context.canvas.width - this.backdropDim.w)/2,
 										(this.context.canvas.height - this.backdropDim.h)/2);
@@ -2584,36 +2683,64 @@ function ActiveImage() {
 		
 		tooltip: '',
 		
+		fps: 0,
+		timeout: 0,
+		countup: 0,
+		aTimer: 0,
+		aTimerOn: false,
+		
 		Create: function(id, rect, obj) {
 			var canvas = document.createElement('canvas');
 			canvas.id = escape(id);
 			this.context = canvas.getContext('2d');
-			this.text = id;
+			if (this.type == 'animText') {
+				// TODO: for now only timer is supported
+				this.text = Helper.convertTime(this.timeout);
+				// create a user variable with id
+				var idx = Helper.findVar(escape(id));
+				if (idx != -1) {
+					Stage.variables[idx].Set(escape(id), this.timeout);
+				}
+				else {
+					var uv = new UserVars();
+					uv.Set(escape(id), this.timeout);
+					Stage.variables.push(uv);
+				}
+				this.countup = !(this.timeout > 0);
+			}
+			else
+				this.text = id;
 			this.rect = rect;
 			this.origin.x = this.rect.x;
 			this.origin.y = this.rect.y;
 			
-			if (obj.length>0) {
-				this.loaded = obj.length;
-				for (var i in obj) {
-					if (Helper.checkIfImage(obj[i])) {
-						var item = new Image();
-						item.onload = function() {
-							act.IsLoaded();
+			try {
+				if (obj.length>0) {
+					this.loaded = obj.length;
+					for (var i in obj) {
+						if (Helper.checkIfImage(obj[i])) {
+							var item = new Image();
+							item.onload = function() {
+								act.IsLoaded();
+							}
+							item.src = obj[i];
+							this.sprites.push(item);
+							this.rect.w = 0;
+							this.rect.h = 0;
 						}
-						item.src = obj[i];
-						this.sprites.push(item);
-						this.rect.w = 0;
-						this.rect.h = 0;
-					}
-					else {
-						this.sprites.push(obj[i])
-						this.IsLoaded();
+						else {
+							this.sprites.push(obj[i])
+							this.IsLoaded();
+						}
 					}
 				}
+			} catch (e) {
+				var item = Config.activeTheme.formElementBack;
+				this.sprites.push(item);
+				this.context.canvas.setAttribute('width',this.rect.w);
+				this.context.canvas.setAttribute('height',this.rect.h);
+				this.isready = true;
 			}
-			
-			
 		},
 		IsLoaded: function() {
 			if (--this.loaded <= 0) {
@@ -2621,7 +2748,7 @@ function ActiveImage() {
 				// all sprites are assumed same size, set canvas size here
 				var idx = 0;
 				for (var i in this.sprites) {
-					if (this.sprites[i].constructor == Image) {
+					if ((this.sprites[i].constructor == HTMLImageElement) || (this.sprites[i].constructor == Image)) {
 						idx = i;
 						break;
 					}
@@ -2642,40 +2769,70 @@ function ActiveImage() {
 		},
 		Update: function(elapsed) {
 			if (this.isready) {
-				if (!this.visible)
+				if (!this.visible) {
 					this.inputFocus = false;
-				else if (this.prev_state != this.state) {
-					this.prev_state = this.state;
-					this.redraw = true;	
-					if ((this.state == 'hover') || (this.state == 'clicked')) {
-						this.inputFocus = true;
-						if (this.tooltip != '') Stage.Transition('show_tooltip');
-					}
-					else
-						this.inputFocus = false;
+					//if (this.aTimerOn)
+					//	clearTimeout(this.aTimer);
 				}
-				if (Stage.mouseClick && this.inputFocus) {
-					if (this.link != '') {
-						this.link[0].call(this, this.link[1]);
-						Stage.pause = false;
-					}
-					this.redraw = true;
-				}
-				/*
-				if (Stage.mouseClick && this.inputFocus && 
-				   ((this.state == 'hover') || (this.state == 'clicked'))) {
-					if (this.link != '') {
-						// remove focus from groupmates
-						for (var i in Stage.layers[4]) {
-							if (Stage.layers[4][i].group == this.group)
-								Stage.layers[4][i].inputFocus = false;
+				else if (this.type == 'button') {
+					if (this.prev_state != this.state) {
+						this.prev_state = this.state;
+						this.redraw = true;	
+						if ((this.state == 'hover') || (this.state == 'clicked')) {
+							this.inputFocus = true;
+							if (this.tooltip != '') Stage.Transition('show_tooltip');
 						}
-						this.link[0].call(this, this.link[1]);
-						Stage.pause = false;
+						else
+							this.inputFocus = false;
 					}
-					this.redraw = true;
+					if (Stage.mouseClick && this.inputFocus) {
+						if (this.link != '') {
+							this.link[0].call(this, this.link[1]);
+							Stage.pause = false;
+						}
+						this.redraw = true;
+					}
 				}
-				*/
+				else if (this.type == 'animText') {
+					// TODO: for now only timer is supported
+					if (!this.aTimerOn) {
+						this.aTimer = setTimeout(function() { 
+							//alert("set atimeron " + this.fps);
+							if (act.countup)
+								Helper.setValue(act.context.canvas.id, Helper.getValue(act.context.canvas.id)+1);
+							else
+								Helper.setValue(act.context.canvas.id, Helper.getValue(act.context.canvas.id)-1);
+							act.text = Helper.convertTime(Helper.getValue(act.context.canvas.id));
+							act.redraw = true;
+							if (!act.countup) {
+								if (Helper.getValue(act.context.canvas.id) > 0) {
+									if (act.visible) act.aTimerOn = false;
+								}
+								else {
+									if (act.link != '') {
+										act.link[0].call(act, act.link[1]);
+										Stage.pause = false;
+									}
+								}
+							}
+							else {
+								if (act.visible) act.aTimerOn = false;
+							}
+						}, 1000/this.fps);
+						this.aTimerOn = true;
+					}
+				}
+				else if (this.type == 'animImage') {
+					if ((!this.aTimerOn) && (this.sprites.length > 1)) {
+						this.aTimer = setTimeout(function() {
+							act.countup++;
+							act.countup %= act.sprites.length;
+							act.redraw = true;
+							if (act.visible) act.aTimerOn = false;
+						}, 1000/this.fps);
+						this.aTimerOn = true;
+					}
+				}
 			}
 			return this.update;
 		},
@@ -2685,30 +2842,47 @@ function ActiveImage() {
 
 			if (this.visible) {
 				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);
-				if ((this.sprites.length>1) && (this.state=='hover')) {
-					if (this.sprites[1].constructor == Image)
-						this.context.drawImage(this.sprites[1],0,0);
+				if (this.type == 'button') {
+					if ((this.sprites.length>1) && (this.state=='hover')) {
+						if ((this.sprites[1].constructor == HTMLImageElement) || (this.sprites[1].constructor == Image))
+							this.context.drawImage(this.sprites[1],0,0);
+						else {
+							this.context.fillStyle = this.sprites[1];
+							this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+						}
+					}
+					else if ((this.sprites.length>=3) && (this.state=='clicked')) {
+						if ((this.sprites[2].constructor == HTMLImageElement) || (this.sprites[2].constructor == Image))
+							this.context.drawImage(this.sprites[2],0,0);
+						else {
+							this.context.fillStyle = this.sprites[2];
+							this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+						}
+					}
 					else {
-						this.context.fillStyle = this.sprites[1];
-						this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+						if ((this.sprites[0].constructor == HTMLImageElement) || (this.sprites[0].constructor == Image))
+							this.context.drawImage(this.sprites[0],0,0);
+						else {
+							this.context.fillStyle = this.sprites[0];
+							this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+						}
 					}
 				}
-				else if ((this.sprites.length>=3) && (this.state=='clicked')) {
-					if (this.sprites[2].constructor == Image)
-						this.context.drawImage(this.sprites[2],0,0);
-					else {
-						this.context.fillStyle = this.sprites[2];
-						this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
-					}
-				}
-				else {
-					if (this.sprites[0].constructor == Image)
+				else if (this.type == 'animText') {
+					if ((this.sprites[0].constructor == HTMLImageElement) || (this.sprites[0].constructor == Image))
 						this.context.drawImage(this.sprites[0],0,0);
 					else {
 						this.context.fillStyle = this.sprites[0];
 						this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
 					}
-
+				}
+				else if (this.type == 'animImage') {
+					if ((this.sprites[this.countup].constructor == HTMLImageElement) || (this.sprites[this.countup].constructor == Image))
+						this.context.drawImage(this.sprites[this.countup],0,0);
+					else {
+						this.context.fillStyle = this.sprites[0];
+						this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+					}
 				}
 				if ((this.showText) && (this.text != '')) {
 					this.context.textBaseline = 'middle';
@@ -2975,7 +3149,7 @@ function ScriptBox() {
 						}
 					}
 					// draw hover
-					if (this.menuHover != -1) {
+					if ((this.jumpTo.length > 0) && (this.menuHover != -1)) {
 						this.context.globalAlpha = 0.25;						
 						this.context.fillStyle = Config.activeTheme.boxMenuHilite;
 						this.context.fillRect(5,this.jumpTo[this.menuHover].hotspot[1] - this.lineHeight + 4,
@@ -3684,6 +3858,7 @@ var Stage = {
 		// setup default forms theme
 		if (Config.activeTheme.formFontStyle) {
 			var subs = Helper.parseFontString(Config.activeTheme.formFontStyle);
+			this.formStyle.splice(0, this.formStyle.length);
 			if (subs.length >= 4) {
 				this.formStyle.push(subs.slice(0,3).join(' '));
 				this.formStyle.push(subs.slice(3).join(' '));

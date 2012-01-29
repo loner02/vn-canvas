@@ -7,6 +7,8 @@ Theme1 = {
 	formTipStyle:		"normal 12px sans-serif black",
 	// 	tooltip background color
 	formTipColor:		"#FFFFE0",
+	//	element default background color
+	formElementBack:	"#FFFFE0",
 
 	// Script/Dialog Box
 	// 	default font style
