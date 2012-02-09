@@ -43,7 +43,10 @@
 ******************************************************************************/
 /******************************************************************************
 Revision history:
-02.02.12 - Added atmosphere "snow", "rain" direction
+Version 0.2 Althea
+
+Version 0.1 Preview
+01.02.12 - Added atmosphere "snow", "rain" direction
 01.31.12 - Updated cutscene/movie to play in canvas
 		 - Optimized method encapsulation
 01.28.12 - Bugfix for non-modal dialog while checkpoint loading
@@ -3168,12 +3171,10 @@ function ScriptBox() {
 					}
 					// draw hover
 					if ((this.jumpTo.length > 0) && (menuHover != -1)) {
-						this.context.save();
 						this.context.globalAlpha = 0.25;						
 						this.context.fillStyle = Config.activeTheme.boxMenuHilite;
 						this.context.fillRect(5,this.jumpTo[menuHover].hotspot[1] - this.lineHeight + 4,
 												this.context.canvas.width - 10,this.lineHeight);
-						this.context.restore();
 					}
 				}
 				
@@ -3848,27 +3849,18 @@ var Stage = {
         }, false);
 		Helper.addEvent(this.canvas, 'touchstart', function(e) {
 			e.preventDefault();
-			Stage.mouseOut = false;
 			Stage.touchStart = true;
 			Stage.HandleEvents(e);
 		}, false);
 		Helper.addEvent(this.canvas, 'touchmove', function(e) {
 			e.preventDefault();
-			Stage.mouseOut = false;
 			Stage.mouseMove = true;
 			Stage.HandleEvents(e);
 		}, false);
 		Helper.addEvent(this.canvas, 'touchend', function(e) {
 			e.preventDefault();
-			Stage.mouseOut = false;
 			Stage.touchEnd = true;
 			Stage.HandleEvents(e);
-		}, false);
-		// addEventListener to body for 'touchcancel' ?
-		Helper.addEvent(document.body, 'touchcancel', function(e) {
-			Stage.mouseOut = true;
-			Stage.touchStart = false;
-			Stage.touchEnd = false;
 		}, false);
 		
 		// create the stage layers
@@ -4117,17 +4109,17 @@ var Stage = {
 	HandleEvents: function(evt) {
 		if (this.mouseOut) return;
 		// all mouse and touch moves
-		this.targetPos = (this.touchStart) ? this.GetTouchPosition(this.canvas, evt) :
-											 this.GetMousePosition(this.canvas, evt);
+		this.targetPos = this.GetMousePosition(this.canvas, evt) ||
+						 this.GetTouchPosition(this.canvas, evt);
 					 
 		// mouse click / touch end
 		if (this.mouseUp || this.touchEnd) {
-			this.click = this.coord;	// used only for debug
+			this.click = this.coord;
 			this.mouseClick = true;
 			this.mouseUp = false;
 			this.touchEnd = false;
-			this.touchStart = false;
 		}
+		//else if (this.mouseMove || this.mouseDown || this.touchStart) {
 		else if (this.mouseDown || this.touchStart) {
 			for (var i in Stage.layers[4]) {
 				if (Stage.layers[4][i].type == "button") {
@@ -4168,30 +4160,25 @@ var Stage = {
 	},
 	
 	GetMousePosition: function(obj, event) {
+		//Stage.coordX = event.pageX - obj.offsetLeft;
+		//Stage.coordY = event.pageY - obj.offsetTop;
 		var pos = {x:0, y:0};
-		//pos.x = event.clientX - obj.offsetLeft + window.pageXOffset;
-		//pos.y = event.clientY - obj.offsetTop + window.pageYOffset;
-		pos.x = event.pageX - obj.offsetLeft;
-		pos.y = event.pageY - obj.offsetTop;
-		pos.x = Math.max(0, Math.min(obj.width, pos.x));
-		pos.y = Math.max(0, Math.min(obj.height, pos.y));
+		pos.x = event.clientX - obj.offsetLeft + window.pageXOffset;
+		pos.y = event.clientY - obj.offsetTop + window.pageYOffset;
+		pos.x = Math.max(0, Math.min(this.canvas.width, pos.x));
+		pos.y = Math.max(0, Math.min(this.canvas.height, pos.y));
 		return pos;
 	},
 	
 	GetTouchPosition: function(obj, event) {
 		var pos = {x:0, y:0};
-		/*if ((event.touches != null) && (event.touches.length == 1)) {
+		if ((event.touches != null) && (event.touches.length == 1)) {
 			pos.x = event.touches[0].clientX - obj.offsetLeft + window.pageXOffset;
 			pos.y = event.touches[0].clientY - obj.offsetTop + window.pageYOffset;
 			pos.x = Math.max(0, Math.min(this.canvas.width, pos.x));
 			pos.y = Math.max(0, Math.min(this.canvas.height, pos.y));
 			return pos;
-        }*/
-		pos.x = event.targetTouches[0].pageX - obj.offsetLeft;
-		pos.y = event.targetTouches[0].pageY - obj.offsetTop;
-		pos.x = Math.max(0, Math.min(obj.width, pos.x));
-		pos.y = Math.max(0, Math.min(obj.height, pos.y));
-		return pos;
+        }
 	},
 	
 	GetCameraPosition: function(elapsed, spring) {
