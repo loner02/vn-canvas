@@ -11,3 +11,6 @@ I'm no expert in licenses but I think so. What I'm providing you is a free pen a
 
 ==Can I help?==
 Sure why not. I appreciate feature requests, bug reports, patches, etc. Also, I do not have access to other platforms, particularly IE9/Win7, Safari/MAC, iOs, Android, iPhone, etc. So any help on the above is very much welcome.
+
+==If I make something with it, do you require anything in return?==
+Nope. Nada. Even credit or link back is totally optional. I'd like to see what you did though. I'm not asking for a copy of your work, just maybe a link to your site or a couple of screenshots, just for my "bragging rights". :)
