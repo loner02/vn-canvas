@@ -25,7 +25,7 @@
 //      can be used online/offline and, on top of that, FREE.                //
 ///////////////////////////////////////////////////////////////////////////////
 /******************************************************************************
-	Copyright © 2011 by OCLabbao a.k.a [lo'ner]
+	Copyright © 2012 by OCLabbao a.k.a [lo'ner]
 	
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as published 
@@ -44,9 +44,23 @@
 /******************************************************************************
 Revision history:
 Version 0.2 Althea
-
+02.13.12 - Recode 'atmosphere' (to be plugin-ready)
+02.12.12 - Recode effects (to be plugin-ready)
+02.10.12 - Recode 'box', script, stage and 'button'
+		 - Added 'preload'
+		 - Selectable 'video-on-canvas' or 'video-element'
+02.09.12 - Added vector2d class (in anticipation for some future features)
+		 - Optimized 'particles' for performance
+		 - Recode 'scene', 'overlay'
+		 - Recode 'actor'
+02.06.12 - Recode 'user variables'
+		 - Recode 'audio', 'video'
+		 - Recode 'form'
+		 - Bug fix for iOS user inputs
+02.05.12 - Recode for "cleaner" encapsulation thru functional inheritance
+		 - Recode 'atmosphere'
 Version 0.1 Preview
-01.02.12 - Added atmosphere "snow", "rain" direction
+02.02.12 - Added atmosphere 'snow', 'rain' direction
 01.31.12 - Updated cutscene/movie to play in canvas
 		 - Optimized method encapsulation
 01.28.12 - Bugfix for non-modal dialog while checkpoint loading
@@ -85,7 +99,9 @@ Version 0.1 Preview
 11.27.11 - File creation
 ******************************************************************************/
 
+///////////////////////////////////////////////////////////////////////////////
 // Generic/helper methods
+///////////////////////////////////////////////////////////////////////////////
 var Helper = {
 	// Function for adding an event listener
 	addEvent: function (obj, evType, fn, useCapture) {
@@ -117,25 +133,21 @@ var Helper = {
 	},
 	// Helper function to search for user variable
 	findVar: function (id) {
-		for (var i in Stage.variables) {
-			if (Stage.variables[i].Name() == id) {
-				return i;
-			}
-		}
-		return -1;
+		if (Stage.variables[id] != null)
+			return Stage.variables[id].Value();
+		return null;
 	},
 	// Helper function to obtain value from stage or config variables
 	getValue: function (id) {
-		var idx = Helper.findVar(id);
-		if (idx != -1)
-			return Stage.variables[idx].Value();
+		var ret = Helper.findVar(id);
+		if (ret != null) return ret;
 		return eval("Config."+id);
 	},
 	// Helper function to set value to stage or config variables
 	setValue: function (id, value) {
-		var idx = Helper.findVar(id);
-		if (idx != -1)
-			Stage.variables[idx].value = value;
+		var ret = Helper.findVar(id);
+		if (ret != null)
+			Stage.variables[id].Set(value);
 		else {
 			eval("Config."+id+"="+value);
 			// a configuration variable has changed, reflect it back
@@ -185,6 +197,10 @@ var Helper = {
 					for (var idx in subs)
 						Stage.layers[4][0].dimStyle.push(subs[idx]);
 				}
+				if (Config.activeTheme.boxImageStyle)
+					Stage.layers[4][0].src = Config.activeTheme.boxImageStyle;
+				else
+					Stage.layers[4][0].src = null;
 				// configure CanvasText
 				Stage.layers[4][0].canvasText.config({
 			        canvas: Stage.layers[4][0].context.canvas,
@@ -205,11 +221,9 @@ var Helper = {
 				break;
 			case "volumeAudio":
 				for (var idx in Stage.sounds) {
-					if (Stage.sounds[idx].length > 0) {
-						for (var entry in Stage.sounds[idx]) {
-							if ((!Stage.sounds[idx][entry].isPaused) && (!Stage.sounds[idx][entry].isStopping))
-								Stage.sounds[idx][entry].audio.volume = Config.volumeAudio;
-						}
+					for (var entry in Stage.sounds[idx]) {
+						if ((!Stage.sounds[idx][entry].isPaused) && (!Stage.sounds[idx][entry].isStopping))
+							Stage.sounds[idx][entry].audio.volume = Config.volumeAudio;
 					}
 				}
 				break;
@@ -253,157 +267,263 @@ var Helper = {
 	// Helper function to check for image file
 	checkIfImage: function(src) {
 		// crude way of checking if src is an image
-		return (/jpg|jpeg|bmp|png|gif/i.test(src));
+		return (/jpg|jpeg|bmp|png|gif|svg/i.test(src));
+	},
+	// Helper function to check for audio file
+	checkIfAudio: function(src) {
+		return (/mp3|m4a|ogg|oga|wav|webma/i.test(src));
+	},
+	// Helper function to check for video file
+	checkIfVideo: function(src) {
+		return (/mp4|m4v|ogg|ogv|webm|webmv/i.test(src));
+	},
+	// Helper function to process audio
+	processAudio: function (obj, src, param) {
+		var mimeType = {"wav": 'audio/wav',
+						"ogg": 'audio/ogg;codecs="vorbis"',
+						"oga": 'audio/ogg;codecs="vorbis"',
+						"mp3": 'audio/mpeg',
+						"m4a": 'audio/mp4;codecs="mp4a.40.2"',
+						"webma": 'audio/webm; codecs="vorbis"',};			
+		var index = -1;
+		for (var i in obj) {
+			if (obj[i].src.search(src) != -1) {
+				index = i;
+				break;
+			}
+		}
+		if (index != -1) {
+			switch (param.action) {
+				case "stop":
+					obj[index].Stop(false);
+					break;
+				case "pause":
+					obj[index].Pause();
+					break;
+				case "rewind":
+					obj[index].Rewind();
+					break;
+				case "remove":
+					if (param.bgs || param.se) {
+						obj[index].Stop(true);
+						obj.splice(index, 1);
+					}
+					break;
+				case "play":
+				default:
+					obj[index].Play(false);
+					break;
+			}
+		}
+		else {
+			var s = new Sounds();
+			s.src = null;
+			for (var i in param.format) {
+				if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
+					s.src = src + '.' + param.format[i];
+					break;
+				}
+			}
+			if (s.src != null) {
+				if (param.bgm) {
+					while (obj.length > 0) {
+						var old = obj.shift();
+						old.Stop(true);
+					}
+				}
+				if (param.se)
+					s.repeat = (param.repeat > 0) ? param.repeat : 0;
+				else
+					s.repeat = -1;
+				s.delay = (param.delay > 0) ? param.delay : 0;
+				obj.push(s);
+			}
+		}
+	},
+	// Helper function to process actor
+	processActor: function (chr, param) {
+		if (param.sprite) {
+			if (typeof param.sprite == 'string') {
+				for (var i in chr.sprites) {
+					if (chr.sprites[i] == param.sprite) {
+						if (chr.visible) {
+							chr.prevSprite = chr.activeSprite;
+							chr.alpha = 0;
+						}
+						chr.activeSprite = i;
+						break;
+					}
+				}
+			}
+			else {
+				if (chr.visible && (chr.activeSprite > -1)) {
+					chr.prevSprite = chr.activeSprite;
+					chr.alpha = 0;
+				}
+				chr.AddSprite(param.sprite[0], param.sprite[1]);
+			}
+		}
+		if (param.avatar) chr.AddAvatar(param.avatar);
+		if (param.effect) {
+			var fxarr = param.effect.split(' ');
+			chr.effects = fxarr[0];
+			chr.prevFx = fxarr[0];
+			if (fxarr.length > 1) chr.fxparam = parseFloat(fxarr[1]);
+			if (eval('Effects.'+fxarr[0]+'._init'))
+				eval('Effects.'+fxarr[0]+'._init').call(this, chr, chr.fxparam);
+		}
+		else {
+			chr.effects = chr.prevFx;
+		}
+		if ((param.show == false) ||
+			(param.remove == 'actor') ||
+			(chr.sprites[chr.activeSprite].id == param.remove))
+			chr.effects += '_out';
+		else
+			chr.effects += '_in';
+		if (param.remove) {
+			if (param.remove == 'actor')
+				chr.pendingRemoval = true;
+			else
+				chr.RemoveSprite(param.remove);
+		}
+		if (param.time != null) 
+			chr.transTime = (param.time>0) ? param.time : 0.01;
+		if (param.say) {
+			var cont = Helper.checkCurrentSpeaker(chr.nick, param.append);
+			Stage.layers[4][0].text = Helper.addTagToDialog(chr.nick, chr.color, param.say, cont);
+			Stage.layers[4][0].avatar = (chr.avatar != null) ? chr.avatar : null;
+			Stage.layers[4][0].alpha = 1;
+			Stage.layers[4][0].effects = "none";
+			Stage.layers[4][0].scrollOffsetY = 0;
+			Stage.layers[4][0].visible = true;
+			Stage.layers[4][0].changed = true;
+		}
+		var ret = '';
+		if (param.position) {
+			var subs = param.position.split(' ');
+			for (var i in subs) {
+				if (subs[i].search(/(left|right|center|auto)/g) != -1)
+					chr.posMode = subs[i];
+				if (subs[i].search(/(front|back)/g) != -1)
+					ret = subs[i];
+			}
+		}
+		return ret;
+	},
+	// Helper function to process backdrop
+	processBackdrop: function (obj, type, param) {
+		var nextid = 0;
+		if (obj.length > 0) {
+			// background/overlay layer has more than one element
+			// to conserve memory, maintain only the previous and the incoming backdrop
+			if (obj.length>1)
+				obj.splice(0, obj.length-1);
+			if (!param.src && (param.show != false)) {
+				// show the previous overlay
+				if (param.effect) {
+					var fxarr = param.effect.split(' ');
+					obj[0].effects = fxarr[0] + '_in';
+					if (fxarr.length>1) obj[0].fxparam = parseFloat(fxarr[1]);
+				}
+				else 
+					obj[0].effects = '_in';
+				obj[0].drawn = false;
+				obj[0].update = false;
+				return;
+			}
+			// do a reverse effect on the previous backdrop
+			obj[0].effects = '_out';
+			if (param.effect) {
+				var fxarr = param.effect.split(' ');
+				obj[0].effects = fxarr[0] + '_out';
+				if (fxarr.length>1) obj[0].fxparam = parseFloat(fxarr[1]);
+			}
+			obj[0].drawn = false;
+			obj[0].update = false;
+			nextid = parseInt(obj[0].context.canvas.id.substr(2))+1;
+			if ((!param.src) && (param.show == false)) {
+				return;
+			}
+		}
+		// add the new backdrop
+		var bd = new Backdrop();
+		bd.type = type;
+		var objects = new Array();
+		if (param.objects) {
+			// assumes multiples of 3
+			for (var i=0; i<param.objects.length; i+=3) {
+				var item = {src:'', x:0, y:0};
+				item.src = param.objects[i];
+				item.x = param.objects[i+1];
+				item.y = param.objects[i+2];
+				objects.push(item);
+			}
+		}
+		bd.Create('bd' + nextid, param.src, (objects.length > 0) ? objects : null);
+		if (param.effect) {
+			var fxarr = param.effect.split(' ');
+			bd.effects = fxarr[0] + '_in';
+			if (fxarr.length > 1) 
+				bd.fxparam = parseFloat(fxarr[1]);
+			else {
+				if (type == 'scene')
+					bd.fxparam = (Stage.layers[0].length > 0);
+				else
+					bd.fxparam = (Stage.layers[2].length > 0);
+			}
+			if (eval('Effects.'+fxarr[0]+'._init'))
+				eval('Effects.'+fxarr[0]+'._init').call(this, bd, bd.fxparam);
+		}
+		else 
+			bd.effects = '_in';
+		if (param.time != null) 
+			bd.transTime = (param.time>0) ? param.time : 0.01;
+		if (param.offset) {
+			if (typeof (param.offset) == "string")
+				bd.scroll = (param.offset == 'scroll') ? true : false;
+			else {
+				bd.scroll = false;
+				bd.offset = Vector2d(param.offset[0],param.offset[1]);
+			}
+		}
+		else {
+			bd.scroll = false;
+			bd.offset = Vector2d(0,0);
+		}
+		obj.push(bd);
 	},
 	// Helper function to process effects
 	processEffects: function (obj, elapsed) {
+		var fxarr = obj.effects.split('_');
+		if (fxarr[0] == '') fxarr[0] = 'none';
+		if (fxarr.length == 1) fxarr.push('in');
+		
 		obj.target_alpha = 1.0;
-		switch (obj.effects) {
-			case 'scale':
-			case 'scalein':
-				obj.Reset(false);
-				obj.alpha = 1.0;
-				obj.drawn = true;
-				if (Math.abs(1-obj.target_scale/obj.fxparam) <= 0.01) {
-					obj.effects = 'done';
-					//obj.drawn = true;
-					obj.scale = 1.0;
-					//obj.target_scale = 1.0;
-				}
-				else {
-					obj.scale = Math.exp(Math.log(obj.fxparam/obj.target_scale)*elapsed/(obj.transTime * 1000));
-					obj.target_scale *= obj.scale;
-				}
-				break;
-			case 'rotate':
-			case 'rotatein':
-				obj.Reset(false);
-				obj.alpha = 1.0;
-				obj.drawn = true;
-				if (Math.abs(obj.target_rotation - obj.fxparam) <= 0.1) {
-					obj.effects = 'done';
-					//obj.drawn = true;
-					obj.rotation = 0;
-					obj.target_rotation = 0;
-				}
-				else {
-					obj.rotation = (obj.fxparam - obj.target_rotation)* elapsed/(obj.transTime * 1000);
-					obj.target_rotation += obj.rotation;
-				}
-				break;
-			case 'fadein':
-			case 'dissolvein':
-			case 'ghostin':
-				obj.Reset(false);
-				if (obj.effects == 'ghostin') obj.target_alpha = 0.5;
-				if (obj.alpha >= obj.target_alpha) {
-					obj.effects = 'done';
-					obj.drawn = true;
-				}
-				else {
-					obj.alpha += elapsed/(obj.transTime * 1000);
-				}
-				break;
-			case 'fadeout':
-			case 'dissolveout':
-			case 'ghostout':
-				if (obj.alpha <= 0.0) {
-					obj.effects = 'done';
-					obj.drawn = true;
-					obj.visible = false;
-				}
-				else {
-					obj.alpha -= elapsed/(obj.transTime * 1000);
-				}
-				obj.redraw = true;
-				break;
-			case 'nonein':
-			case 'in':
-				obj.Reset(false);
-				obj.alpha = 1.0;
-				obj.effects = 'done';
-				obj.drawn = true;
-				break;
-			case 'rotateout':
-			case 'scaleout':
-			case 'noneout':
-			case 'out':
-				obj.alpha = 0.0;
-				obj.effects = 'done';
-				obj.drawn = true;
-				obj.redraw = true;
-				obj.visible = false;
-				break;
-			case 'left':
-			case 'leftin':
-				obj.Reset(false);
-				obj.drawn = true;
-				obj.alpha = 1.0;
-				obj.effects = 'done'
-				obj.pos.x = -obj.context.canvas.width;
-				break;
-			case 'right':
-			case 'rightin':
-				obj.Reset(false);
-				obj.drawn = true;
-				obj.alpha = 1.0;
-				obj.effects = 'done'
-				obj.pos.x = Stage.canvas.width + obj.context.canvas.width;
-				break;
-			case 'bottom':
-			case 'bottomin':
-				obj.Reset(false);
-				obj.drawn = true;
-				obj.alpha = 1.0;
-				obj.effects = 'done';
-				obj.pos.y = Stage.canvas.height + obj.context.canvas.height;
-				break;
-			case 'top':
-			case 'topin':
-				obj.Reset(false);
-				obj.drawn = true;
-				obj.alpha = 1.0;
-				obj.effects = 'done';
-				obj.pos.y = -obj.context.canvas.height;
-				break;
-			case 'leftout':
-			case 'rightout':
-			case 'bottomout':
-			case 'topout':
-				obj.redraw = true;
-				obj.posMode = obj.effects;
-				obj.drawn = true;
-				obj.effects = 'done';
-				break;
-			case 'done':
-			default:
-				obj.drawn = true;
-				break;
-		}	
+		eval('Effects.'+fxarr[0]+'._'+fxarr[1]).call(this, obj, elapsed);
 	},
 	// Helper function to draw visual elements
 	drawElements: function(obj, layer, defaults) {
 		if (!obj.visible) return false;
-		var positionX, positionY;
-		var factorX = defaults[0];
-		var factorY = defaults[1];
+		var position = Vector2d(0,0);
+		var factor = Vector2d(defaults[0],defaults[1]);
 		var running_draw = false;
 		switch (obj.posMode) {
-			case 'left': factorX = 1/4; break;
-			case 'right': factorX = 3/4; break;
-			case 'leftout': factorX = -(obj.context.canvas.width/Stage.canvas.width); break;
-			case 'rightout': factorX = 1+(obj.context.canvas.width/Stage.canvas.width); break;
-			case 'bottomout': factorY = 1+(obj.context.canvas.height/Stage.canvas.height); break;
-			case 'topout': factorY = -(obj.context.canvas.height/Stage.canvas.height); break;
+			case 'left': factor.vx = 1/4; break;
+			case 'right': factor.vx = 3/4; break;
+			case 'left_out': factor.vx = -(obj.context.canvas.width/Stage.canvas.width); break;
+			case 'right_out': factor.vx = 1+(obj.context.canvas.width/Stage.canvas.width); break;
+			case 'bottom_out': factor.vy = 1+(obj.context.canvas.height/Stage.canvas.height); break;
+			case 'top_out': factor.vy = -(obj.context.canvas.height/Stage.canvas.height); break;
 			case 'center':
 			case 'auto':
 			default: break;
 		}
+		var target = Vector2d(Stage.canvas.width * factor.vx, 
+							  Stage.canvas.height * factor.vy);
 		if (Stage.transTime <= 0) {
-			positionX = Stage.canvas.width*factorX;
-			positionY = Stage.canvas.height*factorY;
-			obj.pos.x = positionX;
-			obj.pos.y = positionY;
+			position.copy(target);
+			obj.pos.copy(position);
 			if (obj.posMode.indexOf('out') != -1) {
 				obj.posMode = (layer==1) ? 'auto' : '';
 				obj.alpha = 0;
@@ -411,18 +531,17 @@ var Helper = {
 			}
 		}
 		else {
-			positionX = Stage.transTime * obj.pos.x + (1-Stage.transTime) * Stage.canvas.width*factorX;
-			positionY = Stage.transTime * obj.pos.y + (1-Stage.transTime) * Stage.canvas.height*factorY;
+			position.lerp(target, obj.pos, Stage.transTime);
 			running_draw = true;
 		}
 
 		Stage.context.save();
-		Stage.context.scale(obj.target_scale, obj.target_scale);
-		Stage.context.translate(positionX - obj.target_scale * obj.origin.x + obj.offset[0],
-								positionY - obj.target_scale * obj.origin.y + obj.offset[1]);
+		Stage.context.translate(position.vx - obj.scale * obj.origin.vx + obj.offset.vx,
+								position.vy - obj.scale * obj.origin.vy + obj.offset.vy);
+		Stage.context.scale(obj.scale, obj.scale);
 		Stage.context.drawImage(obj.context.canvas,
-								Stage.AddDepth(layer, Stage.canvas.width/2 - Stage.coord.x),
-								Stage.AddDepth(layer, Stage.canvas.height/2 - Stage.coord.y)/2,
+								Stage.AddDepth(layer, Stage.canvas.width/2 - Stage.coord.vx),
+								Stage.AddDepth(layer, Stage.canvas.height/2 - Stage.coord.vy)/2,
 								obj.context.canvas.width,
 								obj.context.canvas.height);	
 		Stage.context.restore();
@@ -452,6 +571,7 @@ var Helper = {
 		}
 		return same_window;
 	},
+	// Helper function to add name tag, if any, to dialog
 	addTagToDialog: function(tag, tagcolor, text, append) {
 		var dialog = '';
 		if (tag != null) {
@@ -471,16 +591,16 @@ var Helper = {
 			dialog += '\n';
 		}
 		if (text != null) {
-			var idx = Helper.findVar(text);
-			if (idx == -1)
+			var ret = Helper.findVar(text);
+			if (ret != null)
+				dialog += ret.toString().replace(/\n/g,"<br/>");
+			else
 				dialog += text.replace(/\n/g,"<br/>");
-			else {
-				dialog += Helper.getValue(text).toString().replace(/\n/g,"<br/>");
-			}
 		}
 		
 		return Helper.filterBadWords(dialog);
 	},
+	// Helper function to show tooltip on forms
 	showTooltip: function(tip) {
 		Stage.context.save();
 		Stage.context.fillStyle = Config.activeTheme.formTipColor;
@@ -491,8 +611,8 @@ var Helper = {
 		Stage.context.font = subs.slice(0,3).join(' ');
 		var w = Stage.context.measureText(tip).width;
 		var h = parseInt(subs[1]);
-		var x = Math.min(Stage.coord.x, Stage.canvas.width - w - 5);
-		var y = Math.min(Stage.coord.y, Stage.canvas.height - 2*h - 5);
+		var x = Math.min(Stage.coord.vx, Stage.canvas.width - w - 5);
+		var y = Math.min(Stage.coord.vy, Stage.canvas.height - 2*h - 5);
 		Stage.context.fillRect(x-5, y-5+h, w+10, h+10);
 		//Stage.context.strokeRect(x-5, y-5+h, w+10, h+10);
 		
@@ -502,6 +622,7 @@ var Helper = {
 		Stage.context.fillText(tip, x, y + h);
 		Stage.context.restore();
 	},
+	// Helper function to filter words, if enabled
 	filterBadWords: function (str) {
 		if (Config.gameMatureFilter) {
 			var pattern = "/(^|\\n?|\\s*)("+Config.gameBadWords.join('|')+")($|\\n?|\\s*)/img";
@@ -510,6 +631,7 @@ var Helper = {
 		else
 			return str;
 	},
+	// Helper function to display readable time
 	convertTime: function (val) {
 		var sec = val % 60;
 		var min = (val - sec) / 60;
@@ -534,20 +656,272 @@ window.requestAnimFrame = (function(callback){
 })();
 // Helper function on window resize
 window.onresize = (function(){
+	if (!Config.movieOnCanvas) {
+		for (var idx in Stage.videos) {
+			var x = Stage.canvas.offsetLeft + (1-Config.movieSize)/2 * Stage.canvas.width;
+			var y = Stage.canvas.offsetTop + (1-Config.movieSize)/2 * Stage.canvas.height;
+			Stage.videos[idx].movie.setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px');
+		}
+	}
 	for (var i=0; i<document.forms.length; i++) {
-		var x = Stage.canvas.offsetLeft;//- window.pageXOffset;
-		var y = Stage.canvas.offsetTop; //- window.pageYOffset;
+		var x = Stage.canvas.offsetLeft;
+		var y = Stage.canvas.offsetTop;
 		document.forms[i].setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px;');
 	}
 });
 
+///////////////////////////////////////////////////////////////////////////////
+// Effects class
+///////////////////////////////////////////////////////////////////////////////
+var Effects = {
+	// effect completed
+	done: {
+		_in: function(obj, elapsed) {
+			obj.drawn = true;
+		}
+	},
+	// default/no effect
+	none: {
+		_in: function(obj, elapsed) {
+			obj.Reset(false);
+			obj.alpha = 1.0;
+			obj.effects = 'done';
+			obj.drawn = true;
+		},
+		_out: function(obj, elapsed) {
+			obj.alpha = 0.0;
+			obj.effects = 'done';
+			obj.drawn = true;
+			obj.redraw = true;
+			obj.visible = false;
+		}
+	},
+	// fade effect
+	fade: {
+		_init: function(obj, param) {
+			if (param == true) obj.alpha = -1;
+		},
+		_in: function(obj, elapsed) {
+			obj.Reset(false);
+			if (obj.alpha >= obj.target_alpha) {
+				obj.effects = 'done';
+				obj.drawn = true;
+			}
+			else {
+				obj.alpha += elapsed/(obj.transTime * 1000);
+			}
+		},
+		_out: function(obj, elapsed) {
+			if (obj.alpha <= 0.0) {
+				obj.effects = 'done';
+				obj.drawn = true;
+				obj.visible = false;
+			}
+			else {
+				obj.alpha -= elapsed/(obj.transTime * 1000);
+			}
+			obj.redraw = true;
+		}
+	},
+	// ghost effect
+	ghost: {
+		_init: function(obj, param) {
+			obj.target_alpha = 0.5;
+		},
+		_in: function(obj, elapsed) {
+			Effects.fade._in(obj, elapsed);
+		},
+		_out: function(obj, elapsed) {
+			Effects.fade._out(obj, elapsed);
+		}
+	},
+	// dissolve effect
+	dissolve: {
+		_in: function(obj, elapsed) {
+			Effects.fade._in(obj, elapsed);
+		},
+		_out: function(obj, elapsed) {
+			Effects.fade._out(obj, elapsed);
+		}
+	},
+	// scale effect
+	scale: {
+		_init: function(obj, param) {
+			obj.size = param;
+		},
+		_in: function(obj, elapsed) {
+			obj.Reset(false);
+			obj.alpha = 1.0;
+			obj.drawn = true;
+			if (Math.abs(1-obj.scale/obj.fxparam) <= 0.01)
+				obj.effects = 'done';
+			else
+				obj.scale *= Math.exp(Math.log(obj.fxparam/obj.scale)*elapsed/(obj.transTime * 1000));
+		},
+		_out: function(obj, elapsed) {
+			if (obj.type == 'scene')
+				Effects.none._in(obj, elapsed);
+			else
+				Effects.none._out(obj, elapsed);
+		}
+	},
+	// rotate effect
+	rotate: {
+		_init: function(obj, param) {
+			obj.orientation += param;
+			obj.orientation %= 360;
+		},
+		_in: function(obj, elapsed) {
+			obj.Reset(false);
+			obj.alpha = 1.0;
+			obj.drawn = true;
+			if (Math.abs(obj.accum_rotation - obj.fxparam) <= 0.1) {
+				obj.effects = 'done';
+				obj.rotation = 0;
+				obj.accum_rotation = 0;
+			}
+			else {
+				obj.rotation = (obj.fxparam - obj.accum_rotation)* elapsed/(obj.transTime * 1000);
+				obj.accum_rotation += obj.rotation;
+			}		
+		},
+		_out: function(obj, elapsed) {
+			if (obj.type == 'scene')
+				Effects.none._in(obj, elapsed);
+			else
+				Effects.none._out(obj, elapsed);
+		}		
+	},
+	// movement effects (paired)
+	left: {
+		_in: function(obj, elapsed) {
+			obj.Reset(false);
+			obj.drawn = true;
+			obj.alpha = 1.0;
+			obj.effects = 'done'
+			obj.pos.vx = -obj.context.canvas.width;
+		},
+		_out: function(obj, elapsed) {
+			if (obj.type == 'scene') {
+				Effects.none._in(obj, elapsed);
+			}
+			else {
+				obj.redraw = true;
+				obj.posMode = obj.effects;
+				obj.drawn = true;
+				obj.effects = 'done';
+			}
+		}
+	},
+	right: {
+		_in: function(obj, elapsed) {
+			obj.Reset(false);
+			obj.drawn = true;
+			obj.alpha = 1.0;
+			obj.effects = 'done'
+			obj.pos.vx = Stage.canvas.width + obj.context.canvas.width;
+		},
+		_out: function(obj, elapsed) {
+			Effects.left._out(obj, elapsed);
+		}
+	},
+	bottom: {
+		_in: function(obj, elapsed) {
+			obj.Reset(false);
+			obj.drawn = true;
+			obj.alpha = 1.0;
+			obj.effects = 'done';
+			obj.pos.vy = Stage.canvas.height + obj.context.canvas.height;
+		},
+		_out: function(obj, elapsed) {
+			Effects.left._out(obj, elapsed);
+		}
+	},
+	top: {
+		_in: function(obj, elapsed) {
+			obj.Reset(false);
+			obj.drawn = true;
+			obj.alpha = 1.0;
+			obj.effects = 'done';
+			obj.pos.vy = -obj.context.canvas.height;
+		},
+		_out: function(obj, elapsed) {
+			Effects.left._out(obj, elapsed);
+		}
+	}
+};
+///////////////////////////////////////////////////////////////////////////////
+// 2D vector class
+///////////////////////////////////////////////////////////////////////////////
+var Vector2d = function (x, y) {
+    var vec = {
+        vx: x,
+        vy: y,
+
+		copy: function (vec2) {
+			vec.vx = vec2.vx;
+			vec.vy = vec2.vy;
+		},
+        scale: function (scale) {
+            vec.vx *= scale;
+            vec.vy *= scale;
+        },
+        add: function (vec2) {
+            vec.vx += vec2.vx;
+            vec.vy += vec2.vy;
+        },
+        sub: function (vec2) {
+            vec.vx -= vec2.vx;
+            vec.vy -= vec2.vy;
+        },
+        negate: function () {
+            vec.vx = -vec.vx;
+            vec.vy = -vec.vy;
+			return vec;
+        },
+		equal: function (vec2) {
+			return ((vec.vx == vec2.vx) && (vec.vy == vec2.vy));
+		},
+        length: function () {
+            return Math.sqrt(vec.vx * vec.vx + vec.vy * vec.vy);
+        },
+        lengthSquared: function () {
+            return vec.vx * vec.vx + vec.vy * vec.vy;
+        },
+        normalize: function () {
+            var len = Math.sqrt(vec.vx * vec.vx + vec.vy * vec.vy);
+            if (len) {
+                vec.vx /= len;
+                vec.vy /= len;
+            }
+            return len;
+        },
+        rotate: function (angle) {
+            var vx = vec.vx,
+                vy = vec.vy,
+                cosVal = Math.cos(angle),
+                sinVal = Math.sin(angle);
+            vec.vx = vx * cosVal - vy * sinVal;
+            vec.vy = vx * sinVal + vy * cosVal;
+        },
+		lerp: function (vec1, vec2, amt) {
+			vec.vx = (1-amt) * vec1.vx + (amt) * vec2.vx;
+			vec.vy = (1-amt) * vec1.vy + (amt) * vec2.vy;
+		},
+        toString: function () {
+            return '(' + vec.vx.toFixed(3) + ',' + vec.vy.toFixed(3) + ')';
+        }
+    };
+    return vec;
+};
+
+///////////////////////////////////////////////////////////////////////////////
 // Script method callback/handlers
+///////////////////////////////////////////////////////////////////////////////
 // label - marks a position in the script
 function label(param) { /*alert(param);*/ }
 // message - display a message box
-function message(param) {
-	alert(param);
-}
+function message(param) { alert(param); }
 // wait - pauses execution
 function wait(param) {
 	Stage.pause = true;
@@ -561,66 +935,51 @@ function wait(param) {
 }
 // macro - execute a user function
 function macro(param) {
-	eval(param).call(this);
+	if (Config.gameAllowMacro)
+		eval(param).call(this);
 }
 // set - sets a user variable
 function set(param) {
 	var str_param = JSON.stringify(param);
 	var arr_param = str_param.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
-	//alert(arr_param);
 	for (var i=0; i<arr_param.length; i+=2) {
 		arr_param[i] = eval(arr_param[i]);
 		arr_param[i+1] = eval(arr_param[i+1]);
-		var idx = Helper.findVar(arr_param[i]);
-		if (idx != -1) {
+		var value = Helper.findVar(arr_param[i]);
+		if (value != null) {
 			if (typeof arr_param[i+1] == 'string') {
 				// if value is a reference to other variables
-				var j = Helper.findVar(arr_param[i+1]);
-				if (j != -1) {
-					Stage.variables[idx].Set(arr_param[i], Stage.variables[j].Value());
-				}
+				var ref = Helper.findVar(arr_param[i+1]);
+				if (ref != null)
+					Stage.variables[arr_param[i]].Set(ref);
 				else {
 					// is it an expression with supported operator
-					if (arr_param[i+1].search(/[+|-|*|%|\/]/g) != -1) {
-						Stage.variables[idx].Set(arr_param[i], eval(Stage.variables[idx].Value() + arr_param[i+1]));
-					}
+					if (arr_param[i+1].search(/[+|-|*|%|\/]/g) != -1)
+						Stage.variables[arr_param[i]].Set(eval(Stage.variables[arr_param[i]].Value() + arr_param[i+1]));
 					// or a simple string to set
-					else {
-						Stage.variables[idx].Set(arr_param[i], arr_param[i+1]);
-					}
+					else
+						Stage.variables[arr_param[i]].Set(arr_param[i+1]);
 				}
 			}
 			else {
-				Stage.variables[idx].Set(arr_param[i], arr_param[i+1]);
+				Stage.variables[arr_param[i]].Set(arr_param[i+1]);
 			}
 		}
 		else {
 			var uv = new UserVars();
 			if (typeof arr_param[i+1] == 'string') {
-				// if value is a reference to other variables
-				var j = Helper.findVar(arr_param[i+1]);
-				if (j != -1) {
-					uv.Set(arr_param[i], Stage.variables[j].Value());
-				}
-				else {
-					// this is a new variable, don't expect operator elements
-					uv.Set(arr_param[i], arr_param[i+1]);
-				}
+				var ref = Helper.findVar(arr_param[i+1]);
+				uv.Set((ref != null) ? ref : arr_param[i+1]);
 			}
-			else {
-				uv.Set(arr_param[i], arr_param[i+1]);
-			}
-			Stage.variables.push(uv);
-		}
+			else
+				uv.Set(arr_param[i+1]);
+			Stage.variables[arr_param[i]] = uv;
+		}	
 	}
 }
 // get - gets value of a user variable
 function get(param) {
-	var idx = Helper.findVar(param.name);
-	if (idx != -1) {
-		return Stage.variables[idx].Value();
-	}
-	return null;
+	return Helper.findVar(param.name);
 }
 // jump - continues execution at given label
 function jump(param) {
@@ -630,7 +989,8 @@ function jump(param) {
 			Stage.pause = true;
 		}
 		else if (param.indexOf("http") != -1) {
-			window.open(param);
+			var newwin = window.open(param);
+			window.setTimeout('newwin.focus();', 250);
 		}
 		else {
 			Stage.script.PushFrame();
@@ -641,114 +1001,111 @@ function jump(param) {
 		Stage.script.PushFrame();
 		var str_param = JSON.stringify(param);
 		var arr_param = str_param.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
-		//alert(arr_param); // expects only 4 items
 		for (var i=0; i<arr_param.length; i+=2) {
 			arr_param[i] = eval(arr_param[i]);
 			arr_param[i+1] = eval(arr_param[i+1]);
 			if (arr_param[i] == 'label') continue;
-			
-			var idx = Helper.findVar(arr_param[i]);
-			if (idx != -1) {
-				if (Stage.variables[idx].type == 'number') {
-					if (Stage.variables[idx].Value() >= arr_param[i+1])
+
+			var val = Helper.getValue(arr_param[i]);
+			if (val != null) {
+				if (typeof val == 'number') {
+					if (val >= arr_param[i+1])
 						Stage.script.SetFrame(param.label);
 				}
-				else if (Stage.variables[idx].type == 'string') {
-					if (Stage.variables[idx].Value() === arr_param[i+1])
+				else if (typeof val ==  'string') {
+					if (ret === arr_param[i+1])
 						Stage.script.SetFrame(param.label);
 				}
 				else {
-					if (Stage.variables[idx].Value() == arr_param[i+1])
+					if (val == arr_param[i+1])
 						Stage.script.SetFrame(param.label);
-				}
-			}
-			else {
-				// try a config variable
-				var val = eval("Config."+arr_param[i]);
-				if (val != null) {
-					if (typeof val == 'number') {
-						if (val > arr_param[i+1])
-							Stage.script.SetFrame(param.label);
-					}
-					else if (typeof val == 'string') {
-						if (val === arr_param[i+1])
-							Stage.script.SetFrame(param.label);
-					}
-					else {
-						if (val == arr_param[i+1])
-							Stage.script.SetFrame(param.label);
-					}
 				}
 			}
 		}
 	}
 	Stage.layers[4][0].jumpTo.splice(0,Stage.layers[4][0].jumpTo.length);
 }
+function preload(param) {
+	// TODO: here's a crude preload support
+	if (Config.gameAllowPreload) {
+		if ((typeof param == 'string') && (param == 'auto')){
+			var seq = Stage.script.sequence;
+			for (var i=Stage.script.frame; i<seq.length; i+=2) {
+				if ((seq[i] == scene) || (seq[i] == overlay)) {
+					if ((seq[i+1].src) && (Helper.checkIfImage(seq[i+1].src))) {
+						var newImage = new Image();
+						newImage.src = seq[i+1].src;
+					}						
+					if (seq[i+1].objects) {
+						for (var j=0; j<seq[i+1].objects.length; j+=3) {
+							var newImage = new Image();
+							newImage.src = seq[i+1].objects[j];
+						}
+					}
+				}
+				if (seq[i] == actor) {
+					if (seq[i+1].sprite) {
+						var newImage = new Image();
+						newImage.src = seq[i+1].sprite[1];
+					}
+					if (seq[i+1].avatar) {
+						var newImage = new Image();
+						newImage.src = seq[i+1].avatar;
+					}
+				}
+				if (seq[i] == audio) {
+					var soundfile;
+					if (seq[i+1].bgm) soundfile = seq[i+1].bgm;
+					if (seq[i+1].bgs) soundfile = seq[i+1].bgs;
+					if (seq[i+1].se) soundfile = seq[i+1].se;
+					if (seq[i+1].format) {
+						for (var j=0; j<seq[i+1].format.length; j++) {
+							var newAudio = new Audio();
+							newAudio.preload = 'auto';
+							newAudio.autoplay = false;
+							newAudio.src = soundfile + '.' + seq[i+1].format[j];
+						}
+					}
+				}
+				if (seq[i] == video) {
+					var videofile;
+					if (seq[i+1].src) videofile = seq[i+1].src;
+					if (seq[i+1].format) {
+						for (var j=0; j<seq[i+1].format.length; j++) {
+							var newVideo = document.createElement('video');
+							newVideo.preload = 'auto';
+							newVideo.autoplay = false;
+							newVideo.src = videofile + '.' + seq[i+1].format[j];
+						}
+					}
+				}
+			}
+			return;
+		}
+		var preloadObj = new Array(param.length);
+		for (var i=0; i<param.length; i++) {
+			if (Helper.checkIfImage(param[i])) {
+				preloadObj[i] = new Image();
+				preloadObj[i].src = param[i];
+			}
+			if (Helper.checkIfAudio(param[i])) {
+				preloadObj[i] = new Audio();
+				preloadObj[i].preload = 'auto';
+				preloadObj[i].autoplay = false;
+				preloadObj[i].src = param[i];
+			}
+			if (Helper.checkIfVideo(param[i])) {
+				preloadObj[i] = document.createElement('video');
+				preloadObj[i].preload = 'auto';
+				preloadObj[i].autoplay = false;
+				preloadObj[i].src = param[i];
+			}
+		}
+	}
+}
 // scene - displays a background (layer 0)
 function scene(param) {
-	var nextid = 0;
-	if (Stage.layers[0].length > 0) {
-		// background layer has more than one element
-		// to conserve memory, maintain only the previous and the incoming backdrop
-		while (Stage.layers[0].length > 1) {
-			Stage.layers[0].shift();
-			// TODO: does removing it from array enough to free memory?
-		}
-		// do a reverse effect on the previous backdrop
-		// current effect is 'done'
-		if (param.effect) {
-			if ((param.effect == 'dissolve') || 
-				(param.effect == 'fade')) {
-				Stage.layers[0][0].effects = param.effect + 'out';
-			}
-			else {
-				// do nothing to previous backdrop
-				Stage.layers[0][0].effects = 'in';
-			}
-		}
-		else 
-			Stage.layers[0][0].effects = 'out';
-		Stage.layers[0][0].drawn = false;
-		Stage.layers[0][0].update = false;
-		nextid = parseInt(Stage.layers[0][0].context.canvas.id.substr(2))+1;
-	}
-	// add the new background layer
-	var bg = new Backdrop();
-	var obj = new Array();
-	if (param.objects) {
-		// assumes multiples of 3
-		for (var i=0; i<param.objects.length; i+=3) {
-			var item = {src:'', x:0, y:0	};
-			item.src = param.objects[i];
-			item.x = param.objects[i+1];
-			item.y = param.objects[i+2];
-			obj.push(item);
-		}
-	}
-	bg.Create('bg' + nextid, param.src, obj);
-	if (param.effect) {
-		if ((param.effect.indexOf('scale') != -1) || 
-			(param.effect.indexOf('rotate') != -1)) {
-			var fx = param.effect.split(' ');
-			bg.effects = fx[0] + 'in';
-			bg.fxparam = parseFloat(fx[1]);
-			if (fx[0] == 'rotate') {
-				bg.orientation += bg.fxparam;
-				bg.orientation %= 360;
-			}
-			if (fx[0] == 'scale') {
-				bg.size = bg.fxparam;
-			}
-		}
-		else 
-			bg.effects = param.effect + 'in';
-		if ((param.effect == 'fade') && (Stage.layers[0].length > 0))
-			bg.alpha = -1;
-	}
-	else 
-		bg.effects = 'in';
-	if (param.time != null) bg.transTime = (param.time>0) ? param.time : 0.01;
-	Stage.layers[0].push(bg);
+	Helper.processBackdrop(Stage.layers[0], 'scene', param);
 	Stage.Transition('show_backdrop');
 }
 // actor - create and display character (layer 1)
@@ -764,368 +1121,69 @@ function actor(param) {
 		}
 		if (idx != -1) {
 			// update an existing actor
-			if (param.sprite) {
-				if (typeof param.sprite == 'string') {
-					for (var i in Stage.layers[1][idx].sprites) {
-						if (Stage.layers[1][idx].sprites[i].id == param.sprite) {
-							if (Stage.layers[1][idx].visible) {
-								Stage.layers[1][idx].prevSprite = Stage.layers[1][idx].activeSprite;
-								Stage.layers[1][idx].alpha = 0;
-							}
-							Stage.layers[1][idx].activeSprite = i;
-							break;
-						}
-					}
-				}
-				else {
-					// assumes array of length 2 to be added to list of sprites
-					if (Stage.layers[1][idx].visible) {
-						Stage.layers[1][idx].prevSprite = Stage.layers[1][idx].activeSprite;
-						Stage.layers[1][idx].alpha = 0;
-					}
-					Stage.layers[1][idx].AddSprite(param.sprite[0], param.sprite[1]);
-				}
+			var updchar = Helper.processActor(Stage.layers[1][idx], param);
+			// check if a reorder is needed
+			if (updchar != '') {
+				var chr = Stage.layers[1][idx];
+				Stage.layers[1].splice(idx, 1);
+				if (updchar == 'front')
+					Stage.layers[1].push(chr);
+				else if (updchar == 'back')
+					Stage.layers[1].unshift(chr);
 			}
-			if (param.avatar) {
-				Stage.layers[1][idx].AddAvatar(param.avatar);
-			}
-			if (param.effect) {
-				if ((param.effect.indexOf('scale') != -1) || 
-					(param.effect.indexOf('rotate') != -1)) {
-					var fx = param.effect.split(' ');
-					Stage.layers[1][idx].effects = fx[0];
-					Stage.layers[1][idx].prevFx = fx[0];
-					Stage.layers[1][idx].fxparam = parseFloat(fx[1]);
-					if (fx[0] == 'rotate') {
-						Stage.layers[1][idx].orientation += Stage.layers[1][idx].fxparam;
-						Stage.layers[1][idx].orientation %= 360;
-					}
-					if (fx[0] == 'scale') {
-						Stage.layers[1][idx].size = Stage.layers[1][idx].fxparam;
-					}
-				}
-				else {
-					Stage.layers[1][idx].effects = param.effect;
-					Stage.layers[1][idx].prevFx = param.effect;
-				}
-			}
-			else
-				Stage.layers[1][idx].effects = Stage.layers[1][idx].prevFx;
-			//if ((param.remove == true) || (param.show == false))
-			if ((param.show == false) ||
-				(param.remove == 'actor') || 
-				(Stage.layers[1][idx].sprites[Stage.layers[1][idx].activeSprite].id == param.remove) )
-				Stage.layers[1][idx].effects += 'out';
-			else
-				Stage.layers[1][idx].effects += 'in';
-			if (param.remove) {
-				if (param.remove == 'actor')
-					Stage.layers[1][idx].pendingRemoval = true;
-				else
-					Stage.layers[1][idx].RemoveSprite(param.remove);
-			}
-				
-			if (param.say) {
-				var same_window = Helper.checkCurrentSpeaker(Stage.layers[1][idx].nick, param.append);
-				Stage.layers[4][0].text = Helper.addTagToDialog(Stage.layers[1][idx].nick, 
-																Stage.layers[1][idx].color,
-																param.say,
-																same_window);
-				if (Stage.layers[1][idx].avatar != null)
-					Stage.layers[4][0].avatar = Stage.layers[1][idx].avatar;
-				else
-					Stage.layers[4][0].avatar = null;
-				Stage.layers[4][0].alpha = 1;
-				Stage.layers[4][0].effects = "none";
-				Stage.layers[4][0].scrollOffsetY = 0;
-				Stage.layers[4][0].visible = true;
-				Stage.layers[4][0].changed = true;
-			}
-			
-			var updchr = '';
-			var changepos = false;
-			if (param.position) {
-				var subs = param.position.split(' ');
-				for (var i in subs) {
-					if ((subs[i] == 'left') ||
-						(subs[i] == 'right') ||
-						(subs[i] == 'center') ||
-						(subs[i] == 'auto')) {
-							Stage.layers[1][idx].posMode = subs[i];
-							changepos = true;
-						}
-					if ((subs[i] == 'front') ||
-						(subs[i] == 'back'))
-							updchr = subs[i];
-				}
-			}
-			
 			// done updating, do not trickle down
 			Stage.layers[1][idx].drawn = false;
 			Stage.layers[1][idx].update = false;
 			//Stage.layers[1][idx].redraw = true;
 			if ((Stage.layers[1][idx].visible && (Stage.layers[1][idx].effects.indexOf('out')!=-1)) ||
 				(!Stage.layers[1][idx].visible && (Stage.layers[1][idx].effects.indexOf('in')!=-1)) ||
-				changepos)
-				Stage.Transition('show_actor');
-				
-			// finally check if a reorder is needed
-			if (updchr != '') {
-				var chr = Stage.layers[1][idx];
-				Stage.layers[1].splice(idx, 1);
-				if (updchr == 'front')
-					Stage.layers[1].push(chr);
-				else if (updchr == 'back')
-					Stage.layers[1].unshift(chr);
-			}
+				((param.position) && (param.position.search(/(left|right|center|auto)/g) != -1)))
+				Stage.Transition('show_actor');	
 			return;
 		}
 	}
 	// this is a new actor
 	var chr = new Character();
 	chr.Create(param.id);
-	if (param.nick) 
-		chr.nick = param.nick;
-	else
-		chr.nick = param.id;
-	if (param.color)
-		chr.color = param.color;
-	else
-		chr.color = Stage.layers[4][0].tagColor;
-	if (param.type)
-		chr.type = param.type;
-	if (param.sprite) {
-		// assumes length == 2
-		chr.AddSprite(param.sprite[0], param.sprite[1]);
-	}
-	if (param.avatar) {
-		chr.AddAvatar(param.avatar);
-	}
-	if (param.effect) {
-		if ((param.effect.indexOf('scale') != -1) || 
-			(param.effect.indexOf('rotate') != -1)) {
-			var fx = param.effect.split(' ');
-			chr.effects = fx[0];
-			chr.prevFx = fx[0];
-			chr.fxparam = parseFloat(fx[1]);
-			if (fx[0] == 'rotate') {
-				chr.orientation += chr.fxparam;
-				chr.orientation %= 360;
-			}
-			if (fx[0] == 'scale') {
-				chr.size = chr.fxparam;
-			}
-		}
-		else {
-			chr.effects = param.effect;
-			chr.prevFx = param.effect;
-		}
-		if (param.show == false)
-			chr.effects += 'out';
-		else
-			chr.effects += 'in';
-	}
-	else {
-		if (param.show == false)
-			chr.effects = 'out';
-		else
-			chr.effects = 'in';
-	}
-	if (param.time != null) chr.transTime = (param.time>0) ? param.time : 0.01;
-	if (param.say) {
-		// new actor will have new dialog window, continue is ignored
-		Stage.layers[4][0].cont = false;
-		Stage.layers[4][0].text = Helper.addTagToDialog(chr.nick, chr.color, param.say, false);
-		if (chr.avatar != null)
-			Stage.layers[4][0].avatar = chr.avatar;
-		else
-			Stage.layers[4][0].avatar = null;
-		Stage.layers[4][0].alpha = 1;
-		Stage.layers[4][0].effects = "none";
-		Stage.layers[4][0].scrollOffsetY = 0;
-		Stage.layers[4][0].visible = true;
-		Stage.layers[4][0].changed = true;
-	}
-	var addchr = 'front';
-	if (param.position) {
-		var subs = param.position.split(' ');
-		for (var i in subs) {
-			if ((subs[i] == 'left') ||
-				(subs[i] == 'right') ||
-				(subs[i] == 'center') ||
-				(subs[i] == 'auto'))
-					chr.posMode = subs[i];
-			if ((subs[i] == 'front') ||
-				(subs[i] == 'back'))
-					addchr = subs[i];
-		}
-	}
-	if (addchr == 'front')
-		Stage.layers[1].push(chr);	
-	else
+	chr.nick = (param.nick) ? param.nick : param.id;
+	chr.color = (param.color) ? param.color : Stage.layers[4][0].tagColor;
+	var addchar = Helper.processActor(chr, param);
+	if (addchar == 'back')
 		Stage.layers[1].unshift(chr);
+	else
+		Stage.layers[1].push(chr);	
 	Stage.Transition('show_actor');
 }
 // overlay - displays an overlay image (layer 2)
 function overlay(param) {
-	var nextid = 0;
 	Stage.Transition('show_overlay');
-	if (Stage.layers[2].length > 0) {
-		// overlay layer has more than one element
-		// to conserve memory, maintain only the previous and the incoming overlay
-		while (Stage.layers[2].length > 1) {
-			Stage.layers[2].shift();
-		}
-		if (!param.src && (param.show != false)) {
-			// show the previous overlay
-			if (param.effect) {
-				if ((param.effect.indexOf('scale') != -1) || 
-					(param.effect.indexOf('rotate') != -1)) {
-					var fx = param.effect.split(' ');
-					Stage.layers[2][0].effects = fx[0] + 'in';
-				}
-				else
-					Stage.layers[2][0].effects = param.effect + 'in';
-			}
-			else 
-				Stage.layers[2][0].effects = 'in';
-			Stage.layers[2][0].drawn = false;
-			Stage.layers[2][0].update = false;
-			return;
-		}
-		
-		// do a reverse effect on the previous overlay
-		if (param.effect) {
-			if ((param.effect.indexOf('scale') != -1) || 
-				(param.effect.indexOf('rotate') != -1)) {
-				var fx = param.effect.split(' ');
-				Stage.layers[2][0].effects = fx[0] + 'out';
-			}
-			else
-				Stage.layers[2][0].effects = param.effect + 'out';
-		}
-		else 
-			Stage.layers[2][0].effects = 'out';
-		Stage.layers[2][0].drawn = false;
-		Stage.layers[2][0].update = false;
-		nextid = parseInt(Stage.layers[2][0].context.canvas.id.substr(3))+1;
-		
-		if ((!param.src) && (param.show == false)) {
-			// just hiding the previous overlay
-			return;
-		}
-	}
-	// add the new overlay layer
-	var ovl = new Backdrop();
-	ovl.Create('ovl' + nextid, param.src, null);
-	if (param.effect) {
-		if ((param.effect.indexOf('scale') != -1) || 
-			(param.effect.indexOf('rotate') != -1)) {
-			var fx = param.effect.split(' ');
-			ovl.effects = fx[0] + 'in';
-			ovl.fxparam = parseFloat(fx[1]);
-			if (fx[0] == 'rotate') {
-				ovl.orientation += ovl.fxparam;
-				ovl.orientation %= 360;
-			}
-			if (fx[0] == 'scale') {
-				ovl.size = ovl.fxparam;
-			}
-		}
-		else 
-			ovl.effects = param.effect + 'in';
-	}
-	else 
-		ovl.effects = 'in';
-	if (param.time != null) ovl.transTime = (param.time>0) ? param.time : 0.01;
-	if (param.offset) {
-		if (typeof (param.offset) == "string") {
-			if (param.offset == "scroll")
-				ovl.scroll = true;
-			else
-				ovl.scroll = false;
-		}
-		else {
-			ovl.scroll = false;
-			ovl.offset = param.offset;
-		}
-	}
-	else {
-		ovl.scroll = false;
-		ovl.offset = [0, 0];
-	}
-	Stage.layers[2].push(ovl);
+	Helper.processBackdrop(Stage.layers[2], 'overlay', param);
 }
 // atmosphere - create atmosphere effects (layer 3)
 function atmosphere(param) {
 	var str_param = JSON.stringify(param);
 	var arr_param = str_param.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
-	var type, count, src, action;
-	for (var i=0; i<arr_param.length; i+=2) {
-		arr_param[i] = eval(arr_param[i]);
-		arr_param[i+1] = eval(arr_param[i+1]);
-		if ((arr_param[i] == "rain") || 
-			(arr_param[i] == "snow") || 	
-			(arr_param[i] == "beam")) {
-			type = arr_param[i];
-			if (typeof arr_param[i+1] == 'number') {
-				count = arr_param[i+1];
-				action = 'start';
-			}
-			else
-				action = arr_param[i+1];
-		}
-		else if (arr_param[i] == "cloud") {
-			type = arr_param[i];
-			if ((arr_param[i+1] == 'start') || (arr_param[i+1] == 'stop'))
-				action = arr_param[i+1];
-			else {
-				src = arr_param[i+1];
-				action = 'start';
-			}
-		}
-	}
-
-	var idx = -1;
-	var nextid = 0;
-	if (Stage.layers[3].length > 0) {
-		// look for existing fx
-		for (var i=0; i<Stage.layers[3].length; i++ ) {
-			if (Stage.layers[3][i].type == type) {
-				idx = i;
-				break;
-			}
-		}
-		if (idx != -1) {
-			if (action)
-				Stage.layers[3][idx].action = action;
-			else
-				Stage.layers[3][idx].action = 'start';
-			if (Stage.layers[3][idx].action == 'start') {
-				if ((type == "rain") || (type == "snow") ||(type == "beam")) {
-					Stage.layers[3][idx].Init(type,
-											 (count!=null)?count:null,
-											 (param.direction!=null)?param.direction:null);
-					if (param.mask)
-						Stage.layers[3][idx].mask = param.mask;
-				}
-				else if (type == "cloud") {
-					if (src) Stage.layers[3][idx].src = src;
-					Stage.layers[3][idx].Init(type, null,
-										     (param.direction!=null)?param.direction:Stage.layers[3][idx].direction);
-				}
-			}
+	
+	// for plugins compatibility, first parameter must identify type of atmo effect
+	var type = eval(arr_param[0]);
+	arr_param[1] = eval(arr_param[1]);
+	var action = 'start';
+	if (arr_param[1].toString().search(/(start|stop)/g) != -1)
+		action = arr_param[1];
+		
+	for (var i=0; i<Stage.layers[3].length; i++) {
+		if (Stage.layers[3][i].type == type) {
+			Stage.layers[3][i].action = (action) ? action : 'start';
+			if (Stage.layers[3][i].action == 'start')
+				Stage.layers[3][i].Init(type, param);
 			return;
 		}
-		nextid = parseInt(Stage.layers[3][Stage.layers[3].length-1].context.canvas.id.substr(3))+1;
 	}
-	// this is new fx type
+	var nextid = (Stage.layers[3].length > 0) ? 
+				parseInt(Stage.layers[3][Stage.layers[3].length-1].context.canvas.id.substr(3))+1 : 0;
 	var atm = new Atmosphere();
-	atm.Create('atm' + nextid);
-	if (src) atm.src = src;
-	atm.Init(type, (count!=null)?count:null, (param.direction!=null)?param.direction:null);
-	if (param.mask) atm.mask = param.mask;
-	if (action) atm.action = action;
+	atm.Create('atm'+nextid);
+	atm.Init(type, param);	
 	Stage.layers[3].push(atm);
 }
 // box - configures script box (layer 4)
@@ -1136,15 +1194,10 @@ function box(param) {
 		Stage.layers[4][0].visible = false;
 		Stage.layers[4][0].text = '';
 	}
-
 	if (param.pos) Stage.layers[4][0].pos = param.pos;
 	if (param.back) {
-		if ((param.back == "none") || (param.back == "dim"))
-			Stage.layers[4][0].back = param.back;
-		else {
-			Stage.layers[4][0].back = 'image';
-			Stage.layers[4][0].src = param.back;
-		}
+		Stage.layers[4][0].back = param.back;
+		Stage.layers[4][0].src = Config.activeTheme.boxImageStyle;
 	}
 	if (param.prompt) {
 		if (param.prompt == "none") {
@@ -1159,7 +1212,6 @@ function box(param) {
 	if (param.align) {
 		Stage.layers[4][0].textAlign = param.align;
 	}
-
 	// assumes this function won't be called unless there are some changes somewhere
 	Stage.layers[4][0].changed = true;
 }
@@ -1171,14 +1223,10 @@ function text(param) {
 	Stage.layers[4][0].scrollOffsetY = 0;
 	if (typeof param == "string") {
 		var str = Helper.filterBadWords(param);
-		if (Stage.layers[4][0].cont) {
+		if (Stage.layers[4][0].cont)
 			Stage.layers[4][0].text += '\n' + str.replace(/\n/g,"<br/>");
-		}
-		else {
+		else
 			Stage.layers[4][0].text = str.replace(/\n/g,"<br/>");
-		}
-		//Stage.layers[4][0].text = Helper.filterBadWords(Stage.layers[4][0].text);
-		//alert(Stage.layers[4][0].text);
 	}
 	else {
 		if (param.font) { 
@@ -1192,10 +1240,8 @@ function text(param) {
 			if (subs.length > 2) Stage.layers[4][0].fontFamily = subs[2];
 			if (subs.length > 3) Stage.layers[4][0].fontColor = subs[3];
 		}
-		if (param.align) {
+		if (param.align)
 			Stage.layers[4][0].textAlign = param.align;
-		}
-		
 		if (param.effect) {
 			if (param.effect == "fade")
 				Stage.layers[4][0].alpha = 0;
@@ -1203,7 +1249,7 @@ function text(param) {
 				Stage.layers[4][0].scrollOffsetY = Stage.layers[4][0].context.canvas.height;
 			Stage.layers[4][0].effects = param.effect;
 		}
-			
+
 		var nick = null;
 		var color = '';
 		if (param.speaker) {
@@ -1213,25 +1259,20 @@ function text(param) {
 				if (Stage.layers[1][i].id == param.speaker) {
 					nick = Stage.layers[1][i].nick;
 					color = Stage.layers[1][i].color;
-					if (Stage.layers[1][i].avatar != null)
-						Stage.layers[4][0].avatar = Stage.layers[1][i].avatar;
-					else
-						Stage.layers[4][0].avatar = null;
+					Stage.layers[4][0].avatar = (Stage.layers[1][i].avatar != null) ? Stage.layers[1][i].avatar : null;
 					break;
 				}
 			}
 		}
 		var same_window = Helper.checkCurrentSpeaker((param.speaker) ? param.speaker : '', param.append);
 		Stage.layers[4][0].text = Helper.addTagToDialog(nick, color, 
-														(param.value) ? param.value : null, same_window);
-		
+														(param.value) ? param.value : null, same_window);		
 		if (param.duration > 0) Stage.layers[4][0].timeout = param.duration;
 		if (param.offset) {
 			Stage.layers[4][0].textOffset.x = param.offset[0];
 			Stage.layers[4][0].textOffset.y = param.offset[1];
 		}
 	}
-	//Stage.layers[4][0].avatar = null;	<-- moved to top
 	Stage.layers[4][0].visible = true;
 	Stage.layers[4][0].changed = true;
 }
@@ -1246,7 +1287,6 @@ function menu(param) {
 		Stage.layers[4][0].text += "<br/><class=\'menu\'>" + param[i] + "</class>";
 		var menuItem = {hotspot:[], link:param[i+1]};
 		Stage.layers[4][0].jumpTo.push(menuItem);
-		//Stage.layers[4][0].jumpTo.push(param[i+1])
 	}
 	Stage.layers[4][0].avatar = null;
 	Stage.layers[4][0].visible = true;
@@ -1255,31 +1295,13 @@ function menu(param) {
 }
 // button - create a canvas button (layer 4), independent of cform
 function button(param) {
-	// check existing button w/ same id
-	/*
-	for (var i in Stage.layers[4]) {
-		if ((Stage.layers[4][i].type == "button") && 
-			(Stage.layers[4][i].text == param.name)) {
-			Stage.layers[4][i].inputFocus = true;
-			return;
-		}
-	}
-	*/
-	// or new button
+	// check existing button w/ same id ?
 	var bt = new ActiveImage();
-	var rect = {x:param.x, y:param.y, w:0, h:0};
-	if (param.w) rect.w = param.w;
-	if (param.h) rect.h = param.h;
+	var rect = {x:param.x, y:param.y, w:(param.w)?param.w:0, h:(param.h)?param.h:0};
 	var obj = new Array();
 	if (param.base) obj.push(param.base);
-	if (param.hover) 
-		obj.push(param.hover);
-	else
-		obj.push(param.base);
-	if (param.click) 
-		obj.push(param.click);
-	else
-		obj.push(param.base);
+	obj.push((param.hover)?param.hover:param.base);
+	obj.push((param.click)?param.click:param.base);
 	bt.Create(param.name, rect, obj);
 	if (param.link) bt.link = param.link;
 	if (param.showText == false)
@@ -1287,7 +1309,6 @@ function button(param) {
 	if (param.tip)
 		bt.tooltip = param.tip;
 	Stage.layers[4].push(bt);
-	//Stage.pause = true;
 }
 // timer - create a canvas form timer (layer 4)
 function timer(param) {
@@ -1424,141 +1445,12 @@ function audio(param) {
 	*/
 	if (!document.createElement('audio').canPlayType) return;
 	
-	var mimeType = {"wav": "audio/wav",
-					"ogg": 'audio/ogg;codecs="vorbis"',
-					"mp3": "audio/mpeg"};
-
-	if (param.bgm) {
-		if ((Stage.sounds[0].length==0) || (Stage.sounds[0][0].src.search(param.bgm)==-1)) {
-			var s = new Sounds();
-			if (param.format) {
-				s.src = null;
-				for (var i in param.format) {
-					if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
-						s.src = param.bgm + '.' + param.format[i];
-						break;
-					}
-				}
-			}
-			while (Stage.sounds[0].length > 0) {
-				var old = Stage.sounds[0].shift();
-				old.Stop(true);
-			}
-			s.delay = (param.delay > 0) ? param.delay : 0;
-			Stage.sounds[0].push(s);
-		}
-		else {
-			switch (param.action) {
-				case "stop":
-					Stage.sounds[0][0].Stop(false);
-					break;
-				case "pause":
-					Stage.sounds[0][0].Pause();
-					break;
-				case "rewind":
-					Stage.sounds[0][0].Rewind();
-					break;
-				case "play":
-				default:
-					Stage.sounds[0][0].Play(false);
-					break;
-			}
-		}
-	}
-	if (param.bgs) {
-		var index = -1;
-		if (Stage.sounds[1].length > 0) {
-			for (var i in Stage.sounds[1]) {
-				if (Stage.sounds[1][i].src.search(param.bgs) != -1) {
-					index = i;
-					break;
-				}
-			}
-		}
-		if (index != -1) {
-			switch (param.action) {
-				case "stop":
-					Stage.sounds[1][index].Stop(false);
-					break;
-				case "pause":
-					Stage.sounds[1][index].Pause();
-					break;
-				case "rewind":
-					Stage.sounds[1][index].Rewind();
-					break;
-				case "remove":
-					Stage.sounds[1][index].Stop(true);
-					Stage.sounds[1].splice(index, 1);
-					break;
-				case "play":
-				default:
-					Stage.sounds[1][index].Play(false);
-					break;
-			}
-		}
-		else {
-			var s = new Sounds();
-			if (param.format) {
-				s.src = null;
-				for (var i in param.format) {
-					if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
-						s.src = param.bgs + '.' + param.format[i];
-						break;
-					}
-				}
-			}
-			s.repeat = -1;
-			s.delay = (param.delay > 0) ? param.delay : 0;
-			Stage.sounds[1].push(s);
-		}
-	}
-	if (param.se) {
-		var index = -1;
-		if (Stage.sounds[2].length > 0) {
-			for (var i in Stage.sounds[2]) {
-				if (Stage.sounds[2][i].src.search(param.se) != -1) {
-					index = i;
-					break;
-				}
-			}
-		}
-		if (index != -1) {
-			switch (param.action) {
-				case "stop":
-					Stage.sounds[2][index].Stop(false);
-					break;
-				case "pause":
-					Stage.sounds[2][index].Pause();
-					break;
-				case "rewind":
-					Stage.sounds[2][index].Rewind();
-					break;
-				case "remove":
-					Stage.sounds[2][index].Stop(true);
-					Stage.sounds[2].splice(index, 1);
-					break;
-				case "play":
-				default:
-					Stage.sounds[2][index].Play(false);
-					break;
-			}
-		}
-		else {
-			var s = new Sounds();
-			if (param.format) {
-				s.src = null;
-				for (var i in param.format) {
-					if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
-						s.src = param.se + '.' + param.format[i];
-						break;
-					}
-				}
-			}
-			s.repeat = (param.repeat > 0) ? param.repeat : 0;
-			s.delay = (param.delay > 0) ? param.delay : 0;
-			Stage.sounds[2].push(s);
-		}
-	}
+	if (param.bgm)
+		Helper.processAudio (Stage.sounds[0], param.bgm, param);
+	if (param.bgs)
+		Helper.processAudio (Stage.sounds[1], param.bgs, param);
+	if (param.se)
+		Helper.processAudio (Stage.sounds[2], param.se, param);
 }
 // video - plays a video (cutscene, etc.)
 function video(param) {
@@ -1568,8 +1460,8 @@ function video(param) {
 					"m4v": 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
 					"ogg": 'video/ogg; codecs="theora, vorbis"',
 					"ogv": 'video/ogg; codecs="theora, vorbis"',
-					"webm": 'video/webm; codecs="vp8, vorbis"'};
-				
+					"webm": 'video/webm; codecs="vp8, vorbis"',			
+					"webmv": 'video/webm; codecs="vp8, vorbis"'};			
 	var v = new Movie();
 	v.src = null;
 	for (var i in param.format) {
@@ -1581,7 +1473,7 @@ function video(param) {
 	Stage.videos.push(v);
 	Stage.pause = true;
 }
-// default form elements
+// default form elements (sibling layer)
 function input(param) {
 	var element = document.createElement("input");
 	element.name = param.name;
@@ -1599,7 +1491,6 @@ function input_label(param, tip) {
 	element.htmlFor = param;
 	element.innerHTML = param;
 	if (tip) element.title = tip;
-		//element.innerHTML += '<span>'+tip+'</span>';
 	return element;
 }
 function textarea(param) {
@@ -1625,31 +1516,18 @@ function select(param) {
 	var element = document.createElement("select");
 	element.name = param.name;
 	element.id = param.name;
-	if (typeof param.options == 'string') {
-		var options = Helper.getValue(param.options);
-		for (var i=0; i<options.length; i+=2) {
-			var opt = document.createElement("option");
-			opt.innerText = options[i];
-			opt.value = JSON.stringify(options[i+1]);
-			element.appendChild(opt);
-			if (param.bind) {
-				if (opt.value == JSON.stringify(Helper.getValue(param.bind))) 
-					element.selectedIndex = i/2;
-			}
+	
+	var opts = (typeof param.options == 'string') ? Helper.getValue(param.options) : param.options;
+	for (var i=0; i<opts.length; i+=2) {
+		var opt = document.createElement("option");
+		opt.innerHTML = opts[i];
+		opt.value = JSON.stringify(opts[i+1]);
+		element.appendChild(opt);
+		if (param.bind) {
+			if (opt.value == JSON.stringify(Helper.getValue(param.bind)))
+				element.selectedIndex = i/2;
 		}
-	}
-	else {
-		for (var i=0; i<param.options.length; i+=2) {
-			var opt = document.createElement("option");
-			opt.innerText = param.options[i];
-			opt.value = JSON.stringify(param.options[i+1]);
-			element.appendChild(opt);
-			if (param.bind) {
-				if (opt.value == JSON.stringify(Helper.getValue(param.bind)))
-					element.selectedIndex = i/2;
-			}
-		}
-	}
+	}	
 	if (param.bind) Stage.formBindings.push([param.name, param.bind]);
 	return element;
 }
@@ -1665,7 +1543,6 @@ function submit(param) {
 			// update bindings here
 			for (var idx in Stage.formBindings) {
 				var items = document.getElementById(Stage.formBindings[idx][0]);
-				//alert(items.type+" "+items.value+" "+items.checked);
 				if (items.type == "radio") {
 					if (items.checked == true) 
 						Helper.setValue(Stage.formBindings[idx][1], JSON.stringify(items.value));
@@ -1688,7 +1565,6 @@ function submit(param) {
 			Stage.activeForm = null;
 			Stage.pause = false;
         }, false);
-
 	return element;
 }
 function checkbox(param) {
@@ -1696,10 +1572,7 @@ function checkbox(param) {
 	element.type = "checkbox";
 	element.name = param.name;
 	element.id = param.name;
-	if (param.checked)
-		element.checked = param.checked;
-	else
-		element.checked = false;
+	element.checked = (param.checked) ? param.checked : false;
 	if (param.bind) {
 		element.checked = Helper.getValue(param.bind);
 		Stage.formBindings.push([param.name, param.bind]);
@@ -1712,10 +1585,7 @@ function radio(param) {
 	element.name = param.name;
 	element.id = param.value;
 	element.value = param.value;
-	if (param.checked)
-		element.checked = param.checked;
-	else
-		element.checked = false;
+	element.checked = (param.checked) ? param.checked : false;
 	if (param.bind) {
 		element.checked = (element.value == Helper.getValue(param.bind));
 		Stage.formBindings.push([param.value, param.bind]);
@@ -1761,7 +1631,6 @@ function form(param) {
 		// if this element is a fieldset, revert to default fieldset
 		if (param[i] == fieldset)
 			fset = null;
-		
 		// append element to active fieldset
 		if ((param[i] == input) || 
 			(param[i] == select) || 
@@ -1777,12 +1646,10 @@ function form(param) {
 		if (param[i] == radio) {
 			f.AddChild(input_label(param[i+1].value, param[i+1].tip), fset);
 		}
-		
 		// if this element is a fieldset, attach succeeding elements to it
 		if (param[i] == fieldset)
 			fset = param[i+1];
 	}
-
 	Stage.activeForm = f;
 	Stage.pause = true;
 }
@@ -1845,7 +1712,10 @@ function checkpoint(param) {
 				localStorage["l1_"+i+"_avatar"] = "undefined";
 			localStorage["l1_"+i+"_active"] = Stage.layers[1][i].activeSprite;
 			localStorage["l1_"+i+"_alpha"] = Stage.layers[1][i].alpha;
-			localStorage["l1_"+i+"_effects"] = Stage.layers[1][i].prevFx;
+			if (Stage.layers[1][i].prevFx != '')
+				localStorage["l1_"+i+"_effects"] = Stage.layers[1][i].prevFx;
+			else
+				localStorage["l1_"+i+"_effects"] = "undefined";
 			localStorage["l1_"+i+"_time"] = Stage.layers[1][i].transTime;
 			localStorage["l1_"+i+"_visible"] = Stage.layers[1][i].visible;
 			localStorage["l1_"+i+"_pending"] = Stage.layers[1][i].pendingRemoval;
@@ -1867,8 +1737,8 @@ function checkpoint(param) {
 			localStorage["l2_"+i+"_effects"] = Stage.layers[2][i].effects;
 			localStorage["l2_"+i+"_time"] = Stage.layers[2][i].transTime;
 			localStorage["l2_"+i+"_scroll"] = Stage.layers[2][i].scroll;
-			localStorage["l2_"+i+"_offset_x"] = Stage.layers[2][i].offset[0];
-			localStorage["l2_"+i+"_offset_y"] = Stage.layers[2][i].offset[1];
+			localStorage["l2_"+i+"_offset_x"] = Stage.layers[2][i].offset.vx;
+			localStorage["l2_"+i+"_offset_y"] = Stage.layers[2][i].offset.vy;
 			if (Stage.layers[2][i].posMode != '')
 				localStorage["l2_"+i+"_posMode"] = Stage.layers[2][i].posMode;
 			else
@@ -1881,19 +1751,9 @@ function checkpoint(param) {
 		for (var i=0; i<Stage.layers[3].length; i++) {
 			localStorage["l3_"+i+"_id"] = Stage.layers[3][i].context.canvas.id;
 			localStorage["l3_"+i+"_type"] = Stage.layers[3][i].type;
-			localStorage["l3_"+i+"_count"] = Stage.layers[3][i].numParticles;
 			localStorage["l3_"+i+"_action"] = Stage.layers[3][i].action;
 			localStorage["l3_"+i+"_visible"] = Stage.layers[3][i].visible;
-			if (Stage.layers[3][i].src != '')
-				localStorage["l3_"+i+"_src"] = Stage.layers[3][i].src;
-			else
-				localStorage["l3_"+i+"_src"] = "undefined";
-			if (Stage.layers[3][i].direction != null)
-				localStorage["l3_"+i+"_direction"] = Stage.layers[3][i].direction;
-			else
-				localStorage["l3_"+i+"_direction"] = "undefined";				
-			localStorage["l3_"+i+"_radius"] = Stage.layers[3][i].radius;
-			localStorage["l3_"+i+"_mask"] = Stage.layers[3][i].mask;
+			localStorage["l3_"+i+"_param"] = JSON.stringify(Stage.layers[3][i].saveparam);
 		}
 		// Store layer 4
 		localStorage["l4_count"] = Stage.layers[4].length;
@@ -1904,7 +1764,7 @@ function checkpoint(param) {
 				localStorage["l4_"+i+"_text"] = Stage.layers[4][i].text;
 				localStorage["l4_"+i+"_pos"] = Stage.layers[4][i].pos;
 				localStorage["l4_"+i+"_back"] = Stage.layers[4][i].back;
-				if (Stage.layers[4][i].src != '')
+				if (Stage.layers[4][i].src != null)
 					localStorage["l4_"+i+"_src"] = Stage.layers[4][i].src;
 				else
 					localStorage["l4_"+i+"_src"] = "undefined";
@@ -2020,11 +1880,14 @@ function checkpoint(param) {
 		}
 		// Store video?? No need. Videos are non-persistent data anyway
 		// Store user variables
-		localStorage["uv_count"] = Stage.variables.length;
-		for (var i=0; i<Stage.variables.length; i++) {
-			localStorage["uv"+i+"_name"] = Stage.variables[i].name;
-			localStorage["uv"+i+"_value"] = Stage.variables[i].value;
-			localStorage["uv"+i+"_type"] = Stage.variables[i].type;
+		var str_uv = JSON.stringify(Stage.variables);
+		var arr_uv = str_uv.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
+		localStorage["uv_count"] = arr_uv.length/2;
+		for (var i=0; i<arr_uv.length; i+=2) {
+			arr_uv[i] = eval(arr_uv[i]);
+			localStorage["uv"+i/2+"_name"] = arr_uv[i];
+			localStorage["uv"+i/2+"_value"] = Stage.variables[arr_uv[i]].Value();
+			localStorage["uv"+i/2+"_type"] = Stage.variables[arr_uv[i]].Type();
 		}
 		// Store forms
 		localStorage["forms_count"] = Stage.formStack.length;
@@ -2048,6 +1911,7 @@ function checkpoint(param) {
 		Stage.layers[0].splice(0, Stage.layers[0].length);
 		for (var i=0; i<parseInt(localStorage["l0_count"]); i++) {
 			var bg = new Backdrop();
+			bg.type = 'scene';
 			var obj = new Array();
 			for (var j=0; j<parseInt(localStorage["l0_"+i+"_obj_count"]); j++) {
 				var item = {src:'', x:0, y:0};
@@ -2068,13 +1932,14 @@ function checkpoint(param) {
 			bg.orientation = parseFloat(localStorage["l0_"+i+"_orientation"]);
 			bg.rotation = parseFloat(localStorage["l0_"+i+"_orientation"]);
 			bg.size = parseFloat(localStorage["l0_"+i+"_size"]);
-			bg.target_scale = parseFloat(localStorage["l0_"+i+"_size"]);
+			bg.scale = parseFloat(localStorage["l0_"+i+"_size"]);
 			Stage.layers[0].push(bg);
 		}
 		// populate layer 1
 		Stage.layers[1].splice(0, Stage.layers[1].length);
 		for (var i=0; i<parseInt(localStorage["l1_count"]); i++) {
 			var chr = new Character();
+			chr.type = 'actor';
 			chr.Create(localStorage["l1_"+i+"_id"]);
 			chr.nick = localStorage["l1_"+i+"_nick"];
 			chr.color = localStorage["l1_"+i+"_color"];
@@ -2088,7 +1953,10 @@ function checkpoint(param) {
 			chr.activeSprite = parseInt(localStorage["l1_"+i+"_active"]);
 			chr.alpha = parseFloat(localStorage["l1_"+i+"_alpha"]);
 			//chr.effects = localStorage["l1_"+i+"_effects"];
-			chr.prevFx = localStorage["l1_"+i+"_effects"];
+			if (localStorage["l1_"+i+"_effects"] != "undefined")
+				chr.prevFx = localStorage["l1_"+i+"_effects"];
+			else
+				chr.prevFx = 'done';
 			chr.transTime = parseFloat(localStorage["l1_"+i+"_time"]);
 			chr.visible = (localStorage["l1_"+i+"_visible"] == "true");
 			chr.pendingRemoval = (localStorage["l1_"+i+"_pending"] == "true");
@@ -2097,20 +1965,21 @@ function checkpoint(param) {
 			chr.orientation = parseFloat(localStorage["l1_"+i+"_orientation"]);
 			chr.rotation = parseFloat(localStorage["l1_"+i+"_orientation"]);
 			chr.size = parseFloat(localStorage["l1_"+i+"_size"]);
-			chr.target_scale = parseFloat(localStorage["l1_"+i+"_size"]);
+			chr.scale = parseFloat(localStorage["l1_"+i+"_size"]);
 			Stage.layers[1].push(chr);
 		}
 		// populate layer 2
 		Stage.layers[2].splice(0, Stage.layers[2].length);
 		for (var i=0; i<parseInt(localStorage["l2_count"]); i++) {
 			var ovl = new Backdrop();
+			ovl.type = 'overlay';
 			ovl.Create(localStorage["l2_"+i+"_id"], localStorage["l2_"+i+"_src"], null);
 			ovl.effects = localStorage["l2_"+i+"_effects"];
 			ovl.alpha = parseFloat(localStorage["l2_"+i+"_alpha"]);
 			ovl.visible = (localStorage["l2_"+i+"_visible"] == "true");
 			ovl.transTime = parseFloat(localStorage["l2_"+i+"_time"]);
 			ovl.scroll = (localStorage["l2_"+i+"_scroll"] == "true");
-			ovl.offset = [parseInt(localStorage["l2_"+i+"_offset_x"]), parseInt(localStorage["l2_"+i+"_offset_y"])];
+			ovl.offset = Vector2d(parseInt(localStorage["l2_"+i+"_offset_x"]), parseInt(localStorage["l2_"+i+"_offset_y"]))
 			if (localStorage["l2_"+i+"_posMode"] != "undefined")
 				ovl.posMode = localStorage["l2_"+i+"_posMode"];
 			else
@@ -2118,26 +1987,16 @@ function checkpoint(param) {
 			ovl.orientation = parseFloat(localStorage["l2_"+i+"_orientation"]);
 			ovl.rotation = parseFloat(localStorage["l2_"+i+"_orientation"]);
 			ovl.size = parseFloat(localStorage["l2_"+i+"_size"]);
-			ovl.target_scale = parseFloat(localStorage["l2_"+i+"_size"]);
+			ovl.scale = parseFloat(localStorage["l2_"+i+"_size"]);
 			Stage.layers[2].push(ovl);
 		}
 		// populate layer 3
 		Stage.layers[3].splice(0, Stage.layers[3].length);
 		for (var i=0; i<parseInt(localStorage["l3_count"]); i++) {
 			var atm = new Atmosphere();
+			var param = JSON.parse(localStorage["l3_"+i+"_param"]);
 			atm.Create(localStorage["l3_"+i+"_id"]);
-			if ((localStorage["l3_"+i+"_type"] == "rain") || 
-				(localStorage["l3_"+i+"_type"] == "beam")) {
-				atm.Init(localStorage["l3_"+i+"_type"], parseInt(localStorage["l3_"+i+"_count"]));
-				atm.mask = localStorage["l3_"+i+"_mask"];
-				atm.radius = parseInt(localStorage["l3_"+i+"_radius"]);
-			}
-			else if (localStorage["l3_"+i+"_type"] == "cloud") {
-				atm.src = (localStorage["l3_"+i+"_src"] != "undefined") ? localStorage["l3_"+i+"_src"] : '';
-				atm.Init(localStorage["l3_"+i+"_type"], (localStorage["l3_"+i+"_direction"] != "undefined") ?
-						parseInt(localStorage["l3_"+i+"_direction"]) : null);
-			}
-			//atm.Init(localStorage["l3_"+i+"_type"], parseInt(localStorage["l3_"+i+"_count"]));
+			atm.Init(localStorage["l3_"+i+"_type"], param);
 			atm.action = localStorage["l3_"+i+"_action"];
 			atm.visible = (localStorage["l3_"+i+"_visible"] == "true");
 			Stage.layers[3].push(atm);
@@ -2155,7 +2014,7 @@ function checkpoint(param) {
 				if (localStorage["l4_"+i+"_src"] != "undefined")
 					sb.src = localStorage["l4_"+i+"_src"];
 				else
-					sb.src = '';
+					sb.src = null;
 				if (localStorage["l4_"+i+"_prompt"] != "undefined") {
 					sb.psrc = localStorage["l4_"+i+"_prompt"];
 					sb.prompt.src = sb.psrc;
@@ -2183,7 +2042,7 @@ function checkpoint(param) {
 					var menuItem = {hotspot:[], link:''};
 					menuItem.link = localStorage["l4_"+i+"jumpTo"+j+"link"];
 					menuItem.hotspot = [parseInt(localStorage["l4_"+i+"jumpTo"+j+"hotspot_x"]),
-											parseInt(localStorage["l4_"+i+"jumpTo"+j+"hotspot_y"])];
+										parseInt(localStorage["l4_"+i+"jumpTo"+j+"hotspot_y"])];
 					sb.jumpTo.push(menuItem);
 				}			
 				Stage.layers[4].push(sb);
@@ -2283,18 +2142,16 @@ function checkpoint(param) {
 			}
 		}
 		// populate user variables
-		Stage.variables.splice(0, Stage.variables.length);
+		Stage.variables = {};
 		for (var i=0; i<parseInt(localStorage["uv_count"]); i++) {
 			var uv = new UserVars();
-			uv.name = localStorage["uv"+i+"_name"];
-			uv.type = localStorage["uv"+i+"_type"];
-			if (uv.type == "number")
-				uv.value = parseFloat(localStorage["uv"+i+"_value"]);
-			else if (uv.type == "boolean")
-				uv.value = (localStorage["uv"+i+"_value"] == "true");
+			if (localStorage["uv"+i+"_type"] == "number")
+				uv.Set(parseFloat(localStorage["uv"+i+"_value"]));
+			else if (localStorage["uv"+i+"_type"] == "boolean")
+				uv.Set((localStorage["uv"+i+"_value"] == "true"));
 			else
-				uv.value = localStorage["uv"+i+"_value"];
-			Stage.variables.push(uv);
+				uv.Set(localStorage["uv"+i+"_value"]);
+			Stage.variables[localStorage["uv"+i+"_name"]] = uv;
 		}
 		// populate form stack and style
 		Stage.formStack.splice(0, Stage.formStack.length);
@@ -2317,31 +2174,31 @@ function checkpoint(param) {
 	}
 }
 
+///////////////////////////////////////////////////////////////////////////////
 // Stage elements
+///////////////////////////////////////////////////////////////////////////////
 // User variables
+///////////////////////////////////////////////////////////////////////////////
 function UserVars() {
-	var uv = {
-		name: 0,
-		value: 0,
-		type: 0,
-		
-		Set: function(n, v) {
-			this.name = n;
-			this.value = v;
-			this.type = typeof v;
+	var	value = 0,
+		type = 0;
+	var uv = {	
+		Set: function(v) {
+			value = v;
+			type = typeof v;
 		},
-		
 		Value: function() {
-			return this.value;
+			return value;
 		},
-		
-		Name: function() {
-			return this.name;
+		Type: function() {
+			return type;
 		}
 	}
 	return uv;
 }
-// Audio elements
+///////////////////////////////////////////////////////////////////////////////
+// Audio/Video elements
+///////////////////////////////////////////////////////////////////////////////
 function Sounds() {
 	var	initd = false;
 	var snd = {
@@ -2358,36 +2215,19 @@ function Sounds() {
 				(this.src != null)) {
 				if (init) {
 					this.audio.src = this.src;
-					// loop is buggy or not implemented in firefox, do a manual loop
-					/*
-					if (this.repeat < 0)
-						this.audio.loop = true;
-					else {
-						Helper.addEvent(this.audio, 'ended', (function(self) {
-							return function() {
-								if (self.repeat > 0) {
-									self.Play(false);
-									self.repeat--;
-								}
-							}
-				        })(this), false);					
-					}
-					*/
-					Helper.addEvent(this.audio, 'ended', (function(self) {
-						return function() {
-							if (self.repeat > 0) {
-								self.Play(false);
-								self.repeat--;
-							}
-							else if (self.repeat < 0) {
-								self.Play(false);
-							}
-							else {	// self.repeat == 0
-								self.isPaused = true;
-							}
+					Helper.addEvent(this.audio, 'ended', function(e) {
+						if (snd.repeat > 0) {
+							snd.Play(false);
+							snd.repeat--;
 						}
-					})(this), false);
-					this.audio.volume = (Config.volumeAudio != null) ? Config.volumeAudio : 1;
+						else if (snd.repeat < 0) {
+							snd.Play(false);
+						}
+						else {
+							snd.isPaused = true;
+						}
+			        }, false);
+					this.audio.volume = Config.volumeAudio;
 					if (!this.isPaused) {
 						if (this.delay > 0)
 							setTimeout(function() {
@@ -2400,7 +2240,7 @@ function Sounds() {
 					initd = true;
 				}
 				else {
-					this.audio.volume = (Config.volumeAudio != null) ? Config.volumeAudio : 1;
+					this.audio.volume = Config.volumeAudio;
 					this.isPaused = false;
 					if (this.delay > 0)
 						setTimeout(function() {
@@ -2412,10 +2252,8 @@ function Sounds() {
 				}
 			}
 		},
-		
 		Stop: function(immediate) {
-			if ((this.audio != null) && 
-				(initd)) {
+			if ((this.audio != null) &&	(initd)) {
 				this.isStopping = true;
 				if ((immediate) || (this.audio.volume <= 0)) {
 					this.audio.pause();
@@ -2428,103 +2266,108 @@ function Sounds() {
 				}
 			}
 		},
-		
 		Pause: function() {
-			if ((this.audio != null) &&
-				(initd)) {
+			if ((this.audio != null) && (initd)) {
 				this.audio.pause();
 				this.isPaused = true;
 			}
 		},
-		
 		Seek: function(pos) {
-			if ((this.audio != null) && 
-				(initd)) {
+			if ((this.audio != null) && (initd)) {
 				this.audio.currentTime = pos;
 			}
 		},
-		
 		Rewind: function() {
-			if ((this.audio != null) &&
-				(initd)) {
+			if ((this.audio != null) &&	(initd)) {
 				this.audio.currentTime = 0;
 			}
 		}
 	}
 	return snd;
 }
-// Video element
 function Movie() {
 	var	initd = false;
 	var vid = {
 		src: 0,
 		movie: document.createElement('video'),
 		isStopping: false,
-		pos: {x:0, y:0},
+		pos: Vector2d(0,0),
+		parent: 0,
 		
 		Play: function() {
 			if (initd)	return;
-			
 			if ((this.movie != null) && 
 				(this.src != null)) {
-				
-				Helper.addEvent(this.movie, 'ended', (function(self) {
-					return function() {
-						self.isStopping = true;
-					}
-				})(this), false);			
+				Helper.addEvent(this.movie, 'ended', function(e) {
+					vid.isStopping = true;
+				}, false);
+				if (!Config.movieOnCanvas) {
+					Helper.addEvent(this.movie, 'mouseup', function(e) {
+						if (e.which != 1) return;
+						vid.isStopping = true;
+			        }, false);
+					Helper.addEvent(this.movie, 'touchend', function(e) {
+						e.preventDefault();
+						vid.isStopping = true;
+					}, false);
 
-				this.movie.src = this.src;
-				if (Config.movieSize) {
-					this.movie.width = Config.movieSize * Stage.canvas.width;
-					this.movie.height = Config.movieSize * Stage.canvas.height;
-					this.pos.x += (1.0-Config.movieSize)/2 * Stage.canvas.width;// - window.pageXOffset;
-					this.pos.y += (1.0-Config.movieSize)/2 * Stage.canvas.height;// - window.pageYOffset;
+					this.pos.vx = Stage.canvas.offsetLeft;
+					this.pos.vy = Stage.canvas.offsetTop;
 				}
+				this.movie.src = this.src;
+				this.movie.width = Config.movieSize * Stage.canvas.width;
+				this.movie.height = Config.movieSize * Stage.canvas.height;
+				this.pos.vx += (Stage.canvas.width - this.movie.width)>>1; 
+				this.pos.vy += (Stage.canvas.height - this.movie.height)>>1; 
+
 				initd = true;
 				this.movie.autoplay = true;
-				this.movie.volume = (Config.volumeVideo != null) ? Config.volumeVideo : 1;
+				this.movie.volume = Config.volumeVideo;
+				if (!Config.movieOnCanvas) {
+					this.movie.setAttribute('style', 'position:absolute; left:'+this.pos.vx+'px; top:'+this.pos.vy+'px');
+					this.parent = Stage.canvas.parentElement;
+					this.parent.appendChild(this.movie);
+				}
 			}
-		},
-		
+		},		
 		Stop: function(init) {
-			if ((this.movie != null) &&
-				(initd)) {
+			if ((this.movie != null) && (initd)) {
 				this.movie.pause();
+				if (!Config.movieOnCanvas)
+					this.parent.removeChild(this.movie);
 				Stage.pause = false;
 			}
 		}
 	}
 	return vid;
 }
-// Default form element
+///////////////////////////////////////////////////////////////////////////////
+// Default form elements
+///////////////////////////////////////////////////////////////////////////////
 function Form() {
 	var frm = {
 		newForm: document.createElement("form"),
 		newFieldset: document.createElement("fieldset"),
-		id: 0,
 		parent: 0,
 		
 		Create: function(id) {
 			this.newForm.id = id;
-			var x = Stage.canvas.offsetLeft;// - window.pageXOffset;
-			var y = Stage.canvas.offsetTop; // - window.pageYOffset;
+			var x = Stage.canvas.offsetLeft;
+			var y = Stage.canvas.offsetTop;
 			this.newForm.setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px;');
 			
 			var newHeading = document.createElement("h1");
 			newHeading.innerHTML = id;
 			this.newForm.appendChild(newHeading);
 			var newHr = document.createElement("hr");
-			this.newForm.appendChild(newHr);
-			
+			this.newForm.appendChild(newHr);		
 			this.newFieldset.id = "_fieldset_";
 			this.newForm.appendChild(this.newFieldset);
 
 			this.parent = Stage.canvas.parentElement;
 			this.parent.appendChild(this.newForm);
 			Stage.formBindings.splice(0, Stage.formBindings.length);
-		},
-		
+		},	
 		AddChild: function(element, fieldsetname) {
 			if (fieldsetname != null)
 				document.getElementById(fieldsetname).appendChild(element);
@@ -2534,34 +2377,38 @@ function Form() {
 	}
 	return frm;
 }
+///////////////////////////////////////////////////////////////////////////////
 // Background/Overlay image
+///////////////////////////////////////////////////////////////////////////////
 function Backdrop() {
 	var	isready = false,
-		loaded = 0;
+		loaded = 1;
 	var bg = {	
+		type: '',
 		context: 0,
 		image: 0,
-		effects: 'none',
-		fxparam: '',
-		alpha: 0,
-		target_alpha: 1,
-		rotation: 0,
-		target_rotation: 0,
-		orientation: 0,
-		scale: 1,
-		target_scale: 1,
-		size: 1,
-		transTime: 1,	//#secs transition time
+		objects: new Array(),
 		drawn: false,
 		redraw: true,
 		visible: true,
 		update: false,
-		objects: new Array(),
+		
+		effects: 'done',
+		fxparam: '',
+		alpha: 0,
+		target_alpha: 1,
+		rotation: 0,
+		accum_rotation: 0,
+		orientation: 0,
+		scale: 1,
+		size: 1,
 		scroll: false,
-		origin: {x:0, y:0},		// backdrop's origin is center
-		pos: {x:0, y:0},
-		offset:[0,0],
-		backdropDim: {w:0, h:0},
+		transTime: 1,
+
+		origin: Vector2d(0,0),		// backdrop's origin is center
+		pos: Vector2d(0,0),
+		offset: Vector2d(0,0),
+		backdropDim: Vector2d(0,0),
 		posMode: '',
 		
 		Create: function(id, file, obj) {
@@ -2570,31 +2417,25 @@ function Backdrop() {
 			this.context =  canvas.getContext('2d');
 
 			if (obj) {
-				loaded = obj.length + 1;	// total number of images to load
-				if (obj.length>0) {
-					for (var i in obj) {
-						var item = {img:new Image(), x:obj[i].x, y:obj[i].y};
-						item.img.onload = function() {
-							bg.IsLoaded();
-						}
-						item.img.src = obj[i].src;
-						this.objects.push(item);
+				loaded += obj.length;	// total number of images to load
+				for (var i in obj) {
+					var item = {img:new Image(), x:obj[i].x, y:obj[i].y};
+					item.img.onload = function() {
+						bg.IsLoaded();
 					}
+					item.img.src = obj[i].src;
+					this.objects.push(item);
 				}
 			}
-			else
-				loaded = 1;
 			if (Helper.checkIfImage(file)) {
 				this.image = new Image();
 				this.image.onload = function() {
 					// use larger canvas to support sprite rotation
-					bg.backdropDim.w = bg.image.width;
-					bg.backdropDim.h = bg.image.height;
-					var dim = Math.ceil(Math.sqrt(bg.backdropDim.w*bg.backdropDim.w + bg.backdropDim.h*bg.backdropDim.h));
+					bg.backdropDim = Vector2d(bg.image.width, bg.image.height);
+					var dim = Math.ceil(bg.backdropDim.length());
 					bg.context.canvas.setAttribute('width', dim);
 					bg.context.canvas.setAttribute('height', dim);
-					bg.origin.x = dim/2;
-					bg.origin.y = dim/2;
+					bg.origin = Vector2d(dim/2, dim/2);
 					bg.IsLoaded();
 				}
 				this.image.src = file;
@@ -2604,42 +2445,33 @@ function Backdrop() {
 				this.image = file;
 				this.context.canvas.setAttribute('width', 1.1*Stage.canvas.width);
 				this.context.canvas.setAttribute('height', 1.1*Stage.canvas.height);
-				this.origin.x = this.context.canvas.width/2;
-				this.origin.y = this.context.canvas.height/2;
+				this.origin = Vector2d(this.context.canvas.width>>1, this.context.canvas.height>>1);
 				isready = true;
 			}
-			
 			// configure transition
 			if (Config.transTime != null) {
 				this.transTime = (Config.transTime > 0) ? Config.transTime : 0.01;
 			}
-			
 			this.update = false;
 			this.Reset(true);
 			return this.context.canvas.id;
-		},
-		
+		},		
 		IsLoaded: function() {
 			if (--loaded <= 0)
 				isready = true;
 		},
-		
 		Reset: function(init) {
 			if ((init) || (!this.visible)) {
-				this.pos.x = Stage.canvas.width/2;
-				this.pos.y = Stage.canvas.height/2;
+				this.pos = Vector2d(Stage.canvas.width>>1, Stage.canvas.height>>1);
 			}
 			this.visible = true;
 			this.redraw = true;
 		},
-		
 		Update: function(elapsed) {
-			if (isready) {
+			if (isready)
 				Helper.processEffects(this, elapsed);
-			}
 			return this.update;
 		},
-		
 		Draw: function() {
 			if (!isready) return false;
 			if (!this.redraw) return false;
@@ -2655,22 +2487,20 @@ function Backdrop() {
 				}
 				if ((this.image.constructor == HTMLImageElement) || (this.image.constructor == Image)) {
 					this.context.drawImage(this.image, 
-										((this.context.canvas.width - this.backdropDim.w)/2)>>0,
-										((this.context.canvas.height - this.backdropDim.h)/2)>>0);
+										((this.context.canvas.width - this.backdropDim.vx)/2)>>0,
+										((this.context.canvas.height - this.backdropDim.vy)/2)>>0);
 				}
 				else {
 					this.context.fillStyle = this.image;
 					this.context.fillRect(0, 0, this.context.canvas.width, this.context.canvas.height);		
 				}
-
 				if (this.objects.length > 0) {
 					for (var i in this.objects)
 						this.context.drawImage(this.objects[i].img, 
-											(this.objects[i].x + (this.context.canvas.width - this.backdropDim.w)/2)>>0,
-											(this.objects[i].y + (this.context.canvas.height - this.backdropDim.h)/2)>>0);
+											(this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0,
+											(this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0);
 				}
 			}
-
 			this.redraw = false;
 			if (this.drawn) this.update = true;
 			return true;
@@ -2678,7 +2508,9 @@ function Backdrop() {
 	}
 	return bg;
 }
+///////////////////////////////////////////////////////////////////////////////
 // Selectable/clickable image; use for buttons, imagemaps, etc.
+///////////////////////////////////////////////////////////////////////////////
 function ActiveImage() {
 	var	isready = false,
 		redraw = true,
@@ -2695,11 +2527,10 @@ function ActiveImage() {
 		inputFocus: false,
 		text: '',
 		link: '',
-		origin: {x:0, y:0},
+		origin: Vector2d(0,0),
 		rect: {x:0, y:0, w:0, h:0},
 		visible: true,
 		showText: true,
-		
 		state: '',
 		tooltip: '',
 		
@@ -2715,22 +2546,21 @@ function ActiveImage() {
 				// TODO: for now only timer is supported
 				this.text = Helper.convertTime(this.timeout);
 				// create a user variable with id
-				var idx = Helper.findVar(escape(id));
-				if (idx != -1) {
-					Stage.variables[idx].Set(escape(id), this.timeout);
+				var val = Helper.findVar(escape(id));
+				if (val != null) {
+					Stage.variables[escape(id)].Set(this.timeout);
 				}
 				else {
 					var uv = new UserVars();
-					uv.Set(escape(id), this.timeout);
-					Stage.variables.push(uv);
+					uv.Set(this.timeout);
+					Stage.variables[escape(id)] = uv;
 				}
 				this.countup = !(this.timeout > 0);
 			}
 			else
 				this.text = id;
 			this.rect = rect;
-			this.origin.x = this.rect.x;
-			this.origin.y = this.rect.y;
+			this.origin = Vector2d(this.rect.x, this.rect.y);
 			
 			try {
 				if (obj.length>0) {
@@ -2789,8 +2619,6 @@ function ActiveImage() {
 			if (isready) {
 				if (!this.visible) {
 					this.inputFocus = false;
-					//if (this.aTimerOn)
-					//	clearTimeout(this.aTimer);
 				}
 				else if (this.type == 'button') {
 					if (prev_state != this.state) {
@@ -2815,7 +2643,6 @@ function ActiveImage() {
 					// TODO: for now only timer is supported
 					if (!aTimerOn) {
 						aTimer = setTimeout(function() { 
-							//alert("set atimeron " + this.fps);
 							if (act.countup)
 								Helper.setValue(act.context.canvas.id, Helper.getValue(act.context.canvas.id)+1);
 							else
@@ -2861,46 +2688,18 @@ function ActiveImage() {
 			if (this.visible) {
 				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);
 				if (this.type == 'button') {
-					if ((this.sprites.length>1) && (this.state=='hover')) {
-						if ((this.sprites[1].constructor == HTMLImageElement) || (this.sprites[1].constructor == Image))
-							this.context.drawImage(this.sprites[1],0,0);
-						else {
-							this.context.fillStyle = this.sprites[1];
-							this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
-						}
-					}
-					else if ((this.sprites.length>=3) && (this.state=='clicked')) {
-						if ((this.sprites[2].constructor == HTMLImageElement) || (this.sprites[2].constructor == Image))
-							this.context.drawImage(this.sprites[2],0,0);
-						else {
-							this.context.fillStyle = this.sprites[2];
-							this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
-						}
-					}
-					else {
-						if ((this.sprites[0].constructor == HTMLImageElement) || (this.sprites[0].constructor == Image))
-							this.context.drawImage(this.sprites[0],0,0);
-						else {
-							this.context.fillStyle = this.sprites[0];
-							this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
-						}
-					}
+					if ((this.sprites.length>1) && (this.state=='hover'))
+						this.DrawImageOrFill(this.sprites[1]);
+					else if ((this.sprites.length>2) && (this.state=='clicked'))
+						this.DrawImageOrFill(this.sprites[2]);
+					else
+						this.DrawImageOrFill(this.sprites[0]);
 				}
 				else if (this.type == 'animText') {
-					if ((this.sprites[0].constructor == HTMLImageElement) || (this.sprites[0].constructor == Image))
-						this.context.drawImage(this.sprites[0],0,0);
-					else {
-						this.context.fillStyle = this.sprites[0];
-						this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
-					}
+					this.DrawImageOrFill(this.sprites[0]);
 				}
 				else if (this.type == 'animImage') {
-					if ((this.sprites[this.countup].constructor == HTMLImageElement) || (this.sprites[this.countup].constructor == Image))
-						this.context.drawImage(this.sprites[this.countup],0,0);
-					else {
-						this.context.fillStyle = this.sprites[0];
-						this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
-					}
+					this.DrawImageOrFill(this.sprites[this.countup]);
 				}
 				if ((this.showText) && (this.text != '')) {
 					this.context.textBaseline = 'middle';
@@ -2917,18 +2716,27 @@ function ActiveImage() {
 					this.context.rect(this.rect.x,this.rect.y,this.rect.w,this.rect.h);
 					this.context.closePath();
 				}
-			}
-			
+			}			
 			redraw = false;
 			update = true;
 			return true;
 		},
+		DrawImageOrFill: function(obj) {
+			if ((obj.constructor == HTMLImageElement) || (obj.constructor == Image))
+				this.context.drawImage(obj,0,0);
+			else {
+				this.context.fillStyle = obj;
+				this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+			}
+		}
 	}
 	return act;
 }
-// Script box for dialogs
+///////////////////////////////////////////////////////////////////////////////
+// Script box and script handler for dialogs
+///////////////////////////////////////////////////////////////////////////////
 function ScriptBox() {
-	var	image = 0,
+	var	image = null,
 		vpwidth = 0,
 		vpheight = 0,
 		redraw = true,
@@ -2941,17 +2749,17 @@ function ScriptBox() {
 		group: '',
 		pos: 'bottom',		
 		back: 'dim',
-		src: 0,
+		src: null,
 		context: 0,
 		canvasText: new CanvasText,
-		visible: false,
 		dimStyle: new Array(),
-		origin: {x:0, y:0},			// gui origin is topleft
+		jumpTo: new Array(),
+		origin: Vector2d(0,0),		// gui origin is topleft
 		
 		isready: true,				// flow control
 		changed: true,
 		cont: false,
-		jumpTo: new Array(),
+		visible: false,
 		inputFocus: false,
 		timeout: 0,
 		
@@ -2979,71 +2787,70 @@ function ScriptBox() {
 			this.src = '';
 			vpwidth = w;	// viewport dimensions
 			vpheight = h;
-			this.origin.x = vpwidth * (1-Config.boxWidth)/2; 	//1/8;
-			this.origin.y = vpheight * (1-Config.boxHeight);	//3/4;
+			this.origin.vx = vpwidth * (1-Config.boxWidth)/2; 	//1/8;
+			this.origin.vy = vpheight * (1-Config.boxHeight);	//3/4;
 			
 			// create a default script box: dim at bottom
 			var canvas = document.createElement('canvas');
-			//this.canvas.id = 'sb_canvas';	// fixed id for script box
 			this.context = canvas.getContext('2d');
 			this.context.canvas.setAttribute('width', vpwidth * Config.boxWidth);
-			this.context.canvas.setAttribute('height', vpheight * Config.boxHeight);
-			
-			//Helper.configUpdate("activeTheme");
-
+			this.context.canvas.setAttribute('height', vpheight * Config.boxHeight);			
 			// create prompt images
-			//this.isready = false;
-			this.prompt.onload = function() {
-					box.isready = true;
+			if (this.psrc != '') {
+				this.prompt.onload = function() {
+						box.isready = true;
+				}
+				this.prompt.src = this.psrc;			
 			}
-			this.prompt.src = this.psrc;			
 		},
-		
 		Update: function(elapsed) {
 			if (this.changed || fxupdate) {
 				if (this.changed) {
 					switch (this.pos) {
 						case 'bottom':
-							this.origin.x = vpwidth * (1-Config.boxWidth)/2;
-							this.origin.y = vpheight * (1-Config.boxHeight);
+							this.origin.vx = vpwidth * (1-Config.boxWidth)/2;
+							this.origin.vy = vpheight * (1-Config.boxHeight);
 							this.context.canvas.setAttribute('width', vpwidth * Config.boxWidth);
 							this.context.canvas.setAttribute('height', vpheight * Config.boxHeight);
 							break;
 						case 'center':
-							this.origin.x = vpwidth * (1-Config.boxWidth)/2;
-							this.origin.y = vpheight * (1-Config.boxHeight)/2;
+							this.origin.vx = vpwidth * (1-Config.boxWidth)/2;
+							this.origin.vy = vpheight * (1-Config.boxHeight)/2;
 							this.context.canvas.setAttribute('width', vpwidth * Config.boxWidth);
 							this.context.canvas.setAttribute('height', vpheight * Config.boxHeight);
 							break;
 						case 'top':
-							this.origin.x = vpwidth * (1-Config.boxWidth)/2;
-							this.origin.y = 0;
+							this.origin.vx = vpwidth * (1-Config.boxWidth)/2;
+							this.origin.vy = 0;
 							this.context.canvas.setAttribute('width', vpwidth * Config.boxWidth);
 							this.context.canvas.setAttribute('height', vpheight * Config.boxHeight);
 							break;
 						case 'full':
-							this.origin.x = vpwidth * (1-Config.boxWidth)/2;
-							this.origin.y = vpheight * (1-Config.boxFullHeight)/2;
+							this.origin.vx = vpwidth * (1-Config.boxWidth)/2;
+							this.origin.vy = vpheight * (1-Config.boxFullHeight)/2;
 							this.context.canvas.setAttribute('width', vpwidth * Config.boxWidth);
 							this.context.canvas.setAttribute('height', vpheight * Config.boxFullHeight)
 							break;
 					}
 					switch (this.back) {
 						case 'image':
-							image = new Image();
-							this.isready = false;
-							image.onload = function() {
-								box.isready = true;
+							if (this.src != null) {
+								if ((image == null) || (image.src.search(this.src)==-1)) {
+									image = new Image();
+									this.isready = false;
+									image.onload = function() {
+										box.isready = true;
+									}
+									image.src = this.src;
+									update = false;
+								}
 							}
-							image.src = this.src;
-							update = false;
 							break;
 						case 'none':
 						case 'dim':
 						default:
 							break;
 					}
-					
 					this.canvasText.config({
 				        canvas: this.context.canvas,
 				        context: this.context,
@@ -3084,7 +2891,6 @@ function ScriptBox() {
 						fxupdate = false;
 						break;
 				}
-				
 				this.changed = false;			
 				redraw = true;
 			}
@@ -3101,17 +2907,13 @@ function ScriptBox() {
 			}
 			return update;
 		},
-		
 		Draw: function() {
 			if (!this.isready) return false;
 			if (!redraw) return false;
 			
-			//alert('ScriptBox.Draw()');
 			if (this.visible == true) {
 				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);	
-				//this.canvas.width = this.canvas.width;
 				if (this.back == 'dim') {
-					//alert("image dim");
 					this.context.globalAlpha = 0.5;
 					if (this.dimStyle.length > 1) {
 						var grd=this.context.createLinearGradient(0,0,0,this.context.canvas.height);
@@ -3125,14 +2927,11 @@ function ScriptBox() {
 					}
 					this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
 				}
-				if (this.back == 'image') {
-					//alert("image back");
+				if ((this.back == 'image') && (this.src != null)) {
 					this.context.globalAlpha = 1;		
-					this.context.drawImage(image, 0, 0);
+					this.context.drawImage(image, 0, 0, this.context.canvas.width,this.context.canvas.height);
 				}
-
 				if (this.text != '') {
-					// draw the text
 					this.context.globalAlpha = 1;
 					// draw the avatar if any
 					var avatarOffsetX = 0;
@@ -3171,13 +2970,14 @@ function ScriptBox() {
 					}
 					// draw hover
 					if ((this.jumpTo.length > 0) && (menuHover != -1)) {
+						this.context.save();
 						this.context.globalAlpha = 0.25;						
 						this.context.fillStyle = Config.activeTheme.boxMenuHilite;
 						this.context.fillRect(5,this.jumpTo[menuHover].hotspot[1] - this.lineHeight + 4,
 												this.context.canvas.width - 10,this.lineHeight);
+						this.context.restore();
 					}
 				}
-				
 				// Pauses script box
 				Stage.pause = true;
 				if (!Stage.utimerOn && (this.timeout > 0)) {
@@ -3195,18 +2995,17 @@ function ScriptBox() {
 			if (!this.changed) update = true;
 			redraw = false;
 			return true;
-		},
-		
+		},		
 		CheckHoverOnHotspot: function() {
 			if (Stage.mouseMove == false) return false;
 			if (this.jumpTo.length == 0) return false;
 			if (this.jumpTo[0].hotspot.length < 2) return false;
-			if (Stage.coord.x < this.origin.x) return false;
-			if (Stage.coord.x > this.origin.x + vpwidth * Config.boxWidth) return false;
+			if (Stage.coord.vx < this.origin.vx) return false;
+			if (Stage.coord.vx > this.origin.vx + vpwidth * Config.boxWidth) return false;
 			
 			for (var i in this.jumpTo) {
-				if (Stage.coord.y < this.origin.y + this.jumpTo[i].hotspot[1] - this.lineHeight) continue;
-				if (Stage.coord.y > this.origin.y + this.jumpTo[i].hotspot[1]) continue;
+				if (Stage.coord.vy < this.origin.vy + this.jumpTo[i].hotspot[1] - this.lineHeight) continue;
+				if (Stage.coord.vy > this.origin.vy + this.jumpTo[i].hotspot[1]) continue;
 				menuHover = i;
 				return true;
 			}
@@ -3215,7 +3014,6 @@ function ScriptBox() {
 	}
 	return box;
 }
-// Script element
 function Script() {
 	var scr = {
 		sequence: 0,		// story board, composed of object-value pairs
@@ -3240,11 +3038,10 @@ function Script() {
 			}
 		},
 		SetFrame: function(locator) {
-			var idx = locator.indexOf('#',0);
-			if (idx != -1) {
-				this.sequence = eval(locator.substr(0,idx));
-			}
-			newlabel = locator.substr(idx+1, locator.length-idx-1 );
+			var str = locator.split('#');
+			if (str.length > 1)
+				this.sequence = eval(str.shift());
+			var newlabel = str.shift();
 			for (var i=0; i<this.sequence.length; i+=2){
 				if ((this.sequence[i] == label) && (this.sequence[i+1] == newlabel)) {
 					this.frame = i;
@@ -3272,60 +3069,57 @@ function Script() {
 	}
 	return scr;
 }
+///////////////////////////////////////////////////////////////////////////////
 // Actors
+///////////////////////////////////////////////////////////////////////////////
 function Character() {
 	var	isready = false,
-		spriteDim = {w:0, h:0},
+		spriteDim = Vector2d(0,0),
 		activeSpriteRemoval = false;
 	var chr = {
+		type: 'actor',
+		context: 0,
+		sprites: new Array(),
+		avatar: null,
 		id: '',
 		nick: '',
 		color: 0,
-		sprites: new Array(),
 		prevSprite: -1,
-		activeSprite: 0,
-		alpha: 0,
+		activeSprite: -1,
 		drawn: false,
 		update: false,
 		redraw: true,
-		target_alpha: 0,
-		rotation: 0,
-		target_rotation: 0,
-		orientation: 0,
-		scale: 1,
-		target_scale: 1,
-		size: 1,
-		transTime: 1,
-		avatar: null,
-		
-		context: 0,
-		origin: {x:0, y:0},		// actor origin is bottom center
-		pos: {x:0, y:0},
-		offset: [0, 0],			// dummy
-		posMode: 'auto',
-		
-		effects: 'none',
-		prevFx: 'none',
-		fxparam: '',
 		visible: true,
 		pendingRemoval: false,
+		
+		origin: Vector2d(0,0),		// actor origin is bottom center
+		pos: Vector2d(0,0),
+		offset: Vector2d(0,0),			// dummy
+		posMode: 'auto',
+		
+		effects: 'done',
+		prevFx: '',
+		fxparam: '',
+		alpha: 0,
+		target_alpha: 0,
+		rotation: 0,
+		accum_rotation: 0,
+		orientation: 0,
+		scale: 1,
+		size: 1,
+		transTime: 1,
 		
 		Create: function(id) {
 			this.id = id;
 			var canvas = document.createElement('canvas');
 			canvas.id = escape(id);
 			this.context = canvas.getContext('2d');
-
-			// configure transition
-			if (Config.transTime != null) {
-				this.transTime = (Config.transTime > 0) ? Config.transTime : 0.01;
-			}
+			this.transTime = (Config.transTime > 0) ? Config.transTime : 0.01;
 			isready = true;
 			this.update = false;
 			this.Reset(true);
 			return this.context.canvas.id;
 		},
-		
 		AddSprite: function(tag, file) {
 			var idx = -1;
 			if (this.sprites.length > 1) {
@@ -3340,7 +3134,6 @@ function Character() {
 						}
 						else {
 							// this is same tag but different sprite
-							// no reason why you should do this, but here it is anyway
 							idx = i;
 							break;
 						}
@@ -3356,29 +3149,23 @@ function Character() {
 			else {
 				var tmpSprite = this.sprites[i];
 				this.sprites.splice(i, 1)
+				tmpSprite.src = new Image();
 				this.sprites.push(tmpSprite);
 			}
-			
 			this.sprites[this.sprites.length-1].src.onload = function() {
 				// use larger canvas to support sprite rotation
-				spriteDim.w = chr.sprites[chr.sprites.length-1].src.width;
-				spriteDim.h = chr.sprites[chr.sprites.length-1].src.height;
-				//chr.canvas.setAttribute('width', chr.spriteDim.w);
-				//chr.canvas.setAttribute('height', chr.spriteDim.h);
-				//chr.origin.x = chr.spriteDim.w/2;
-				//chr.origin.y = chr.spriteDim.h;
-				var dim = Math.ceil(Math.sqrt(spriteDim.w*spriteDim.w + spriteDim.h*spriteDim.h));
+				spriteDim = Vector2d(chr.sprites[chr.sprites.length-1].src.width, 
+									 chr.sprites[chr.sprites.length-1].src.height);
+				var dim = Math.ceil(spriteDim.length());
 				chr.context.canvas.setAttribute('width', dim);
 				chr.context.canvas.setAttribute('height', dim);
-				chr.origin.x = dim/2;
-				chr.origin.y = dim/2 + spriteDim.h/2;
+				chr.origin = Vector2d(dim/2, dim/2 + spriteDim.vy/2);
 				isready = true;
 			}
 			this.sprites[this.sprites.length-1].src.src = file;
 			this.activeSprite = this.sprites.length-1;
 			this.update = false;
-		},
-		
+		},		
 		RemoveSprite: function(tag) {
 			if (this.sprites.length > 1) {
 				for (var i in this.sprites) {
@@ -3399,8 +3186,7 @@ function Character() {
 					}
 				}
 			}
-		},
-		
+		},	
 		AddAvatar: function(file) {
 			if (file != '') {
 				isready = false;
@@ -3415,24 +3201,18 @@ function Character() {
 				this.avatar = null;
 			}
 		},
-		
 		Reset: function (init) {
-			if ((init) || (!this.visible)) {
-				this.pos.x = Stage.canvas.width/2;
-				this.pos.y = Stage.canvas.height*Config.actorYPosition;
-				//this.posMode = 'auto';
+			if (init || !this.visible) {
+				this.pos = Vector2d(Stage.canvas.width/2, 
+									Stage.canvas.height*Config.actorYPosition);
 			}
 			this.visible = true;
 			this.redraw = true;
-		},
-		
+		},		
 		Update: function(elapsed) {
-			if (isready) {
-				Helper.processEffects(this, elapsed);
-			}
+			if (isready) Helper.processEffects(this, elapsed);
 			return this.update;
 		},
-		
 		Draw: function() {
 			if (!isready) return false;
 			if (!this.redraw) return false;
@@ -3442,14 +3222,12 @@ function Character() {
 				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);		
 				if (this.prevSprite >= 0) {
 					this.context.globalAlpha = Math.max(0, Math.min(1, this.target_alpha-this.alpha));
-					//this.context.drawImage(this.sprites[this.prevSprite].src, 0, 0);
 					this.context.drawImage(this.sprites[this.prevSprite].src, 								   
-										((this.context.canvas.width - spriteDim.w)/2)>>0,
-										((this.context.canvas.height - spriteDim.h)/2)>>0);
+										((this.context.canvas.width - spriteDim.vx)/2)>>0,
+										((this.context.canvas.height - spriteDim.vy)/2)>>0);
 					if (this.target_alpha - this.alpha <= 0) this.prevSprite = -1;
 				}
 				this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
-				//this.context.drawImage(this.sprites[this.activeSprite].src, 0, 0);
 				if (this.rotation != 0) {
 					this.context.translate(this.context.canvas.width/2, this.context.canvas.height/2);
 					this.context.rotate(this.rotation * Math.PI/180);
@@ -3457,15 +3235,14 @@ function Character() {
 					this.rotation = 0.0;
 				}
 				this.context.drawImage(this.sprites[this.activeSprite].src,
-									   ((this.context.canvas.width - spriteDim.w)/2)>>0,
-									   ((this.context.canvas.height - spriteDim.h)/2)>>0);
+									   ((this.context.canvas.width - spriteDim.vx)/2)>>0,
+									   ((this.context.canvas.height - spriteDim.vy)/2)>>0);
 				if (activeSpriteRemoval && (this.alpha <= 0)) {
 					this.sprites.splice(this.activeSprite, 1);
 					this.activeSprite = Math.max(this.activeSprite-1, 0);
 					activeSpriteRemoval = false;
 				}
-			}
-					
+			}					
 			this.redraw = false;
 			if (this.drawn) this.update = true;
 			return true;
@@ -3473,35 +3250,302 @@ function Character() {
 	}
 	return chr;
 }
-// Particles for atmosphere effects
+///////////////////////////////////////////////////////////////////////////////
+// Atmosphere special effects
+///////////////////////////////////////////////////////////////////////////////
+var AtmoEffects = {
+	rain: {
+		_init: function(param) {
+			this.alpha = 0.5;
+			this.numParticles = (typeof param.rain == 'number') ? param.rain : 0;
+			this.direction = (param.direction != null) ? param.direction%360 : 90;
+			this.particles = new Array(this.numParticles);
+			for (var i=0; i<this.numParticles; i++) {
+				this.particles[i] = new Particle();
+				this.particles[i].Create(this.context.canvas,this.direction,1,1);
+			}
+			this.visible = true;
+			// saves
+			// numParticles is saved in param.rain
+			this.saveparam.direction = this.direction;
+		},
+		_update: function(elapsed) {
+			var running_draw = false;
+			for (var i=0; i<this.numParticles; i++) {
+				var ret = this.particles[i].Update(elapsed, (this.action=='start')?true:false);
+				if (ret) running_draw = true;
+			}
+			this.redraw = running_draw;
+			if (!this.redraw && (this.numParticles>0)) {
+				// free some memory by clearing particles, we'll add later if needed again
+				this.particles.splice(0, this.numParticles);
+				this.numParticles = 0;
+				this.visible = false;
+			}
+			else if (!this.redraw && (this.numParticles<=0)) {
+				this.update = true;
+			}
+		},
+		_draw: function() {
+			this.context.lineWidth = "1";
+			this.context.strokeStyle = "rgb(255, 255, 255)";
+			this.context.beginPath();
+			for (var i=0; i<this.numParticles; i++) {			
+				this.context.moveTo(this.particles[i].Pos().vx, this.particles[i].Pos().vy);
+				this.context.lineTo(this.particles[i].Pos().vx - this.particles[i].Size().vx, 
+									this.particles[i].Pos().vy - this.particles[i].Size().vy);
+			}
+			this.context.closePath();
+			// do a per frame stroke or fill, instead of per particle
+			this.context.stroke();
+		}
+	},
+	snow: {
+		_init: function(param) {
+			this.alpha = 0.5;
+			this.numParticles = (typeof param.snow == 'number') ? param.snow : 0;
+			this.direction = (param.direction != null) ? param.direction%360 : 90;
+			this.particles = new Array(this.numParticles);
+			for (var i=0; i<this.numParticles; i++) {
+				this.particles[i] = new Particle();
+				this.particles[i].Create(this.context.canvas,this.direction,0.5,0.2);
+			}
+			this.visible = true;
+			// saves
+			// numParticles is saved in param.snow
+			this.saveparam.direction = this.direction;
+		},
+		_update: function(elapsed) {
+			var running_draw = false;
+			for (var i=0; i<this.numParticles; i++) {
+				var ret = this.particles[i].Update(elapsed, (this.action=='start')?true:false);
+				if (ret) running_draw = true;
+			}
+			this.redraw = running_draw;
+			if (!this.redraw && (this.numParticles>0)) {
+				// free some memory by clearing particles, we'll add later if needed again
+				this.particles.splice(0, this.numParticles);
+				this.numParticles = 0;
+				this.visible = false;
+			}
+			else if (!this.redraw && (this.numParticles<=0)) {
+				this.update = true;
+			}
+		},
+		_draw: function() {
+			this.context.lineWidth = "1";
+			this.context.strokeStyle = "rgb(255, 255, 255)";
+			this.context.fillStyle = 'white';			
+			this.context.beginPath();
+			for (var i=0; i<this.numParticles; i++) {
+				this.context.moveTo(this.particles[i].Pos().vx, this.particles[i].Pos().vy);
+				this.context.arc(this.particles[i].Pos().vx, this.particles[i].Pos().vy, 
+								this.particles[i].Size().vy, 0, 2*Math.PI);
+			}
+			this.context.closePath();
+			// do a per frame stroke or fill, instead of per particle
+			this.context.fill();
+		}
+	},
+	cloud: {
+		_init: function(param) {
+			if (param.cloud.search(/(start|stop)/g) == -1)
+				this.src = param.cloud;
+			this.isready = false;
+			this.alpha = 0;
+			this.image = new Image();
+			this.image.onload = (function(self) {
+				return function() {
+					self.isready = true;
+					self.visible = true;
+				}
+			})(this);
+			this.image.src = this.src;
+			this.direction = null;
+			this.pos = Vector2d(0,0);
+			if (param.direction != null) {
+				this.direction = param.direction % 360;
+				this.dirVector = Vector2d(1,0);
+				this.dirVector.rotate(this.direction * Math.PI/180);
+			}
+			// saves
+			this.saveparam.cloud = this.src;
+			this.saveparam.direction = this.direction;
+		},
+		_update: function(elapsed) {
+			if (this.action == 'stop') {
+				if (this.alpha > 0) {
+					this.alpha -= elapsed/(Config.transTime * 1000)
+					this.redraw = true;
+				}
+				else {
+					this.image = null;
+					this.visible = false;
+				}
+			}
+			else {
+				if (this.alpha < 1) {
+					this.alpha += elapsed/(Config.transTime * 1000);
+					this.redraw = true;
+				}
+				// scroll it here
+				if (this.direction != null) {
+					var vel = Vector2d(this.dirVector.vx,this.dirVector.vy);
+					vel.scale(elapsed/(Config.transTime * 32));
+					this.pos.add(vel);
+					if (this.pos.vx < -this.image.width) this.pos.vx = 0;
+					if (this.pos.vx > 0) this.pos.vx = -this.image.width;
+					if (this.pos.vy < -this.image.height) this.pos.vy = 0;
+					if (this.pos.vy > 0) this.pos.vy = -this.image.height;
+					this.redraw = true;
+				}
+				else {
+					this.pos = Vector2d(0,0);
+				}
+			}
+		},
+		_draw: function() {
+			var x = this.pos.vx;
+			var y = this.pos.vy;
+			while (x < this.context.canvas.width) {
+				while (y < this.context.canvas.height) {
+					this.context.drawImage(this.image, x, y);
+					y += this.image.height;
+				}
+				y = this.pos.vy;
+				x += this.image.width;
+			}
+		}
+	},
+	beam: {
+		_init: function(param) {
+			this.pos = Vector2d(0,0);
+			this.radius = (typeof param.beam == 'number') ? param.beam : 0;
+			this.mask = (param.mask) ? param.mask : 'black';
+			this.alpha = 0;
+			this.visible = true;
+			// saves
+			// radius is saved in param.beam
+			this.saveparam.mask = this.mask;
+		},
+		_update: function(elapsed) {
+			if (this.action == 'stop') {
+				if (this.alpha > 0) {
+					this.alpha -= elapsed/(Config.transTime * 1000)
+					this.redraw = true;
+				}
+				else {
+					this.visible = false;
+				}
+			}
+			else {
+				if (this.alpha < 1) {
+					this.alpha += elapsed/(Config.transTime * 1000);
+					this.redraw = true;
+				}
+				if (!this.pos.equal(Stage.coord)) {
+					this.pos.copy(Stage.coord);
+					this.redraw = true;
+				}
+			}
+		},
+		_draw: function() {
+			this.context.fillStyle = this.mask;
+			this.context.fillRect(0, 0, this.context.canvas.width, this.context.canvas.height);		
+			this.context.save();
+			this.context.globalCompositeOperation = "destination-out";
+			var grd = this.context.createRadialGradient(Stage.coord.vx, Stage.coord.vy, 0,
+														Stage.coord.vx, Stage.coord.vy, this.radius);
+			grd.addColorStop(0, 'rgba(0,0,0,1)');
+			grd.addColorStop(0.6, 'rgba(0,0,0,0.8)');
+			grd.addColorStop(1, 'rgba(0,0,0,0)');
+			this.context.fillStyle = grd;
+			this.context.beginPath();
+			this.context.arc(Stage.coord.vx, Stage.coord.vy, this.radius, 0, 2*Math.PI);
+			this.context.closePath();
+			this.context.fill();
+			this.context.restore();
+		}
+	}
+}
+function Atmosphere() {
+	var atm = {
+		alpha: 0,
+		isready: false,
+		redraw: true,
+		update: false,
+		context: 0,
+		type: '',
+		visible: true,
+		action: 'start',
+		saveparam: {},
+		
+		Create: function(id) {
+			var canvas = document.createElement('canvas');
+			canvas.id = escape(id);
+			this.context = canvas.getContext('2d');
+			this.context.canvas.setAttribute('width', Stage.canvas.width);
+			this.context.canvas.setAttribute('height', Stage.canvas.height);	
+			this.isready = true;
+			this.update = false;		
+			return this.context.canvas.id;
+		},
+		Init: function(type, param) { 
+			this.type = type;
+			this.saveparam = param;
+			eval('AtmoEffects.'+type+'._init').call(this, param);
+		},
+		Update: function(elapsed) {
+			if (this.isready) {
+				eval('AtmoEffects.'+this.type+'._update').call(this, elapsed);
+			}
+			return this.update;
+		},	
+		Draw: function() {
+			if (!this.isready) return false;
+			if (!this.redraw) return false;
+			if (this.visible) {
+				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);		
+				this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
+				eval('AtmoEffects.'+this.type+'._draw').call(this);
+			}	
+			this.redraw = false;
+			this.update = true;
+			return true;
+		}
+	}
+	return atm;
+}
 function Particle() {
-	var	x = 0,
-		y = 0,
-		xvel = 0,
-		yvel = 0,
+	var	pos = Vector2d(0,0),
+		vel = Vector2d(0,0),
+		size = Vector2d(0,0),
 		viewh = 0,
 		vieww = 0,
 		dir = 0;
 	var part = {
-		Create: function(canvas, angle) {
+		Create: function(canvas, angle, vbase, sbase) {
 			vieww = canvas.width;
 			viewh = canvas.height;
 			dir = (90-angle)*Math.PI/180;
+
+			// fix the size and velocity upon creation
+			// to speed up reset and update
+			vel.vy = Math.random() * 40 * vbase + 10;
+			vel.vx = vel.vy * Math.tan(dir);
+			size.copy(vel);
+			vel.scale(2);
+			size.scale(sbase);
 			this.Reset();
 		},		
 		Reset: function() {
-			x = Math.random() * 2.0 * vieww - 0.5 * vieww;
-			//this.y = Math.random() * this.viewh;
-			y = Math.random() * (-viewh);	// somewhere above the canvas
-			yvel = Math.random() * 40 + 10;
-			//xvel = yvel * Math.tan(Math.PI/12);
-			xvel = yvel * Math.tan(dir);
+			// randomize position only
+			pos.vx = vieww * (2*Math.random() - 0.5);
+			pos.vy = viewh * (-1*Math.random());
 		},
-		Update: function(elapsed, reset) {		
-			x += 2*xvel;
-			y += 2*yvel;
-			//this.yvel += 1;		// accelerate
-			if ((x > 1.5*vieww) || (y > viewh + 50)) {
+		Update: function(elapsed, reset) {
+			pos.add(vel);
+			if (pos.vy > viewh + 50) {
 				if (reset) 
 					this.Reset();
 				else 
@@ -3509,218 +3553,14 @@ function Particle() {
 			}
 			return true;
 		},
-		Draw: function(context, type) {
-			if (type == 'rain') {
-				context.beginPath();
-				context.moveTo(x, y);
-				context.lineTo(x - xvel, y - yvel);
-				context.closePath();
-				context.stroke();
-			} 
-			else if (type == 'snow') {
-				var grd = context.createRadialGradient(x, y, yvel/16,
-													   x, y, yvel/8);
-				grd.addColorStop(0, 'white');
-				grd.addColorStop(1, 'rgba(255,255,255,0)');
-				context.fillStyle = grd;
-				context.fillRect(x-yvel/8,y-yvel/8,yvel/4,yvel/4);
-			}
-		},
+		Pos: function() { return pos; },
+		Size: function() { return size; },
 	}
 	return part;
 }
-// Atmosphere special effects
-function Atmosphere() {
-	var isready = false,
-		redraw = true,
-		update = false,
-		alpha = 0.5,
-		pos = {x:0, y:0},
-		particles = new Array(),
-		image = null;
-	var atm = {
-		context: 0,
-		type: '',
-		visible: true,
-		action: 'start',
-		numParticles: 0,
-		src: '',
-		direction: null,
-		radius: 0,
-		mask: 'black',
-		
-		Create: function(id, type) {
-			var canvas = document.createElement('canvas');
-			canvas.id = escape(id);
-			this.context = canvas.getContext('2d');
-			this.context.canvas.setAttribute('width', Stage.canvas.width);
-			this.context.canvas.setAttribute('height', Stage.canvas.height);
-		
-			isready = true;
-			update = false;		
-			return this.context.canvas.id;
-		},
-		
-		Init: function(type, size, dir) {
-			this.type = type;
-			if ((this.type == 'rain') || (this.type == 'snow')){
-				this.numParticles = size;
-				for (var i=0; i<this.numParticles; i++) {
-					particles[i] = new Particle();
-					particles[i].Create(this.context.canvas,
-										(dir!=null)?dir%360:90);
-				}
-				alpha = 0.5;
-				this.visible = true;
-			}
-			if (this.type == 'cloud') {
-				isready = false;
-				image = new Image();
-				image.onload = function() {
-					isready = true;
-					atm.visible = true;
-				}
-				image.src = this.src;
-				alpha = 0;
-				if (dir != null)
-					this.direction = dir % 360;
-			}
-			if (this.type == 'beam') {
-				this.radius = size;
-				alpha = 0;
-				this.visible = true;
-			}
-		},
-
-		Update: function(elapsed) {
-			if (isready) {
-				if ((this.type == 'rain') || (this.type == 'snow')) {
-					var running_draw = false;
-					for (var i=0; i<this.numParticles; i++) {
-						var ret = particles[i].Update(elapsed, (this.action=='start')?true:false);
-						if (ret) running_draw = true;
-					}
-					redraw = running_draw;
-					if (!redraw && (this.numParticles>0)) {
-						// free some memory by clearing particles, we'll add later if needed again
-						particles.splice(0, this.numParticles);
-						this.numParticles = 0;
-						this.visible = false;
-					}
-					else if (!redraw && (this.numParticles<=0)) {
-						update = true;
-					}
-				}
-				if (this.type == 'cloud') {
-					if (this.action == 'stop') {
-						if (alpha > 0) {
-							alpha -= elapsed/(Config.transTime * 1000)
-							redraw = true;
-						}
-						else {
-							image = null;
-							this.visible = false;
-						}
-					}
-					else {
-						if (alpha < 1) {
-							alpha += elapsed/(Config.transTime * 1000);
-							redraw = true;
-						}
-						// scroll it here
-						if (this.direction != null) {
-							var xdir = Math.cos(this.direction * Math.PI/180);
-							var ydir = Math.sin(this.direction * Math.PI/180);
-							pos.x += xdir * elapsed / (Config.transTime * 50);
-							pos.y += ydir * elapsed / (Config.transTime * 50);
-							if (pos.x < -image.width) pos.x = 0;
-							if (pos.x > 0) pos.x = -image.width;
-							if (pos.y < -image.height) pos.y = 0;
-							if (pos.y > 0) pos.y = -image.height;
-							redraw = true;
-						}
-						else {
-							pos.x = 0;
-							pos.y = 0;
-						}
-					}
-				}
-				if (this.type == 'beam') {
-					if (this.action == 'stop') {
-						if (alpha > 0) {
-							alpha -= elapsed/(Config.transTime * 1000)
-							redraw = true;
-						}
-						else {
-							this.visible = false;
-						}
-					}
-					else {
-						if (alpha < 1) {
-							alpha += elapsed/(Config.transTime * 1000);
-						}
-						redraw = true;
-					}
-				}
-			}
-			return update;
-		},
-		
-		Draw: function() {
-			if (!isready) return false;
-			if (!redraw) return false;
-
-			if (this.visible) {
-				this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);		
-				this.context.globalAlpha = Math.max(0, Math.min(1, alpha));
-				if ((this.type == 'rain') || (this.type == 'snow')) {
-					this.context.lineWidth = "1";
-					this.context.strokeStyle = "rgb(255, 255, 255)";
-					for (var i=0; i<this.numParticles; i++) {
-						particles[i].Draw(this.context, this.type);
-					}
-				}
-				if (this.type == 'cloud') {
-					// tile it here
-					var x = pos.x;
-					var y = pos.y;
-					while (x<this.context.canvas.width) {
-						while (y<this.context.canvas.height) {
-							this.context.drawImage(image, x, y);
-							y+= image.height;
-						}
-						y = pos.y;
-						x += image.width;
-					}
-				}
-				if (this.type == 'beam') {
-					//this.context.fillStyle = 'rgba(0,0,0,1)';
-					this.context.fillStyle = this.mask;
-					this.context.fillRect(0, 0, this.context.canvas.width, this.context.canvas.height);		
-					this.context.save();
-					this.context.globalCompositeOperation = "destination-out";
-					var grd = this.context.createRadialGradient(Stage.coord.x, Stage.coord.y, 0,
-																Stage.coord.x, Stage.coord.y, this.radius);
-					grd.addColorStop(0, 'rgba(0,0,0,1)');
-					grd.addColorStop(0.6, 'rgba(0,0,0,0.8)');
-					grd.addColorStop(1, 'rgba(0,0,0,0)');
-					this.context.fillStyle = grd;
-					this.context.beginPath();
-					this.context.arc(Stage.coord.x, Stage.coord.y, this.radius, 0, 2*Math.PI);
-					this.context.closePath();
-					this.context.fill();
-					this.context.restore();
-				}
-			}
-					
-			redraw = false;
-			update = true;
-			return true;
-		}
-	}
-	return atm;
-}
+///////////////////////////////////////////////////////////////////////////////
 // Main Stage
+///////////////////////////////////////////////////////////////////////////////
 var Stage = {
 	canvasid: 0,
 	canvas: 0,
@@ -3732,8 +3572,8 @@ var Stage = {
 	script: 0,
 	
 	/* user inputs */
-	coord: {x:0, y:0},
-	click: {x:0, y:0},
+	coord: Vector2d(0,0),
+	click: Vector2d(0,0),
 	utimer: 0,
 	utimerOn: false,
 	inputFocus: true,
@@ -3755,9 +3595,8 @@ var Stage = {
 	
 	/* camera movement */
 	// use coord as cameraPos
-	targetPos: {x:0, y:0},
-	camVelocity: {x:0, y:0},
-	prevPos: {x:0, y:0},
+	targetPos: Vector2d(0,0),
+	prevPos: Vector2d(0,0),
 	camTime: 0,
 	
 	/* temporary static data */
@@ -3767,7 +3606,7 @@ var Stage = {
 		the higher the layer, the higher Z order
 			- background = 0: backdrop layer
 			- foreground = 1: actors in foreground (optionally more than one layer)
-			- closeup	 = 2: actors in closeup
+			- closeup	 = 2: actors in closeup, overlay image
 			- atmosphere = 3: atmospheric effects, e.g. lightning flash, dim/brighten, smoke, rain, etc.
 			- interface  = 4: script box, buttons, ads
 	*/
@@ -3775,9 +3614,8 @@ var Stage = {
 	
 	/*	User variables that the script can set/get
 		useful for checking conditions, etc.
-		this is an array of UserVars
 	*/
-	variables: new Array(),
+	variables: {},
 	
 	/*	Sounds to play, 3 types of sound
 			- bgm = 0: background music
@@ -3800,25 +3638,22 @@ var Stage = {
 	formBindings: new Array(),
 	activeForm: null,
 	
-	Init: function(canvasId, width, height) {
+	Init: function(id, width, height) {
 		// DEBUG: for FPS monitoring
 		this.fps = 0;
 		this.prevtime = new Date().getTime();
 		this.curtime = this.prevtime;
 		this.framecount = 0;
-	
-		this.canvasid = canvasId;
-		this.canvas = document.getElementById(canvasId);
+		
+		this.canvasid = id;
+		this.canvas = document.getElementById(id);
 		this.context = this.canvas.getContext('2d');
 		this.canvas.setAttribute('width', width);
 		this.canvas.setAttribute('height', height);
-		this.coord.x = width/2;
-		this.coord.y = height/2;
-		
+		this.coord = Vector2d(width/2, height/2);
 		// for camera integrator
-		this.targetPos = this.coord;
-		this.prevPos = this.coord;
-
+		this.targetPos.copy(this.coord);
+		this.prevPos.copy(this.coord);
 		// add event listeners here for user inputs
 		Helper.addEvent(this.canvas, 'mousemove', function(e) {
 			Stage.mouseOut = false;
@@ -3845,45 +3680,49 @@ var Stage = {
         }, false);
 		Helper.addEvent(this.canvas, 'mouseout', function(e) {
 			Stage.mouseOut = true;
-			Stage.HandleEvents(e);
+			//Stage.HandleEvents(e);
         }, false);
 		Helper.addEvent(this.canvas, 'touchstart', function(e) {
 			e.preventDefault();
+			Stage.mouseOut = false;
 			Stage.touchStart = true;
 			Stage.HandleEvents(e);
 		}, false);
 		Helper.addEvent(this.canvas, 'touchmove', function(e) {
 			e.preventDefault();
+			Stage.mouseOut = false;
 			Stage.mouseMove = true;
 			Stage.HandleEvents(e);
 		}, false);
 		Helper.addEvent(this.canvas, 'touchend', function(e) {
 			e.preventDefault();
+			Stage.mouseOut = false;
 			Stage.touchEnd = true;
 			Stage.HandleEvents(e);
 		}, false);
-		
+		// addEventListener to body for 'touchcancel' ?
+		Helper.addEvent(document.body, 'touchcancel', function(e) {
+			Stage.mouseOut = true;
+			Stage.touchStart = false;
+			Stage.touchEnd = false;
+		}, false);
 		// create the stage layers
 		this.layers[0] = new Array(); 	//background
 		this.layers[1] = new Array();	//foreground
 		this.layers[2] = new Array();	//closeup
 		this.layers[3] = new Array();	//atmosphere
 		this.layers[4] = new Array();	//gui
-		
 		// auto create script box as first element in layers[4]
 		var sb = new ScriptBox();
 		sb.Create(width, height);
 		this.layers[4].push(sb);
 		Helper.configUpdate("activeTheme");
-		
 		// create the sounds playlist
 		this.sounds[0] = new Array();
 		this.sounds[1] = new Array();
 		this.sounds[2] = new Array();
-		
 		// create the script
 		this.script = new Script();
-		
 		// setup default forms theme
 		if (Config.activeTheme.formFontStyle) {
 			var subs = Helper.parseFontString(Config.activeTheme.formFontStyle);
@@ -3895,34 +3734,28 @@ var Stage = {
 			else
 				this.formStyle.push(param);
 		}
-
 		// setup timer tick
 		this.update = true;		// use this.update = false to wait when loading resources
 		this.redraw = true;		// use this.redraw = false when redraw not necessary
 		this.pause = false;		// use this.pause = true to wait with timer or user input
 		this.Tick(1000/60);			// for 60fps
 	},
-	
 	Update: function(elapsed) {
 		// Note: set this.redraw to true if update needs a redraw
 		this.inputFocus = (this.activeForm == null);
-		if (this.layers[4].length > 0) {
-			for (var i in this.layers[4]) {
-				if (this.layers[4][i].inputFocus) 
-					this.inputFocus = false;
-			}
+		for (var i in this.layers[4]) {
+			if (this.layers[4][i].inputFocus) 
+				this.inputFocus = false;
 		}
-
 		// handle user inputs
 		this.camTime += elapsed;
-		if (this.camTime > 67) {
+		if (this.camTime > 40) {
 			this.coord = this.GetCameraPosition(elapsed, this.inputFocus);
-			this.camTime -= 67;		// about 15fps
+			this.camTime -= 40;		// about 25fps
 		}
 		if (this.mouseMove || this.CheckCamera()) {
 			this.redraw = true;
 		}
-		
 		if (this.mouseClick) {
 			if (this.inputFocus)
 				this.pause = false;	
@@ -3933,54 +3766,47 @@ var Stage = {
 				this.layers[4][0].timeout = 0;
 			}
 		}
-
 		// update the script
 		if (this.update && !this.pause) {
 			this.script.Update()
 		}
-
 		// play sounds if any
 		for (var idx in this.sounds) {
-			if (this.sounds[idx].length > 0) {
-				for (var entry in this.sounds[idx]) {
-					if (this.sounds[idx][entry].isStopping)
-						this.sounds[idx][entry].Stop(false);
-					else
-						this.sounds[idx][entry].Play(true);
-				}
+			for (var entry in this.sounds[idx]) {
+				if (this.sounds[idx][entry].isStopping)
+					this.sounds[idx][entry].Stop(false);
+				else
+					this.sounds[idx][entry].Play(true);
 			}
 		}
-		
 		// play videos if any
 		for (var idx in this.videos) {
 			if ((this.videos[idx].isStopping) ||
-				(this.mouseClick)){
+				(this.mouseClick && Config.movieOnCanvas)){
 				this.videos[idx].Stop();
 				this.videos.pop();
 			}
 			else
 				this.videos[idx].Play();
 		}
-		
+		// update layers
 		var running_update = true;
 		for (var idx in this.layers) {
-			if (this.layers[idx].length > 0) {
-				for (var entry in this.layers[idx]) {
-					if (!this.layers[idx][entry].Update(elapsed)) {
-						running_update = false;
-					}
+			for (var entry in this.layers[idx]) {
+				if (!this.layers[idx][entry].Update(elapsed)) {
+					running_update = false;
 				}
 			}
 		}
 		this.update = running_update;
-		if ((this.update) && (this.transTime > 0))
-			this.transTime = Math.max(this.transTime-elapsed/1000, 0);
-		
+		if ((this.update) && (this.transTime > 0)) {
+			var divider = Config.transTime > 0 ? Config.transTime : 0.01;
+			this.transTime = Math.max(0, this.transTime - (elapsed/(1000 * divider)));
+		}
 		// reset clicked, assumed processing done
 		this.mouseClick = false;
 		this.mouseMove = false;
-	},
-	
+	},	
 	Draw: function() {
 		// TODO: clear entire stage first; manage for improved FPS
 		if (this.redraw && ((this.layers[0].length > 0) || 
@@ -3992,16 +3818,13 @@ var Stage = {
 
 		var running_draw = false;			
 		// draw background here
-		if (this.layers[0].length > 0) {
-			for (var i in this.layers[0]) {
-				if (this.layers[0][i].Draw()) running_draw = true;
-				if (this.redraw) {
-					if (Helper.drawElements(this.layers[0][i], 0, [1/2, 1/2])) 
-						running_draw = true;
-				}
+		for (var i in this.layers[0]) {
+			if (this.layers[0][i].Draw()) running_draw = true;
+			if (this.redraw) {
+				if (Helper.drawElements(this.layers[0][i], 0, [1/2, 1/2])) 
+					running_draw = true;
 			}
 		}
-		
 		// draw foreground here
 		if (this.layers[1].length > 0) {
 			// get number of visible & auto actors
@@ -4012,12 +3835,10 @@ var Stage = {
 			// compute auto-positioning
 			var spritepos = new Array();
 			for (var i=1; i<count; i++) {
-				if (i%2 == 0) {	// even
+				if (i%2 == 0) // even
 					spritepos.push((count-i/2)/count);
-				}
-				else {	// odd
+				else // odd
 					spritepos.push((((i/2)>>0)+1)/count);
-				}
 			}
 			// display actors
 			for (var i in this.layers[1]) {
@@ -4033,51 +3854,44 @@ var Stage = {
 					}
 				}
 			}
-		}
-		
+		}		
 		// draw overlay/closeup here
-		if (this.layers[2].length > 0) {
-			for (var i in this.layers[2]) {
-				if (this.layers[2][i].Draw()) running_draw = true;
-				if (this.redraw && this.layers[2][i].visible) {
-					if (this.layers[2][i].scroll) {
-						this.context.save();
-						this.context.scale(this.layers[2][i].target_scale, this.layers[2][i].target_scale);
-						this.context.translate((-this.layers[2][i].target_scale*(this.layers[2][i].context.canvas.width-this.layers[2][i].backdropDim.w)/2 
-												-(this.layers[2][i].target_scale*this.layers[2][i].backdropDim.w-this.canvas.width)*(this.coord.x/this.canvas.width))>>0,
-											   (-this.layers[2][i].target_scale*(this.layers[2][i].context.canvas.height-this.layers[2][i].backdropDim.h)/2
-											    -(this.layers[2][i].target_scale*this.layers[2][i].backdropDim.h-this.canvas.height)*(this.coord.y/this.canvas.height))>>0);
-						this.context.drawImage(this.layers[2][i].context.canvas, 0, 0,
-												this.layers[2][i].context.canvas.width,
-												this.layers[2][i].context.canvas.height);
-						this.context.restore();
-					}
-					else {
-						if (Helper.drawElements(this.layers[2][i], 2, [1/2, 1/2])) 
-							running_draw = true;
-					}
+		for (var i in this.layers[2]) {
+			if (this.layers[2][i].Draw()) running_draw = true;
+			if (this.redraw && this.layers[2][i].visible) {
+				if (this.layers[2][i].scroll) {
+					this.context.save();
+					this.context.translate((-this.layers[2][i].scale*(this.layers[2][i].context.canvas.width-this.layers[2][i].backdropDim.vx)/2 
+											-(this.layers[2][i].scale*this.layers[2][i].backdropDim.vx-this.canvas.width)*(this.coord.vx/this.canvas.width))>>0,
+										   (-this.layers[2][i].scale*(this.layers[2][i].context.canvas.height-this.layers[2][i].backdropDim.vy)/2
+											-(this.layers[2][i].scale*this.layers[2][i].backdropDim.vy-this.canvas.height)*(this.coord.vy/this.canvas.height))>>0);
+					this.context.scale(this.layers[2][i].scale, this.layers[2][i].scale);
+					this.context.drawImage(this.layers[2][i].context.canvas, 0, 0,
+											this.layers[2][i].context.canvas.width,
+											this.layers[2][i].context.canvas.height);
+					this.context.restore();
+				}
+				else {
+					if (Helper.drawElements(this.layers[2][i], 2, [1/2, 1/2])) 
+						running_draw = true;
 				}
 			}
 		}
-		
 		// draw atmosphere effects here
-		if (this.layers[3].length > 0) {
-			for (var i in this.layers[3]) {
-				if (this.layers[3][i].Draw()) running_draw = true;
-				if (this.redraw && this.layers[3][i].visible) {
-					this.context.drawImage(this.layers[3][i].context.canvas, 0, 0);
-				}
+		for (var i in this.layers[3]) {
+			if (this.layers[3][i].Draw()) running_draw = true;
+			if (this.redraw && this.layers[3][i].visible) {
+				this.context.drawImage(this.layers[3][i].context.canvas, 0, 0);
 			}
-		}
-		
+		}		
 		// draw gui here
 		if (this.layers[4].length > 0) {
 			for (var i in this.layers[4]) {
 				if (this.layers[4][i].Draw()) running_draw = true;
 				if (this.redraw && this.layers[4][i].visible) {
 					this.context.drawImage(this.layers[4][i].context.canvas, 
-										   this.layers[4][i].origin.x>>0, 
-										   this.layers[4][i].origin.y>>0);
+										   this.layers[4][i].origin.vx>>0, 
+										   this.layers[4][i].origin.vy>>0);
 				}
 			}
 			// draw tooltips if any
@@ -4090,40 +3904,36 @@ var Stage = {
 				}
 			}
 		}
-
 		// draw videos here
-		if (this.videos.length > 0) {
+		if (Config.movieOnCanvas) {
 			for (var idx in this.videos) {
 				this.context.drawImage(this.videos[idx].movie,
-									   this.videos[idx].pos.x,
-									   this.videos[idx].pos.y,
+									   this.videos[idx].pos.vx,
+									   this.videos[idx].pos.vy,
 									   this.videos[idx].movie.width, 
 									   this.videos[idx].movie.height);
 			}
 		}
-
 		// update redraw variable
 		this.redraw = running_draw;
 	},
-	
 	HandleEvents: function(evt) {
 		if (this.mouseOut) return;
 		// all mouse and touch moves
-		this.targetPos = this.GetMousePosition(this.canvas, evt) ||
-						 this.GetTouchPosition(this.canvas, evt);
-					 
+		this.targetPos = (this.touchStart) ? this.GetTouchPosition(this.canvas, evt) :
+											 this.GetMousePosition(this.canvas, evt);			 
 		// mouse click / touch end
 		if (this.mouseUp || this.touchEnd) {
-			this.click = this.coord;
+			this.click.copy(this.coord);	// used only for debug
 			this.mouseClick = true;
 			this.mouseUp = false;
 			this.touchEnd = false;
+			this.touchStart = false;
 		}
-		//else if (this.mouseMove || this.mouseDown || this.touchStart) {
 		else if (this.mouseDown || this.touchStart) {
 			for (var i in Stage.layers[4]) {
 				if (Stage.layers[4][i].type == "button") {
-					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.x, this.targetPos.y)) {
+					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.vx, this.targetPos.vy)) {
 						Stage.layers[4][i].state = 'clicked';
 					}
 					else
@@ -4134,7 +3944,7 @@ var Stage = {
 		else if (this.mouseMove) {
 			for (var i in Stage.layers[4]) {
 				if (Stage.layers[4][i].type == "button") {
-					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.x, this.targetPos.y)) {
+					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.vx, this.targetPos.vy)) {
 						Stage.layers[4][i].state = 'hover';
 					}
 					else
@@ -4143,105 +3953,68 @@ var Stage = {
 			}
 		}
 	},
-	
 	AddDepth: function(layer, dist) {
 		if (!Config.actorPerspective) return 0;
-		//if (!this.inputFocus) return 0;
-		switch(layer) {
-			case 0:		// this is background layer
-				return 0.1 * dist;
-			case 1:		// this is foreground layer
-				return 0.2 * dist;
-			case 2:		// this is overlay layer
-			default:
-				break;
-		}
-		return 0;
+		if (layer > 1) return 0;
+		// process only background and foreground layers
+		return ((layer+1) * 0.1 * dist);
 	},
-	
 	GetMousePosition: function(obj, event) {
-		//Stage.coordX = event.pageX - obj.offsetLeft;
-		//Stage.coordY = event.pageY - obj.offsetTop;
-		var pos = {x:0, y:0};
-		pos.x = event.clientX - obj.offsetLeft + window.pageXOffset;
-		pos.y = event.clientY - obj.offsetTop + window.pageYOffset;
-		pos.x = Math.max(0, Math.min(this.canvas.width, pos.x));
-		pos.y = Math.max(0, Math.min(this.canvas.height, pos.y));
+		var pos = Vector2d(event.pageX, event.pageY);
+		pos.vx -= obj.offsetLeft;
+		pos.vy -= obj.offsetTop;
+		pos.vx = Math.max(0, Math.min(obj.width, pos.vx));
+		pos.vy = Math.max(0, Math.min(obj.height, pos.vy));
 		return pos;
 	},
-	
 	GetTouchPosition: function(obj, event) {
-		var pos = {x:0, y:0};
-		if ((event.touches != null) && (event.touches.length == 1)) {
-			pos.x = event.touches[0].clientX - obj.offsetLeft + window.pageXOffset;
-			pos.y = event.touches[0].clientY - obj.offsetTop + window.pageYOffset;
-			pos.x = Math.max(0, Math.min(this.canvas.width, pos.x));
-			pos.y = Math.max(0, Math.min(this.canvas.height, pos.y));
-			return pos;
-        }
+		var pos = Vector2d(0,0);
+		if (event.touches != null) {
+			pos.vx = event.touches[0].pageX - obj.offsetLeft;
+			pos.vy = event.touches[0].pageY - obj.offsetTop;
+		}
+		else {
+			pos.vx = event.targetTouches[0].pageX - obj.offsetLeft;
+			pos.vy = event.targetTouches[0].pageY - obj.offsetTop;
+		}
+		pos.vx = Math.max(0, Math.min(obj.width, pos.vx));
+		pos.vy = Math.max(0, Math.min(obj.height, pos.vy));
+		return pos;
 	},
-	
 	GetCameraPosition: function(elapsed, spring) {
 		if (spring) {
-			if ((Math.abs(this.coord.x-this.targetPos.x)<0.1) && (Math.abs(this.coord.y-this.targetPos.y)<0.1))
-			{
-				//this.camVelocity.x = 0;
-				//this.camVelocity.y = 0;
-				this.prevPos = this.targetPos;
+			var camPos = Vector2d(this.coord.vx, this.coord.vy);
+			camPos.sub(this.targetPos);
+			if (camPos.length() < 0.1) {
+				this.prevPos.copy(this.targetPos);
 				return this.targetPos;
 			}
 			// TODO: integrator issues in Opera, for now just do an easing position
-			var camPos = {x:0, y:0};		
-			camPos.x = (this.targetPos.x + this.coord.x)/2;
-			camPos.y = (this.targetPos.y + this.coord.y)/2;
-			this.prevPos = this.coord;
-			
-			/** //Euler integration
-			var camPos = {x:0, y:0};		
-			var forceX = -18 * (this.coord.x - this.targetPos.x) - 10 * this.camVelocity.x;
-			var forceY = -18 * (this.coord.y - this.targetPos.y) - 10 * this.camVelocity.y;
-			this.camVelocity.x += forceX * elapsed/1000;
-			this.camVelocity.y += forceY * elapsed/1000;
-			camPos.x = this.coord.x + this.camVelocity.x * elapsed/1000;
-			camPos.y = this.coord.y + this.camVelocity.y * elapsed/1000;
-			**/
-			/** //Verlet integration
-			var drag = 0.35;
-			var camPos = {x:0, y:0};		
-			var forceX = -5 * (this.coord.x - this.targetPos.x);
-			var forceY = -5 * (this.coord.y - this.targetPos.y);
-			camPos.x = (2 - drag) * this.coord.x -
-					   (1 - drag) * this.prevPos.x +
-					   (forceX) * (elapsed/1000) * (elapsed/1000);
-			camPos.y = (2 - drag) * this.coord.y -
-					   (1 - drag) * this.prevPos.y +
-					   (forceY) * (elapsed/1000) * (elapsed/1000);
-			this.prevPos = this.coord;
-			**/
+			camPos.copy(this.targetPos);
+			camPos.add(this.coord);
+			camPos.scale(0.5);
+			this.prevPos.copy(this.coord);		
 			return camPos;
 		}	
 		else {
-			this.prevPos = this.targetPos;
+			this.prevPos.copy(this.targetPos);
 			return this.targetPos;	
 		}
 	},
-	
 	CheckCamera: function() {
-		if (Math.abs(this.camVelocity.x) > 0.1) return true;
-		if (Math.abs(this.camVelocity.y) > 0.1) return true;
-		if (Math.abs(this.coord.x-this.targetPos.x) > 0.1) return true;
-		if (Math.abs(this.coord.x-this.targetPos.x) > 0.1) return true;
+		var vec = Vector2d(this.coord.vx, this.coord.vy);
+		vec.sub(this.targetPos);
+		if (vec.length() > 0.1) return true;
 		return false;
 	},
-	
 	Transition: function(type) {
 		if ((type == 'show_actor') || 
 			(type == 'show_overlay') ||
 			(type == 'show_backdrop') || 
 			(type == 'show_tooltip'))
-			this.transTime = (Config.transTime != null) ? Config.transTime : 0.01;
+			//this.transTime = (Config.transTime > 0) ? Config.transTime : 0.01;
+			this.transTime = 1.0;
 	},
-	
 	Tick: function(interval) {	
 		var now = new Date().getTime();
 		var elapsed = now - this.curtime;	// time since last update
@@ -4251,47 +4024,21 @@ var Stage = {
 			this.prevtime = this.curtime;
 			this.fps = this.framecount;
 			this.framecount = 0;
-		}
-		
+		}		
 		if (window.jQuery) {
 			// DEBUG:
-			//$('#debug').html(this.timer);
-			//$('#debug').html(elapsed);
-			//$('#debug').html(Stage.coord.x +', '+ Stage.coord.y);
-			//$('#debug').html(Stage.targetPos.x +', '+ Stage.targetPos.y);
-			//$('#debug').html(eval(Stage.coord.x - Stage.targetPos.x) +', '+ eval(Stage.coord.y-Stage.targetPos.y));
-			//$('#debug').html(Stage.click.x +', '+ Stage.click.y);
+			//$('#debug').html(Stage.coord.vx +', '+ Stage.coord.vy);
+			//$('#debug').html(Stage.targetPos.vx +', '+ Stage.targetPos.vy);
+			//$('#debug').html(eval(Stage.coord.vx - Stage.targetPos.vx) +', '+ eval(Stage.coord.vy-Stage.targetPos.vy));
+			//$('#debug').html(Stage.click.vx +', '+ Stage.click.vy);
 			//$('#debug').html(this.script.frame/2 + ' ' + this.update);
 			$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2);
-			//$('#debug').html(Stage.camVelocity.x +', '+Stage.camVelocity.y);
 		}
-
-
 		// update the stage
-		this.Update(elapsed);
-		
+		this.Update(elapsed);	
 		// draw the stage
 		this.Draw();
-
-		/* 	Optional:
-			For the update and draw methods, setup a timer with random timeout.
-			This causes the update and draw to start/operate independently, like
-				setTimeout(Stage.Update, 5*Math.random());
-				setTimeout(Stage.Draw, 5*Math.random());
-			TODO: check for possible implementation ???
-		*/
-		
-		/* 	Optional: ???
-			TODO: implement a message dispatcher for Update or Draw methods,
-					calling the methods as needed instead of a successive call
-		*/
-			
 		// setup next timer tick
-		// usually, ticks should use setInterval, but if update() and draw() takes
-		// a long time, the next tick might come before the functions have finished.
-		// hence, instead of using flags to check for busy, just make sure the
-		// functions have completed before scheduling the next pass
-		//this.timer = setTimeout(function() { Stage.Tick(interval); }, interval);
 		requestAnimFrame(function(){
 			Stage.Tick(interval);
 		});
