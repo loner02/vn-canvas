@@ -17,6 +17,8 @@ Theme1 = {
 	// 		if only one color, solid fill
 	// 		if two colors, gradient fill
 	boxDimStyle:		"#808080 #000000",
+	// image box background
+	boxImageStyle:		"back-image.png",
 	// 	name tag style	
 	boxTagStyle:		"bold 14px Verdana #c8ffc8",
 	// 	menu hilite color	
@@ -62,6 +64,8 @@ Config = {
 	// Movie
 	// 	relative to viewport, from 0 to 1
 	movieSize:			0.75,
+	//	support for video-on-canvas
+	movieOnCanvas:		true,
 
 	// Transitions/Effects
 	// 	duration in seconds
@@ -75,4 +79,8 @@ Config = {
 	gameBadWords:		["fuck", "wank", "shit", "pussy", "cunt", "dick"],
 	//	replacement text for auto filtered words
 	gameAltWord:		"****",
+	//	allow custom javascript to execute
+	gameAllowMacro:		true,
+	//	allow custom preload
+	gameAllowPreload:	false,
 }
