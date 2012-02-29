@@ -44,6 +44,12 @@
 /******************************************************************************
 Revision history:
 Version 0.2 Althea
+02.28.12 - Added 'voice' dub in-sync with dialog
+		 - Added 'nowait' argument to effects
+02.27.12 - Expand user variables for more active use
+		 - Several bugfixes
+02.24.12 - Recode 'cform' (to be plugin-ready)
+		 - Bugfix on user variable checkpoint save
 02.21.12 - Improved memory handling (avoid leaks ?)
 		 - Modify Vector2d class
 02.13.12 - Recode 'atmosphere' (to be plugin-ready)
@@ -51,7 +57,7 @@ Version 0.2 Althea
 02.10.12 - Recode 'box', script, stage and 'button'
 		 - Added 'preload'
 		 - Selectable 'video-on-canvas' or 'video-element'
-02.09.12 - Added vector2d class (in anticipation for some future features)
+02.09.12 - Added vector2d class (in anticipation of some future features)
 		 - Optimized 'particles' for performance
 		 - Recode 'scene', 'overlay'
 		 - Recode 'actor'
@@ -208,7 +214,7 @@ var Helper = {
 						Stage.layers[4][0].fontSize = subs[1];
 						Stage.layers[4][0].lineHeight = parseInt(subs[1]) + 4;
 					}			
-					if (subs.length > 2) Stage.layers[4][0].fontFamily = subs[2].replace(/\'/g,'');
+					if (subs.length > 2) Stage.layers[4][0].fontFamily = subs[2].replace(/['|"]/g,'');
 					if (subs.length > 3) Stage.layers[4][0].fontColor = subs[3];
 				}
 				if (Config.activeTheme.boxTagStyle) {
@@ -216,7 +222,7 @@ var Helper = {
 					
 					if (subs.length > 0) Stage.layers[4][0].tagWeight = subs[0];
 					if (subs.length > 1) Stage.layers[4][0].tagSize = subs[1];
-					if (subs.length > 2) Stage.layers[4][0].tagFamily = subs[2].replace(/\'/g,'');
+					if (subs.length > 2) Stage.layers[4][0].tagFamily = subs[2].replace(/['|"]/g,'');
 					if (subs.length > 3) Stage.layers[4][0].tagColor = subs[3];
 				}
 				if (Config.activeTheme.boxDimStyle) {
@@ -248,6 +254,11 @@ var Helper = {
 				});
 				break;
 			case "volumeAudio":
+				if (typeof Config.volumeAudio == 'string') {
+					var volume = parseFloat(Config.volumeAudio);
+					if (isNaN(volume)) volume = 1.0;
+					Config.volumeAudio = volume;
+				}
 				for (var idx in Stage.sounds) {
 					for (var entry in Stage.sounds[idx]) {
 						if ((!Stage.sounds[idx][entry].isPaused) && (!Stage.sounds[idx][entry].isStopping))
@@ -256,6 +267,11 @@ var Helper = {
 				}
 				break;
 			case "volumeVideo":
+				if (typeof Config.volumeVideo == 'string') {
+					var volume = parseFloat(Config.volumeVideo);
+					if (isNaN(volume)) volume = 1.0;
+					Config.volumeVideo = volume;
+				}
 				for (var idx in Stage.videos) {
 					if (!Stage.videos[idx].isStopping) {
 						this.videos[idx].movie.volume = Config.volumeVideo;
@@ -286,7 +302,7 @@ var Helper = {
 		var combine = false;
 		var tempText = '';
 		for (var i in splitText) {
-			if (splitText[i].search("\'")!=-1) {
+			if (splitText[i].search(/['|"]/g)!=-1) {
 				if (combine == false) {
 					combine = true;
 					tempText = splitText[i];
@@ -309,14 +325,17 @@ var Helper = {
 	// Helper function to check for image file
 	checkIfImage: function(src) {
 		// crude way of checking if src is an image
+		src = Helper.parseArg(src);
 		return (/jpg|jpeg|bmp|png|gif|svg/i.test(src));
 	},
 	// Helper function to check for audio file
 	checkIfAudio: function(src) {
+		src = Helper.parseArg(src);
 		return (/mp3|m4a|ogg|oga|wav|webma/i.test(src));
 	},
 	// Helper function to check for video file
 	checkIfVideo: function(src) {
+		src = Helper.parseArg(src);
 		return (/mp4|m4v|ogg|ogv|webm|webmv/i.test(src));
 	},
 	// Helper function to process audio
@@ -328,6 +347,7 @@ var Helper = {
 						"m4a": 'audio/mp4;codecs="mp4a.40.2"',
 						"webma": 'audio/webm; codecs="vorbis"',};			
 		var index = -1;
+		src = Helper.parseArg(src);
 		for (var i in obj) {
 			if (obj[i].src.search(src) != -1) {
 				index = i;
@@ -361,21 +381,22 @@ var Helper = {
 		else {
 			var s = new Sounds();
 			s.src = null;
-			for (var i in param.format) {
-				if (s.audio.canPlayType(mimeType[param.format[i]]) != '') {
-					s.src = src + '.' + param.format[i];
+			var soundformat = (param.format) ? param.format : Config.audioFormat;
+			for (var i in soundformat) {
+				if (s.audio.canPlayType(mimeType[soundformat[i]]) != '') {
+					s.src = src + '.' + soundformat[i];
 					break;
 				}
 			}
 			if (s.src != null) {
-				if (param.bgm) {
+				if ((param.bgm) || (param.voice)){
 					while (obj.length > 0) {
 						var old = obj.shift();
 						old.Stop(true);
 						old.audio = null;
 					}
 				}
-				if (param.se)
+				if ((param.se) || (param.voice))
 					s.repeat = (param.repeat > 0) ? param.repeat : 0;
 				else
 					s.repeat = -1;
@@ -440,7 +461,13 @@ var Helper = {
 		else
 			suffix = '_in';
 		if (param.effect) {
-			var fxarr = param.effect.split(' ');
+			var effect = param.effect;
+			chr.wait = true;
+			if (param.effect.indexOf('nowait')!=-1) {
+				chr.wait = false;
+				effect = param.effect.replace('nowait','');
+			}
+			var fxarr = effect.split(' ');
 			chr.effects = fxarr[0] + suffix;
 			chr.prevFx = fxarr[0];
 			if (fxarr.length > 1) chr.fxparam = fxarr.slice(1);
@@ -448,6 +475,7 @@ var Helper = {
 				TransEffects[fxarr[0]]['_init'](chr, chr.fxparam);
 		}
 		else {
+			chr.wait = true;
 			chr.effects = chr.prevFx + suffix;
 		}
 		if (param.remove) {
@@ -467,6 +495,9 @@ var Helper = {
 			Stage.layers[4][0].scrollOffsetY = 0;
 			Stage.layers[4][0].visible = true;
 			Stage.layers[4][0].changed = true;
+			
+			if (param.voice)
+				Helper.processAudio (Stage.sounds[3], param.voice, {voice:param.voice});
 		}
 		return ret;
 	},
@@ -484,14 +515,22 @@ var Helper = {
 			if (!param.src && (param.show != false)) {
 				// show the previous overlay
 				if (param.effect) {
-					var fxarr = param.effect.split(' ');
+					var effect = param.effect;
+					obj[0].wait = true;
+					if (param.effect.indexOf('nowait')!=-1) {
+						obj[0].wait = false;
+						effect = param.effect.replace('nowait','');
+					}
+					var fxarr = effect.split(' ');
 					obj[0].effects = fxarr[0] + '_in';
 					if (fxarr.length>1) obj[0].fxparam = fxarr.slice(1);
 					if (TransEffects[fxarr[0]]['_init'])
 						TransEffects[fxarr[0]]['_init'](obj[0], obj[0].fxparam);
 				}
-				else 
+				else {
 					obj[0].effects = '_in';
+					obj[0].wait = true;
+				}
 				obj[0].drawn = false;
 				obj[0].update = false;
 				return;
@@ -499,7 +538,13 @@ var Helper = {
 			// do a reverse effect on the previous backdrop
 			obj[0].effects = '_out';
 			if (param.effect) {
-				var fxarr = param.effect.split(' ');
+				var effect = param.effect;
+				obj[0].wait = true;
+				if (param.effect.indexOf('nowait')!=-1) {
+					obj[0].wait = false;
+					effect = param.effect.replace('nowait','');
+				}
+				var fxarr = effect.split(' ');
 				obj[0].effects = fxarr[0] + '_out';
 				if (fxarr.length>1) obj[0].fxparam = fxarr.slice(1);
 				if (TransEffects[fxarr[0]]['_init'])
@@ -528,6 +573,10 @@ var Helper = {
 		}
 		bd.Create('bd' + nextid, param.src, (objects.length > 0) ? objects : null);
 		if (param.effect) {
+			if (param.effect.indexOf('nowait')!=-1) {
+				bd.wait = false;
+				param.effect = param.effect.replace('nowait','');
+			}
 			var fxarr = param.effect.split(' ');
 			bd.effects = fxarr[0] + '_in';
 			if (fxarr.length > 1) 
@@ -645,13 +694,11 @@ var Helper = {
 			dialog += '\n';
 		}
 		if (text != null) {
-			var ret = Helper.findVar(text);
-			if (ret != null)
-				dialog += ret.toString().replace(/\n/g,"<br/>");
-			else
-				dialog += text.replace(/\n/g,"<br/>");
-		}
-		
+			var match = text.match(/#([^#|\s]+)#/g);
+			for (var i in match)
+				text = text.replace(match[i],Helper.parseArg(match[i].replace(/#/g,'')));
+			dialog += Helper.parseArg(text).toString().replace(/\n/g,"<br/>");
+		}		
 		return Helper.filterBadWords(dialog);
 	},
 	// Helper function to show tooltip on forms
@@ -765,6 +812,7 @@ var TransEffects = {
 			else {
 				obj.alpha += elapsed/(obj.transTime * 1000);
 			}
+			if (!obj.wait) obj.drawn = true;
 		},
 		_out: function(obj, elapsed) {
 			if (obj.alpha <= 0.0) {
@@ -776,6 +824,7 @@ var TransEffects = {
 				obj.alpha -= elapsed/(obj.transTime * 1000);
 			}
 			obj.redraw = true;
+			if (!obj.wait) obj.drawn = true;
 		}
 	},
 	// ghost effect
@@ -808,9 +857,11 @@ var TransEffects = {
 		_in: function(obj, elapsed) {
 			obj.Reset(false);
 			obj.alpha = 1.0;
-			obj.drawn = true;
-			if (Math.abs(1-obj.scale/obj.fxparam) <= 0.01)
+			if (!obj.wait) obj.drawn = true;
+			if (Math.abs(1-obj.scale/obj.fxparam) <= 0.01) {
 				obj.effects = 'done';
+				obj.drawn = true;
+			}
 			else
 				obj.scale *= Math.exp(Math.log(obj.fxparam/obj.scale)*elapsed/(obj.transTime * 1000));
 		},
@@ -831,11 +882,12 @@ var TransEffects = {
 		_in: function(obj, elapsed) {
 			obj.Reset(false);
 			obj.alpha = 1.0;
-			obj.drawn = true;
+			if (!obj.wait) obj.drawn = true;
 			if (Math.abs(obj.accum_rotation - obj.fxparam) <= 0.1) {
 				obj.effects = 'done';
 				obj.rotation = 0;
 				obj.accum_rotation = 0;
+				obj.drawn = true;
 			}
 			else {
 				obj.rotation = (obj.fxparam - obj.accum_rotation)* elapsed/(obj.transTime * 1000);
@@ -859,10 +911,13 @@ var TransEffects = {
 		},
 		_in: function(obj, elapsed) {
 			obj.Reset(false);
-			obj.drawn = true;
 			obj.alpha = 1.0;
+			if (!obj.wait) obj.drawn = true;
 			Helper.interpolatePosition(obj);
-			if (Stage.transTime <=0) obj.effects = 'done';
+			if (Stage.transTime <=0) {
+				obj.effects = 'done';
+				obj.drawn = true;
+			}
 		},
 		_out: function(obj, elapsed) {
 			if (obj.type == 'scene')
@@ -881,10 +936,13 @@ var TransEffects = {
 		},
 		_in: function(obj, elapsed) {
 			obj.Reset(false);
-			obj.drawn = true;
 			obj.alpha = 1.0;
+			if (!obj.wait) obj.drawn = true;
 			Helper.interpolatePosition(obj);
-			if (Stage.transTime <=0) obj.effects = 'done';
+			if (Stage.transTime <=0) {
+				obj.effects = 'done';
+				obj.drawn = true;
+			}
 		},
 		_out: function(obj, elapsed) {
 			if (obj.type == 'scene') {
@@ -892,9 +950,12 @@ var TransEffects = {
 			}
 			else {
 				obj.redraw = true;
-				obj.drawn = true;
+				if (!obj.wait) obj.drawn = true;
 				Helper.interpolatePosition(obj);
-				if (Stage.transTime <=0) obj.effects = 'done';
+				if (Stage.transTime <=0) {
+					obj.effects = 'done';
+					obj.drawn = true;
+				}
 			}
 		}
 	},
@@ -907,10 +968,13 @@ var TransEffects = {
 		},
 		_in: function(obj, elapsed) {
 			obj.Reset(false);
-			obj.drawn = true;
 			obj.alpha = 1.0;
+			if (!obj.wait) obj.drawn = true;
 			Helper.interpolatePosition(obj);
-			if (Stage.transTime <=0) obj.effects = 'done';
+			if (Stage.transTime <=0) {
+				obj.effects = 'done';
+				obj.drawn = true;
+			}
 		},
 		_out: function(obj, elapsed) {
 			if (obj.type == 'scene') {
@@ -918,9 +982,12 @@ var TransEffects = {
 			}
 			else {
 				obj.redraw = true;
-				obj.drawn = true;
+				if (!obj.wait) obj.drawn = true;
 				Helper.interpolatePosition(obj);
-				if (Stage.transTime <=0) obj.effects = 'done';
+				if (Stage.transTime <=0) {
+					obj.effects = 'done';
+					obj.drawn = true;
+				}
 			}
 		}
 	},
@@ -933,10 +1000,13 @@ var TransEffects = {
 		},
 		_in: function(obj, elapsed) {
 			obj.Reset(false);
-			obj.drawn = true;
 			obj.alpha = 1.0;
+			if (!obj.wait) obj.drawn = true;
 			Helper.interpolatePosition(obj);
-			if (Stage.transTime <=0) obj.effects = 'done';
+			if (Stage.transTime <=0) {
+				obj.effects = 'done';
+				obj.drawn = true;
+			}
 		},
 		_out: function(obj, elapsed) {
 			if (obj.type == 'scene') {
@@ -944,9 +1014,12 @@ var TransEffects = {
 			}
 			else {
 				obj.redraw = true;
-				obj.drawn = true;
+				if (!obj.wait) obj.drawn = true;
 				Helper.interpolatePosition(obj);
-				if (Stage.transTime <=0) obj.effects = 'done';
+				if (Stage.transTime <=0) {
+					obj.effects = 'done';
+					obj.drawn = true;
+				}
 			}
 		}
 	},
@@ -959,10 +1032,13 @@ var TransEffects = {
 		},
 		_in: function(obj, elapsed) {
 			obj.Reset(false);
-			obj.drawn = true;
 			obj.alpha = 1.0;
+			if (!obj.wait) obj.drawn = true;
 			Helper.interpolatePosition(obj);
-			if (Stage.transTime <=0) obj.effects = 'done';
+			if (Stage.transTime <=0) {
+				obj.effects = 'done';
+				obj.drawn = true;
+			}
 		},
 		_out: function(obj, elapsed) {
 			if (obj.type == 'scene') {
@@ -970,9 +1046,12 @@ var TransEffects = {
 			}
 			else {
 				obj.redraw = true;
-				obj.drawn = true;
+				if (!obj.wait) obj.drawn = true;
 				Helper.interpolatePosition(obj);
-				if (Stage.transTime <=0) obj.effects = 'done';
+				if (Stage.transTime <=0) {
+					obj.effects = 'done';
+					obj.drawn = true;
+				}
 			}
 		}
 	}
@@ -1065,7 +1144,7 @@ function macro(param) {
 // set - sets a user variable
 function set(param) {
 	var str_param = JSON.stringify(param);
-	var arr_param = str_param.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
+	var arr_param = str_param.replace(/[{|}]/g,'').split(/[\s|:|,]/g);
 	for (var i=0; i<arr_param.length; i+=2) {
 		arr_param[i] = eval(arr_param[i]);
 		arr_param[i+1] = eval(arr_param[i+1]);
@@ -1078,7 +1157,7 @@ function set(param) {
 					Stage.variables[arr_param[i]].Set(ref);
 				else {
 					// is it an expression with supported operator
-					if (arr_param[i+1].search(/[+|-|*|%|\/]/g) != -1)
+					if (arr_param[i+1].search(/[+|\-|*|%|\/]/g) != -1)
 						Stage.variables[arr_param[i]].Set(eval(Stage.variables[arr_param[i]].Value() + arr_param[i+1]));
 					// or a simple string to set
 					else
@@ -1125,7 +1204,7 @@ function jump(param) {
 	else {
 		Stage.script.PushFrame();
 		var str_param = JSON.stringify(param);
-		var arr_param = str_param.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
+		var arr_param = str_param.replace(/[{|}]/g,'').split(/[\s|:|,]/g);
 		for (var i=0; i<arr_param.length; i+=2) {
 			arr_param[i] = eval(arr_param[i]);
 			arr_param[i+1] = eval(arr_param[i+1]);
@@ -1138,7 +1217,7 @@ function jump(param) {
 						Stage.script.SetFrame(param.label);
 				}
 				else if (typeof val ==  'string') {
-					if (ret === arr_param[i+1])
+					if (val === arr_param[i+1])
 						Stage.script.SetFrame(param.label);
 				}
 				else {
@@ -1279,7 +1358,7 @@ function actor(param) {
 	// this is a new actor
 	var chr = new Character(param.id);
 	//chr.Create(param.id);
-	chr.nick = (param.nick) ? param.nick : param.id;
+	chr.nick = (param.nick) ? Helper.parseArg(param.nick) : param.id;
 	chr.color = (param.color) ? param.color : Stage.layers[4][0].tagColor;
 	var addchar = Helper.processActor(chr, param);
 	if (addchar == 'back')
@@ -1297,7 +1376,7 @@ function overlay(param) {
 // atmosphere - create atmosphere effects (layer 3)
 function atmosphere(param) {
 	var str_param = JSON.stringify(param);
-	var arr_param = str_param.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
+	var arr_param = str_param.replace(/[{|}]/g,'').split(/[\s|:|,]/g);
 	
 	// for plugins compatibility, first parameter must identify type of atmo effect
 	var type = eval(arr_param[0]);
@@ -1358,11 +1437,7 @@ function text(param) {
 	Stage.layers[4][0].effects = "none";
 	Stage.layers[4][0].scrollOffsetY = 0;
 	if (typeof param == "string") {
-		var str = Helper.filterBadWords(param);
-		if (Stage.layers[4][0].cont)
-			Stage.layers[4][0].text += '\n' + str.replace(/\n/g,"<br/>");
-		else
-			Stage.layers[4][0].text = str.replace(/\n/g,"<br/>");
+		Stage.layers[4][0].text = Helper.addTagToDialog(null, null, param, Stage.layers[4][0].cont);		
 	}
 	else {
 		if (param.font) { 
@@ -1408,6 +1483,8 @@ function text(param) {
 			Stage.layers[4][0].textOffset.vx = param.offset[0];
 			Stage.layers[4][0].textOffset.vy = param.offset[1];
 		}
+		if (param.value && param.voice)
+			Helper.processAudio (Stage.sounds[3], param.voice, {voice:param.voice});
 	}
 	Stage.layers[4][0].visible = true;
 	Stage.layers[4][0].changed = true;
@@ -1433,45 +1510,35 @@ function menu(param) {
 function button(param) {
 	// check existing button w/ same id ?
 	var bt = new ActiveImage();
-	var rect = new Rect(param.x, param.y, (param.w)?param.w:0, (param.h)?param.h:0);
-	var obj = new Array();
-	if (param.base) obj.push(param.base);
-	obj.push((param.hover)?param.hover:param.base);
-	obj.push((param.click)?param.click:param.base);
-	bt.Create(param.name, rect, obj);
-	if (param.link) bt.link = param.link;
-	if (param.showText == false)
-		bt.showText = false;
-	if (param.tip)
-		bt.tooltip = param.tip;
+	bt.saveparam = param;
+	CformElements['button']['_init'](bt, param);
 	Stage.layers[4].push(bt);
 	bt = null;
 }
 // timer - create a canvas form timer (layer 4)
 function timer(param) {
 	var tm = new ActiveImage();
-	tm.type = "animText";
-	tm.fps = 1;
-	if (param.timeout) tm.timeout = param.timeout;
-	if (param.link) tm.link = param.link;
-	var rect = new Rect(param.x, param.y, param.w, param.h);
-	tm.Create(param.name, rect, null);
+	tm.saveparam = param;
+	CformElements['timer']['_init'](tm, param);
 	Stage.layers[4].push(tm);
 	tm = null;
 }
 // picture - create a canvas form animated image (layer 4)
 function picture(param) {
 	var pic = new ActiveImage();
-	pic.type = "animImage";
-	pic.fps = (param.fps > 1) ? param.fps : 1;
-	var rect = new Rect(param.x, param.y, 0, 0);
-	var obj = new Array();
-	for (var i in param.frames) 
-		obj.push(param.frames[i]);
-	pic.Create(param.name, rect, obj);
-	pic.showText = false;
+	pic.saveparam = param;
+	CformElements['picture']['_init'](pic, param);
 	Stage.layers[4].push(pic);
 	pic = null;
+}
+// cfelement - create a custom cform element
+function cfelement(param) {
+	var element = new ActiveImage();
+	element.type = param.type;
+	element.saveparam = param;
+	CformElements[param.type]['_init'](element, param);
+	Stage.layers[4].push(element);
+	element = null;
 }
 // form - container for canvas form elements such as buttons (layer 4)
 function cform(param) {
@@ -1608,9 +1675,10 @@ function video(param) {
 					"webmv": 'video/webm; codecs="vp8, vorbis"'};			
 	var v = new Movie();
 	v.src = null;
-	for (var i in param.format) {
-		if (v.movie.canPlayType(mimeType[param.format[i]]) != '') {
-			v.src = param.src + '.' + param.format[i];
+	var videoformat = (param.format) ? param.format : Config.movieFormat;
+	for (var i in videoformat) {
+		if (v.movie.canPlayType(mimeType[videoformat[i]]) != '') {
+			v.src = Helper.parseArg(param.src) + '.' + videoformat[i];
 			break;
 		}
 	}	
@@ -1626,7 +1694,8 @@ function input(param) {
 	if (param.placeholder) element.placeholder = param.placeholder;
 	if (param.autofocus) element.autofocus = param.autofocus;
 	if (param.bind) {
-		element.value = Helper.getValue(param.bind);
+		if (Helper.getValue(param.bind) != '')
+			element.value = Helper.getValue(param.bind);
 		Stage.formBindings.push([param.name, param.bind]);
 	}
 	try { return element; }
@@ -1649,7 +1718,8 @@ function textarea(param) {
 	//if (param.rows != null) element.rows = param.rows;
 	//if (param.cols != null) element.cols = param.cols;
 	if (param.bind) {
-		element.value = Helper.getValue(param.bind);
+		if (Helper.getValue(param.bind) != '')
+			element.value = Helper.getValue(param.bind);
 		Stage.formBindings.push([param.name, param.bind]);
 	}
 	try { return element; }
@@ -1695,7 +1765,8 @@ function submit(param) {
 				var items = document.getElementById(Stage.formBindings[idx][0]);
 				if (items.type == "radio") {
 					if (items.checked == true) 
-						Helper.setValue(Stage.formBindings[idx][1], JSON.stringify(items.value));
+						//Helper.setValue(Stage.formBindings[idx][1], JSON.stringify(items.value));
+						Helper.setValue(Stage.formBindings[idx][1], items.value.toString());
 				}
 				else if (items.type == "checkbox") {
 					Helper.setValue(Stage.formBindings[idx][1], items.checked);
@@ -1704,7 +1775,8 @@ function submit(param) {
 					Helper.setValue(Stage.formBindings[idx][1], items.valueAsNumber);
 				}
 				else if ((items.type == "text") || (items.type == "textarea")) {
-					Helper.setValue(Stage.formBindings[idx][1], JSON.stringify(items.value));
+					//Helper.setValue(Stage.formBindings[idx][1], JSON.stringify(items.value));
+					Helper.setValue(Stage.formBindings[idx][1], items.value.toString());
 				}
 				else if (items.type == "select-one") {
 					Helper.setValue(Stage.formBindings[idx][1], JSON.parse(items.value));
@@ -1932,6 +2004,10 @@ function checkpoint(param) {
 					localStorage["l4_"+i+"_prompt"] = Stage.layers[4][i].psrc;
 				else
 					localStorage["l4_"+i+"_prompt"] = "undefined";
+				if (Stage.layers[4][i].avatar != null)
+					localStorage["l4_"+i+"_avatar"] = Stage.layers[4][i].avatar.src;
+				else
+					localStorage["l4_"+i+"_avatar"] = "undefined";
 				localStorage["l4_"+i+"_cont"] = Stage.layers[4][i].cont;
 				localStorage["l4_"+i+"_fontFamily"] = Stage.layers[4][i].fontFamily;
 				localStorage["l4_"+i+"_fontSize"] = Stage.layers[4][i].fontSize;
@@ -1956,79 +2032,32 @@ function checkpoint(param) {
 					localStorage["l4_"+i+"jumpTo"+j+"link"] = Stage.layers[4][i].jumpTo[j].link;
 				}
 			}
-			if (Stage.layers[4][i].type == "button") {
+			else {
+				localStorage["l4_"+i+"_type"] = Stage.layers[4][i].type;
+				localStorage["l4_"+i+"_id"] = Stage.layers[4][i].id;
 				if (Stage.layers[4][i].group != '')
 					localStorage["l4_"+i+"_group"] = Stage.layers[4][i].group;
 				else
 					localStorage["l4_"+i+"_group"] = "undefined";
-				localStorage["l4_"+i+"_sprites_count"] = Stage.layers[4][i].sprites.length;
-				for (var j=0; j<Stage.layers[4][i].sprites.length; j++) {
-					if (typeof Stage.layers[4][i].sprites[j] == 'string')
-						localStorage["l4_"+i+"_sprites_"+j] = Stage.layers[4][i].sprites[j];
-					else
-						localStorage["l4_"+i+"_sprites_"+j] = Stage.layers[4][i].sprites[j].src;
-				}
+				localStorage["l4_"+i+"_param"] = JSON.stringify(Stage.layers[4][i].saveparam);			
 				localStorage["l4_"+i+"_text"] = Stage.layers[4][i].text;
-				localStorage["l4_"+i+"_link_0"] = Stage.layers[4][i].link[0].toString().split(/[' '|(|)|{|}]/g, 2)[1];
-				localStorage["l4_"+i+"_link_1"] = JSON.stringify(Stage.layers[4][i].link[1]);
 				localStorage["l4_"+i+"_visible"] = Stage.layers[4][i].visible;
-				localStorage["l4_"+i+"_showText"] = Stage.layers[4][i].showText;
-				if (Stage.layers[4][i].tooltip != '')
-					localStorage["l4_"+i+"_tooltip"] = Stage.layers[4][i].tooltip;
-				else
-					localStorage["l4_"+i+"_tooltip"] = "undefined";
-				localStorage["l4_"+i+"_rect_x"] = Stage.layers[4][i].rect.x;
-				localStorage["l4_"+i+"_rect_y"] = Stage.layers[4][i].rect.y;
-				localStorage["l4_"+i+"_rect_w"] = Stage.layers[4][i].rect.w;
-				localStorage["l4_"+i+"_rect_h"] = Stage.layers[4][i].rect.h;
-			}
-			if (Stage.layers[4][i].type == "animText") {
-				localStorage["l4_"+i+"_id"] = Stage.layers[4][i].context.canvas.id;
-				if (Stage.layers[4][i].group != '')
-					localStorage["l4_"+i+"_group"] = Stage.layers[4][i].group;
-				else
-					localStorage["l4_"+i+"_group"] = "undefined";
-				localStorage["l4_"+i+"_text"] = Stage.layers[4][i].text;
-				if ((Stage.layers[4][i].link != '') && (Stage.layers[4][i].link.length > 0)) {
-					localStorage["l4_"+i+"_link_0"] = Stage.layers[4][i].link[0].toString().split(/[' '|(|)|{|}]/g, 2)[1];
-					localStorage["l4_"+i+"_link_1"] = JSON.stringify(Stage.layers[4][i].link[1]);
+				if ((Stage.layers[4][i].link != null) && (Stage.layers[4][i].link.length > 0)) {
+					localStorage["l4_"+i+"_link_count"] = Stage.layers[4][i].link.length;
+					for (var j=0; j<Stage.layers[4][i].link.length; j+=2) {
+						localStorage["l4_"+i+"_link_"+j] = Stage.layers[4][i].link[j].toString().split(/[\s|(|)|{|}]/g, 2)[1];
+						localStorage["l4_"+i+"_link_"+(j+1)] = JSON.stringify(Stage.layers[4][i].link[j+1]);
+					}
 				}
 				else {
-					localStorage["l4_"+i+"_link_0"] = "undefined";
-					localStorage["l4_"+i+"_link_1"] = "undefined";
+					localStorage["l4_"+i+"_link_count"] = 0;				
+					//localStorage["l4_"+i+"_link_0"] = "undefined";
+					//localStorage["l4_"+i+"_link_1"] = "undefined";
 				}
-				localStorage["l4_"+i+"_visible"] = Stage.layers[4][i].visible;
-				localStorage["l4_"+i+"_showText"] = Stage.layers[4][i].showText;
-				localStorage["l4_"+i+"_rect_x"] = Stage.layers[4][i].rect.x;
-				localStorage["l4_"+i+"_rect_y"] = Stage.layers[4][i].rect.y;
-				localStorage["l4_"+i+"_rect_w"] = Stage.layers[4][i].rect.w;
-				localStorage["l4_"+i+"_rect_h"] = Stage.layers[4][i].rect.h;
-				localStorage["l4_"+i+"_fps"] = Stage.layers[4][i].fps;
-				localStorage["l4_"+i+"_countup"] = Stage.layers[4][i].countup;
-				localStorage["l4_"+i+"_timeout"] = Stage.layers[4][i].timeout;
 			}
-			if (Stage.layers[4][i].type == "animImage") {
-				localStorage["l4_"+i+"_id"] = Stage.layers[4][i].context.canvas.id;
-				if (Stage.layers[4][i].group != '')
-					localStorage["l4_"+i+"_group"] = Stage.layers[4][i].group;
-				else
-					localStorage["l4_"+i+"_group"] = "undefined";
-				localStorage["l4_"+i+"_sprites_count"] = Stage.layers[4][i].sprites.length;
-				for (var j=0; j<Stage.layers[4][i].sprites.length; j++) {
-					if (typeof Stage.layers[4][i].sprites[j] == 'string')
-						localStorage["l4_"+i+"_sprites_"+j] = Stage.layers[4][i].sprites[j];
-					else
-						localStorage["l4_"+i+"_sprites_"+j] = Stage.layers[4][i].sprites[j].src;
-				}
-				localStorage["l4_"+i+"_visible"] = Stage.layers[4][i].visible;
-				localStorage["l4_"+i+"_rect_x"] = Stage.layers[4][i].rect.x;
-				localStorage["l4_"+i+"_rect_y"] = Stage.layers[4][i].rect.y;
-				localStorage["l4_"+i+"_fps"] = Stage.layers[4][i].fps;
-			}
-			// TODO: other GUI types
 		}
 		// Store sounds
-		for (var i=0; i<3; i++) {
+		for (var i=0; i<4; i++) {
 			localStorage["s"+i+"_count"] = Stage.sounds[i].length;
 			for (var j=0; j<Stage.sounds[i].length; j++) {
 				localStorage["s"+i+"_"+j+"_src"] = Stage.sounds[i][j].src;
@@ -2042,13 +2071,13 @@ function checkpoint(param) {
 		// Store user variables
 		var str_uv = JSON.stringify(Stage.variables);
 		if (str_uv != '{}') {
-			var arr_uv = str_uv.replace(/[{|}]/g,'').split(/[' '|:|,]/g);
-			localStorage["uv_count"] = arr_uv.length/2;
-			for (var i=0; i<arr_uv.length; i+=2) {
+			var arr_uv = str_uv.replace(/[{|}]/g,'').split(/[\s|:|,]/g);
+			localStorage["uv_count"] = arr_uv.length/5;
+			for (var i=0; i<arr_uv.length; i+=5) {
 				arr_uv[i] = eval(arr_uv[i]);
-				localStorage["uv"+i/2+"_name"] = arr_uv[i];
-				localStorage["uv"+i/2+"_value"] = Stage.variables[arr_uv[i]].Value();
-				localStorage["uv"+i/2+"_type"] = Stage.variables[arr_uv[i]].Type();
+				localStorage["uv"+i/5+"_name"] = arr_uv[i];
+				localStorage["uv"+i/5+"_value"] = Stage.variables[arr_uv[i]].Value();
+				localStorage["uv"+i/5+"_type"] = Stage.variables[arr_uv[i]].Type();
 			}
 			arr_uv = null;
 		}
@@ -2191,6 +2220,17 @@ function checkpoint(param) {
 				}
 				else 
 					sb.psrc = '';
+				if (localStorage["l4_"+i+"_avatar"] != "undefined") {
+					for (var j in Stage.layers[1]) {
+						if (Stage.layers[1][j].avatar && 
+						   (Stage.layers[1][j].avatar.src.search(localStorage["l4_"+i+"_avatar"])!=-1)) {
+							sb.avatar = Stage.layers[1][j].avatar;
+							break;
+						}
+					}
+				}
+				else
+					sb.avatar = null;
 				sb.cont = (localStorage["l4_"+i+"_cont"] == "true");
 				sb.fontFamily = localStorage["l4_"+i+"_fontFamily"];
 				sb.fontSize = localStorage["l4_"+i+"_fontSize"];
@@ -2218,92 +2258,37 @@ function checkpoint(param) {
 				Stage.layers[4].push(sb);
 				sb = null;
 			}
-			if (localStorage["l4_"+i+"_type"] == 'button') {
-				var bt = new ActiveImage();
-				var rect = new Rect(0, 0, 0, 0);
-				rect.x = parseInt(localStorage["l4_"+i+"_rect_x"]);
-				rect.y = parseInt(localStorage["l4_"+i+"_rect_y"]);
-				rect.w = parseInt(localStorage["l4_"+i+"_rect_w"]);
-				rect.h = parseInt(localStorage["l4_"+i+"_rect_h"]);
-				var obj = new Array();
-				for (var j=0; j<parseInt(localStorage["l4_"+i+"_sprites_count"]); j++) {
-					obj.push(localStorage["l4_"+i+"_sprites_"+j]);
-				}
-				bt.Create(localStorage["l4_"+i+"_text"], rect, obj);
-						  
-				bt.visible = (localStorage["l4_"+i+"_visible"] == "true");
-				//bt.inputFocus = bt.visible;
-				bt.showText = (localStorage["l4_"+i+"_showText"] == "true");
-				if (localStorage["l4_"+i+"_group"] != "undefined")
-					bt.group = localStorage["l4_"+i+"_group"];
-				else
-					bt.group = '';
-				if (localStorage["l4_"+i+"_tooltip"] != "undefined")
-					bt.tooltip = localStorage["l4_"+i+"_tooltip"];
-				else
-					bt.tooltip = '';
+			else {
+				var element = new ActiveImage();
 				var link = new Array();
-				link.push(eval(localStorage["l4_"+i+"_link_0"]));
-				link.push(JSON.parse(localStorage["l4_"+i+"_link_1"]));
-				bt.link = link;
-				Stage.layers[4].push(bt);
-				obj = null; bt = null;
-			}
-			if (localStorage["l4_"+i+"_type"] == 'animText') {
-				var at = new ActiveImage();
-				var rect = new Rect(0, 0, 0, 0);
-				rect.x = parseInt(localStorage["l4_"+i+"_rect_x"]);
-				rect.y = parseInt(localStorage["l4_"+i+"_rect_y"]);
-				rect.w = parseInt(localStorage["l4_"+i+"_rect_w"]);
-				rect.h = parseInt(localStorage["l4_"+i+"_rect_h"]);
-				at.timeout = parseInt(localStorage["l4_"+i+"_timeout"]);
-				at.type = localStorage["l4_"+i+"_type"];
-				at.Create(localStorage["l4_"+i+"_id"], rect, null);
-
-				at.text = localStorage["l4_"+i+"_text"];
-				at.fps = parseInt(localStorage["l4_"+i+"_fps"]);
-				at.countup = (localStorage["l4_"+i+"_countup"] == "true");
-				at.visible = (localStorage["l4_"+i+"_visible"] == "true");
-				at.showText = (localStorage["l4_"+i+"_showText"] == "true");
+				element.saveparam = JSON.parse(localStorage["l4_"+i+"_param"]);
+				element.type = localStorage["l4_"+i+"_type"];
+				CformElements[element.type]['_init'](element, element.saveparam);
 				if (localStorage["l4_"+i+"_group"] != "undefined")
-					at.group = localStorage["l4_"+i+"_group"];
+					element.group = localStorage["l4_"+i+"_group"];
+				element.text = localStorage["l4_"+i+"_text"];
+				element.visible = (localStorage["l4_"+i+"_visible"] == "true");
+				for (var j=0; j<parseInt(localStorage["l4_"+i+"_link_count"]); j+=2) {
+					link.push(eval(localStorage["l4_"+i+"_link_"+j]));
+					link.push(JSON.parse(localStorage["l4_"+i+"_link_"+(j+1)]));
+				}
+				if (link.length > 0)
+					element.link = link;
 				else
-					at.group = '';
-				if ((localStorage["l4_"+i+"_link_0"] != "undefined") && 
+					element.link = null;
+				/*if ((localStorage["l4_"+i+"_link_0"] != "undefined") && 
 					(localStorage["l4_"+i+"_link_1"] != "undefined")) {
 					var link = new Array();
 					link.push(eval(localStorage["l4_"+i+"_link_0"]));
 					link.push(JSON.parse(localStorage["l4_"+i+"_link_1"]));
-					at.link = link;
-				}
-				Stage.layers[4].push(at);
-				at = null;
+					element.link = link;
+				}*/
+				Stage.layers[4].push(element);
+				element = null;
 			}
-			if (localStorage["l4_"+i+"_type"] == 'animImage') {
-				var ai = new ActiveImage();
-				var rect = new Rect(0, 0, 0, 0);
-				rect.x = parseInt(localStorage["l4_"+i+"_rect_x"]);
-				rect.y = parseInt(localStorage["l4_"+i+"_rect_y"]);
-				ai.type = localStorage["l4_"+i+"_type"];
-				var obj = new Array();
-				for (var j=0; j<parseInt(localStorage["l4_"+i+"_sprites_count"]); j++) {
-					obj.push(localStorage["l4_"+i+"_sprites_"+j]);
-				}
-				ai.Create(localStorage["l4_"+i+"_id"], rect, obj);
-
-				ai.fps = parseInt(localStorage["l4_"+i+"_fps"]);
-				ai.visible = (localStorage["l4_"+i+"_visible"] == "true");
-				if (localStorage["l4_"+i+"_group"] != "undefined")
-					ai.group = localStorage["l4_"+i+"_group"];
-				else
-					ai.group = '';
-				Stage.layers[4].push(at);
-				ai = null;
-			}
-			// TODO: other gui
 		}
 		// Populate sounds
-		for (var i=0; i<3; i++) {
+		for (var i=0; i<4; i++) {
 			Stage.sounds[i].splice(0, Stage.sounds[i].length);
 			for (var j=0; j<parseInt(localStorage["s"+i+"_count"]); j++) {
 				var s = new Sounds();
@@ -2568,6 +2553,7 @@ function Backdrop() {
 	this.size = 1;
 	this.scroll = false;
 	this.transTime = 1;
+	this.wait = true;
 
 	this.origin = new Vector2d(0,0);		// backdrop's origin is center
 	this.pos = new Vector2d(0,0);
@@ -2588,7 +2574,7 @@ Backdrop.prototype.Create = function(id, file, obj) {
 			Helper.addEvent(item.img, 'load', function() {
 				that.IsLoaded();
 			}, false);
-			item.img.src = obj[i].src;
+			item.img.src = Helper.parseArg(obj[i].src);
 			this.objects.push(item);
 			item = null;
 		}
@@ -2604,7 +2590,7 @@ Backdrop.prototype.Create = function(id, file, obj) {
 			that.origin = new Vector2d(dim/2, dim/2);
 			that.IsLoaded();
 		}, false);
-		this.image.src = file;
+		this.image.src = Helper.parseArg(file);
 	}
 	else {
 		// assume valid HTML color
@@ -2672,6 +2658,130 @@ Backdrop.prototype.Draw = function() {
 	return true;
 }
 ///////////////////////////////////////////////////////////////////////////////
+// Canvas Form elements
+///////////////////////////////////////////////////////////////////////////////
+var CformElements = {
+	button: {
+		_init: function (obj, param) {
+			var rect = new Rect(param.x, param.y, (param.w)?param.w:0, (param.h)?param.h:0);
+			var sprites = new Array();
+			if (param.base) sprites.push(param.base);
+			sprites.push((param.hover)?param.hover:param.base);
+			sprites.push((param.click)?param.click:param.base);
+			obj.Create(param.name, rect, sprites);
+			if (param.link) obj.link = param.link;
+			if (param.showText == false) obj.showText = false;
+			if (param.tip) obj.tooltip = param.tip;
+		},
+		_update: function (obj, elapsed) {
+			if (obj.prev_state != obj.state) {
+				obj.prev_state = obj.state;
+				obj.redraw = true;	
+				if ((obj.state == 'hover') || (obj.state == 'clicked')) {
+					obj.inputFocus = true;
+					if (obj.tooltip != '') Stage.Transition(1.0);
+				}
+				else
+					obj.inputFocus = false;
+			}
+			if (Stage.mouseClick && obj.inputFocus) {
+				if (obj.link != null) {
+					obj.link[0](obj.link[1]);
+					Stage.pause = false;
+				}
+				obj.redraw = true;
+			}
+		},
+		_draw: function (obj) {
+			if ((obj.sprites.length>1) && (obj.state=='hover'))
+				obj.DrawImageOrFill(obj.sprites[1]);
+			else if ((obj.sprites.length>2) && (obj.state=='clicked'))
+				obj.DrawImageOrFill(obj.sprites[2]);
+			else
+				obj.DrawImageOrFill(obj.sprites[0]);
+		},
+	},
+	picture: {
+		_init: function (obj, param) {
+			obj.type = "picture";
+			obj.fps = (param.fps > 1) ? param.fps : 1;
+			var rect = new Rect(param.x, param.y, 0, 0);
+			var sprites = new Array();
+			for (var i in param.frames) 
+				sprites.push(param.frames[i]);
+			obj.Create(param.name, rect, sprites);
+			obj.showText = false;
+		},
+		_update: function (obj, elapsed) {
+			if ((!obj.aTimerOn) && (obj.sprites.length > 1)) {
+				obj.aTimer = setTimeout(function() {
+					obj.countup++;
+					obj.countup %= obj.sprites.length;
+					obj.redraw = true;
+					if (obj.visible) obj.aTimerOn = false;
+				}, 1000/obj.fps);
+				obj.aTimerOn = true;
+			}
+		},
+		_draw: function (obj) {
+			obj.DrawImageOrFill(obj.sprites[obj.countup]);
+		}
+	},
+	timer: {
+		_init: function (obj, param) {
+			obj.type = "timer";
+			obj.fps = 1;
+			if (param.timeout) obj.timeout = param.timeout;
+			if (param.link) obj.link = param.link;
+			var rect = new Rect(param.x, param.y, param.w, param.h);
+			obj.Create(param.name, rect, null);
+
+			obj.text = Helper.convertTime(obj.timeout);
+			// create a user variable named param.name
+			var val = Helper.findVar(escape(param.name));
+			if (val != null) {
+				Stage.variables[escape(param.name)].Set(obj.timeout);
+			}
+			else {
+				var uv = new UserVars();
+				uv.Set(obj.timeout);
+				Stage.variables[escape(param.name)] = uv;
+			}
+			obj.countup = !(obj.timeout > 0);
+		},
+		_update: function (obj, elapsed) {
+			if (!obj.aTimerOn) {
+				this.aTimer = setTimeout(function() {
+					if (obj.countup)
+						Helper.setValue(obj.id, Helper.getValue(obj.id)+1);
+					else
+						Helper.setValue(obj.id, Helper.getValue(obj.id)-1);
+					obj.text = Helper.convertTime(Helper.getValue(obj.id));
+					obj.redraw = true;
+					if (!obj.countup) {
+						if (Helper.getValue(obj.id) > 0) {
+							if (obj.visible) obj.aTimerOn = false;
+						}
+						else {
+							if (obj.link != null) {
+								obj.link[0](obj.link[1]);
+								Stage.pause = false;
+							}
+						}
+					}
+					else {
+						if (obj.visible) obj.aTimerOn = false;
+					}
+				}, 1000/obj.fps );
+				obj.aTimerOn = true;
+			}
+		},
+		_draw: function (obj) {
+			obj.DrawImageOrFill(obj.sprites[0]);
+		},
+	},
+}
+///////////////////////////////////////////////////////////////////////////////
 // Selectable/clickable image; use for buttons, imagemaps, etc.
 ///////////////////////////////////////////////////////////////////////////////
 function ActiveImage() {
@@ -2684,18 +2794,20 @@ function ActiveImage() {
 	this.aTimerOn = false;
 
 	this.type = 'button';
+	this.id = '';
 	this.group = '';
 	this.context = 0;
 	this.sprites = new Array();
 	this.inputFocus = false;
 	this.text = '';
-	this.link = '';
+	this.link = null;
 	this.origin = new Vector2d(0,0);
 	this.rect = new Rect(0, 0, 0, 0);
 	this.visible = true;
 	this.showText = true;
 	this.state = '';
 	this.tooltip = '';
+	this.saveparam = {};
 	
 	this.fps = 0;
 	this.timeout = 0;
@@ -2705,24 +2817,9 @@ ActiveImage.prototype.Create = function(id, rect, obj) {
 	var that = this;
 	var canvas = document.createElement('canvas');
 	canvas.id = escape(id);
+	this.id = id;
 	this.context = canvas.getContext('2d');
-	if (this.type == 'animText') {
-		// TODO: for now only timer is supported
-		this.text = Helper.convertTime(this.timeout);
-		// create a user variable with id
-		var val = Helper.findVar(escape(id));
-		if (val != null) {
-			Stage.variables[escape(id)].Set(this.timeout);
-		}
-		else {
-			var uv = new UserVars();
-			uv.Set(this.timeout);
-			Stage.variables[escape(id)] = uv;
-		}
-		this.countup = !(this.timeout > 0);
-	}
-	else
-		this.text = id;
+	this.text = id;
 	this.rect = rect;
 	this.origin = new Vector2d(this.rect.x, this.rect.y);
 	
@@ -2784,67 +2881,10 @@ ActiveImage.prototype.IsLoaded = function() {
 ActiveImage.prototype.Update = function(elapsed) {
 	var that = this;
 	if (this.isready) {
-		if (!this.visible) {
+		if (!this.visible)
 			this.inputFocus = false;
-		}
-		else if (this.type == 'button') {
-			if (this.prev_state != this.state) {
-				this.prev_state = this.state;
-				this.redraw = true;	
-				if ((this.state == 'hover') || (this.state == 'clicked')) {
-					this.inputFocus = true;
-					if (this.tooltip != '') Stage.Transition(1.0);
-				}
-				else
-					this.inputFocus = false;
-			}
-			if (Stage.mouseClick && this.inputFocus) {
-				if (this.link != '') {
-					this.link[0](this.link[1]);
-					Stage.pause = false;
-				}
-				this.redraw = true;
-			}
-		}
-		else if (this.type == 'animText') {
-			// TODO: for now only timer is supported
-			if (!this.aTimerOn) {
-				this.aTimer = setTimeout(function() {
-					if (that.countup)
-						Helper.setValue(that.context.canvas.id, Helper.getValue(that.context.canvas.id)+1);
-					else
-						Helper.setValue(that.context.canvas.id, Helper.getValue(that.context.canvas.id)-1);
-					that.text = Helper.convertTime(Helper.getValue(that.context.canvas.id));
-					that.redraw = true;
-					if (!that.countup) {
-						if (Helper.getValue(that.context.canvas.id) > 0) {
-							if (that.visible) that.aTimerOn = false;
-						}
-						else {
-							if (that.link != '') {
-								that.link[0](that.link[1]);
-								Stage.pause = false;
-							}
-						}
-					}
-					else {
-						if (that.visible) that.aTimerOn = false;
-					}
-				}, 1000/this.fps )
-				this.aTimerOn = true;
-			}
-		}
-		else if (this.type == 'animImage') {
-			if ((!this.aTimerOn) && (this.sprites.length > 1)) {
-				this.aTimer = setTimeout(function() {
-					that.countup++;
-					that.countup %= that.sprites.length;
-					that.redraw = true;
-					if (that.visible) that.aTimerOn = false;
-				}, 1000/this.fps);
-				this.aTimerOn = true;
-			}
-		}
+		else
+			CformElements[this.type]['_update'](this, elapsed);
 	}
 	return this.update;
 }
@@ -2854,20 +2894,7 @@ ActiveImage.prototype.Draw = function() {
 
 	if (this.visible) {
 		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);
-		if (this.type == 'button') {
-			if ((this.sprites.length>1) && (this.state=='hover'))
-				this.DrawImageOrFill(this.sprites[1]);
-			else if ((this.sprites.length>2) && (this.state=='clicked'))
-				this.DrawImageOrFill(this.sprites[2]);
-			else
-				this.DrawImageOrFill(this.sprites[0]);
-		}
-		else if (this.type == 'animText') {
-			this.DrawImageOrFill(this.sprites[0]);
-		}
-		else if (this.type == 'animImage') {
-			this.DrawImageOrFill(this.sprites[this.countup]);
-		}
+		CformElements[this.type]['_draw'](this);
 		if ((this.showText) && (this.text != '')) {
 			this.context.textBaseline = 'middle';
 			this.context.textAlign = 'center';
@@ -2877,7 +2904,7 @@ ActiveImage.prototype.Draw = function() {
 				this.context.fillStyle = Stage.formStyle[1];
 			this.context.fillText(this.text, this.rect.w/2,this.rect.h/2);
 		}			
-		if (this.link != '') {
+		if (this.link != null) {
 			// create a detectable path
 			this.context.beginPath();
 			this.context.rect(this.rect.x,this.rect.y,this.rect.w,this.rect.h);
@@ -3270,6 +3297,7 @@ function Character(id) {
 	this.scale = 1;
 	this.size = 1;
 	//this.transTime = 1;
+	this.wait = true;
 		
 	this.id = id;
 	var canvas = document.createElement('canvas');
@@ -3327,7 +3355,7 @@ Character.prototype.AddSprite = function(tag, file) {
 		that.origin = new Vector2d(dim/2, dim/2 + that.spriteDim.vy/2);
 		that.isready = true;
 	}, false);
-	this.sprites[this.sprites.length-1].src.src = file;
+	this.sprites[this.sprites.length-1].src.src = Helper.parseArg(file);
 	this.activeSprite = this.sprites.length-1;
 	this.update = false;
 }
@@ -3363,7 +3391,7 @@ Character.prototype.AddAvatar = function(file) {
 		Helper.addEvent(this.avatar, 'load', function() {
 			that.isready = true;
 		}, false);
-		this.avatar.src = file;
+		this.avatar.src = Helper.parseArg(file);
 		this.update = false;
 	}
 	else {
@@ -3781,8 +3809,9 @@ var Stage = {
 			- bgm = 0: background music
 			- bgs = 1: background sound
 			- se  = 2: sound effects
+			- voice = 3: dialog vocals
 	*/
-	sounds: new Array(3),
+	sounds: new Array(4),
 	
 	/* 	Videos to play, currently only one video at a time
 			- for intros, cutscenes, etc.
@@ -3894,6 +3923,7 @@ var Stage = {
 		this.sounds[0] = new Array();
 		this.sounds[1] = new Array();
 		this.sounds[2] = new Array();
+		this.sounds[3] = new Array();
 		// create the script
 		this.script = new Script();
 		// setup default forms theme
@@ -4104,10 +4134,10 @@ var Stage = {
 		}
 		else if (this.mouseDown || this.touchStart) {
 			for (var i in Stage.layers[4]) {
-				if (Stage.layers[4][i].type == "button") {
-					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.vx, this.targetPos.vy)) {
+				//if (Stage.layers[4][i].type == "button") {
+				if ((Stage.layers[4][i].link != undefined) && (Stage.layers[4][i].link != null)) {
+					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.vx, this.targetPos.vy))
 						Stage.layers[4][i].state = 'clicked';
-					}
 					else
 						Stage.layers[4][i].state = '';
 				}
@@ -4115,10 +4145,10 @@ var Stage = {
 		}
 		else if (this.mouseMove) {
 			for (var i in Stage.layers[4]) {
-				if (Stage.layers[4][i].type == "button") {
-					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.vx, this.targetPos.vy)) {
+				//if (Stage.layers[4][i].type == "button") {
+				if ((Stage.layers[4][i].link != undefined) && (Stage.layers[4][i].link != null)) {
+					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.vx, this.targetPos.vy))
 						Stage.layers[4][i].state = 'hover';
-					}
 					else
 						Stage.layers[4][i].state = '';
 				}
@@ -4163,7 +4193,6 @@ var Stage = {
 				this.prevPos.copy(this.targetPos);
 				return this.targetPos;
 			}
-			// TODO: integrator issues in Opera, for now just do an easing position
 			camPos.copy(this.targetPos);
 			camPos.add(this.coord);
 			camPos.scale(0.5);

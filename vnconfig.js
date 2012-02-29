@@ -61,15 +61,26 @@ Config = {
 	//		>1.0 may be needed if actorPerspective is true
 	actorYPosition:		1.0
 	
+	// Audio
+	//  specify the audio formats supported
+	//		sounds must have all of the formats
+	//		given below, or the browser migh return
+	//		a file non-existent error
+	audioFormat:		["mp3", "ogg"],
+	
 	// Movie
 	// 	relative to viewport, from 0 to 1
 	movieSize:			0.75,
 	//	support for video-on-canvas
 	movieOnCanvas:		true,
+	//  specify the movie formats supported
+	//		videos must have the all of the formats
+	//		given below, or the browser might return
+	//		a file non-existent error
+	movieFormat:		["mp4", "ogv"],
 
 	// Transitions/Effects
 	// 	duration in seconds
-	// 	set to 0 for no transition times
 	transTime:			1.0,
 	
 	// Gameplay Settings
