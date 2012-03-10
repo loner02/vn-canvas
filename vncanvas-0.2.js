@@ -44,6 +44,13 @@
 /******************************************************************************
 Revision history:
 Version 0.2 Althea
+03.06.12 - Added 'z_order' for actor
+		 - Setting a variable to null deletes it
+		 - Support persistent user variable
+		 - Support multiple named 'checkpoints'
+03.04.12 - Added screen actions 'shake, 'snap'
+03.01.12 - Added speech 'balloon' in actor
+		 - Added arrays in user variables
 02.28.12 - Added 'voice' dub in-sync with dialog
 		 - Added 'nowait' argument to effects
 02.27.12 - Expand user variables for more active use
@@ -159,11 +166,11 @@ var Helper = {
 	},
 	// Function to check support for localStorage
 	supportsLocalStorage: function () {
-	  try {
-	    return 'localStorage' in window && window['localStorage'] !== null;
-	  } catch(e){
-	    return false; 
-	  }
+		try {
+			return 'localStorage' in window && window['localStorage'] !== null;
+		} catch(e){
+			return false; 
+		}
 	},
 	// Helper function to search for user variable
 	findVar: function (id) {
@@ -181,7 +188,7 @@ var Helper = {
 	setValue: function (id, value) {
 		var ret = Helper.findVar(id);
 		if (ret != null)
-			Stage.variables[id].Set(value);
+			Stage.variables[id].Set(value, false);
 		else {
 			Config[id] = value;
 			// a configuration variable has changed, reflect it back
@@ -235,6 +242,17 @@ var Helper = {
 					Stage.layers[4][0].src = Config.activeTheme.boxImageStyle;
 				else
 					Stage.layers[4][0].src = null;
+				// balloon styling
+				Stage.layers[4][0].balloonStyle.splice(0,Stage.layers[4][0].balloonStyle.length);
+				if (Config.activeTheme.balloonStrokeStyle)
+					Stage.layers[4][0].balloonStyle.push(Config.activeTheme.balloonStrokeStyle);
+				else
+					Stage.layers[4][0].balloonStyle.push('transparent');
+				if (Config.activeTheme.balloonFillStyle) {
+					var subs = Config.activeTheme.balloonFillStyle.split(' ');
+					for (var idx in subs)
+						Stage.layers[4][0].balloonStyle.push(subs[idx]);
+				}
 				// configure CanvasText
 				Stage.layers[4][0].canvasText.config({
 			        canvas: Stage.layers[4][0].context.canvas,
@@ -426,11 +444,10 @@ var Helper = {
 					chr.prevSprite = chr.activeSprite;
 					chr.alpha = 0;
 				}
-				chr.AddSprite(param.sprite[0], param.sprite[1]);
+				chr.AddSprite(param.sprite[0], param.sprite[1], param.sprite[2]);
 			}
 		}
 		if (param.avatar) chr.AddAvatar(param.avatar);
-		var ret = '';
 		if (param.position) {
 			var subs = param.position.split(' ');
 			for (var i in subs) {
@@ -449,8 +466,6 @@ var Helper = {
 						chr.target_pos.vx = chr.pos.vx;
 					}
 				}
-				if (subs[i].search(/(front|back)/g) != -1)
-					ret = subs[i];
 			}
 		}
 		var suffix;
@@ -486,20 +501,23 @@ var Helper = {
 		}
 		if (param.time != null) 
 			chr.transTime = (param.time>0) ? param.time : 0.1;
-		if (param.say) {
+		if ((param.say) || (param.balloon)) {
 			var cont = Helper.checkCurrentSpeaker(chr.nick, param.append);
-			Stage.layers[4][0].text = Helper.addTagToDialog(chr.nick, chr.color, param.say, cont);
+			if (!param.balloon)
+				Stage.layers[4][0].text = Helper.addTagToDialog(chr.nick, chr.color, param.say, cont);
+			else
+				Stage.layers[4][0].text = Helper.addTagToDialog(null, null, param.balloon, false);
 			Stage.layers[4][0].avatar = (chr.avatar != null) ? chr.avatar : null;
 			Stage.layers[4][0].alpha = 1;
 			Stage.layers[4][0].effects = "none";
 			Stage.layers[4][0].scrollOffsetY = 0;
 			Stage.layers[4][0].visible = true;
 			Stage.layers[4][0].changed = true;
+			Stage.layers[4][0].balloon = (param.balloon) ? param.id : null;
 			
 			if (param.voice)
 				Helper.processAudio (Stage.sounds[3], param.voice, {voice:param.voice});
 		}
-		return ret;
 	},
 	// Helper function to process backdrop
 	processBackdrop: function (obj, type, param) {
@@ -623,7 +641,7 @@ var Helper = {
 		TransEffects[fxarr[0]]['_'+fxarr[1]](obj, elapsed);
 	},
 	// Helper function to draw visual elements
-	drawElements: function(obj, layer) {
+	drawElements: function(obj, order) {
 		if (!obj.visible) return false;
 
 		Stage.context.save();
@@ -631,8 +649,9 @@ var Helper = {
 								obj.pos.vy - obj.scale * obj.origin.vy + obj.offset.vy);
 		Stage.context.scale(obj.scale, obj.scale);
 		Stage.context.drawImage(obj.context.canvas,
-								Stage.AddDepth(layer, Stage.canvas.width/2 - Stage.coord.vx),
-								Stage.AddDepth(layer, Stage.canvas.height/2 - Stage.coord.vy)/2,
+								Stage.AddDepth(order/10, Stage.canvas.width/2 - Stage.coord.vx) + 
+								Stage.shake * Stage.transTime * Math.sin(Stage.transTime*10*Math.PI),
+								Stage.AddDepth(order/10, Stage.canvas.height/2 - Stage.coord.vy)/2,
 								obj.context.canvas.width,
 								obj.context.canvas.height);	
 		Stage.context.restore();
@@ -742,6 +761,34 @@ var Helper = {
 			return (hr.toString() + ':' + ((min<10)?'0':'') + min.toString() + ':' + ((sec<10)?'0':'') + sec.toString());
 		else
 			return (min.toString() + ':' + ((sec<10)?'0':'') + sec.toString());
+	},
+	createBalloon: function (ctx, x, y, w, h, r, ptr) {
+		if (w < 2 * r) r = w / 2;
+		if (h < 2 * r) r = h / 2;
+		ctx.beginPath();
+		ctx.moveTo(r, y);
+		ctx.moveTo(x+r, y);
+		ctx.lineTo(x+w/4-y/2,y);
+		if (ptr) ctx.lineTo(x+w/4,0);
+		ctx.lineTo(x+w/4+y/2,y);
+		ctx.lineTo(x+w*3/4-y/2,y);
+		if (!ptr) ctx.lineTo(x+w*3/4,0);
+		ctx.lineTo(x+w*3/4+y/2,y);
+
+		ctx.lineTo(w-r, y);
+		ctx.quadraticCurveTo(w, y, w, y+r);
+		ctx.lineTo(w, h-r);
+		ctx.quadraticCurveTo(w, h, w-r, h);
+		ctx.lineTo(x+r, h);
+		ctx.quadraticCurveTo(x, h, x, h-r);
+		ctx.lineTo(x, y+r);
+		ctx.quadraticCurveTo(x, y, x+r, y);
+		// Opera doesn't render arcTo correctly, so used quadratic instead
+		/*ctx.arcTo(w, y, w, h, r);
+		ctx.arcTo(w, h, x, h, r);
+		ctx.arcTo(x, h, x, y, r);
+		ctx.arcTo(x, y, w, y, r); */
+		ctx.closePath();
 	}
 }
 // Function to determine optimal animation frame
@@ -1141,44 +1188,84 @@ function macro(param) {
 	if (Config.gameAllowMacro)
 		eval(param)();
 }
+// screen - do some screen actions
+function screen(param) {
+	for (prop in param) {
+		if (param.hasOwnProperty(prop)) {
+			if (prop == 'shake') {
+				Stage.shake = param.shake;
+				Stage.Transition(param.duration ? param.duration: Config.transTime);
+			}
+			if (prop == 'snap') {
+				var img = Stage.canvas.toDataURL("image/"+param.snap);
+				window.open(img,'_blank','width='+Stage.canvas.width+',height='+Stage.canvas.height);
+			}
+		}
+	}
+	Stage.redraw = true;
+}
 // set - sets a user variable
 function set(param) {
-	var str_param = JSON.stringify(param);
-	var arr_param = str_param.replace(/[{|}]/g,'').split(/[\s|:|,]/g);
+	var arr_param = new Array();
+	for (prop in param) {
+		if (param.hasOwnProperty(prop)) {
+			arr_param.push(prop);
+			arr_param.push(JSON.stringify(param[prop]));
+		}
+	}
 	for (var i=0; i<arr_param.length; i+=2) {
-		arr_param[i] = eval(arr_param[i]);
+		var persist = false;
+		if (arr_param[i].indexOf('$') == 0) {
+			arr_param[i] = arr_param[i].replace(/^\$/g,'');
+			persist = true;
+		}
 		arr_param[i+1] = eval(arr_param[i+1]);
 		var value = Helper.findVar(arr_param[i]);
 		if (value != null) {
-			if (typeof arr_param[i+1] == 'string') {
-				// if value is a reference to other variables
-				var ref = Helper.findVar(arr_param[i+1]);
-				if (ref != null)
-					Stage.variables[arr_param[i]].Set(ref);
-				else {
-					// is it an expression with supported operator
-					if (arr_param[i+1].search(/[+|\-|*|%|\/]/g) != -1)
-						Stage.variables[arr_param[i]].Set(eval(Stage.variables[arr_param[i]].Value() + arr_param[i+1]));
-					// or a simple string to set
-					else
-						Stage.variables[arr_param[i]].Set(arr_param[i+1]);
-				}
+			if (arr_param[i+1] == null) {
+				if (Stage.variables[arr_param[i]].Persist() && Helper.supportsLocalStorage())
+					localStorage.removeItem("_persist_uv_"+arr_param[i]);
+				delete(Stage.variables[arr_param[i]]);
+				return;
+			}
+			if (Stage.variables[arr_param[i]].Type() == 'object') {
+				// assumes array, just push new value
+				Stage.variables[arr_param[i]].Value().push(arr_param[i+1]);
+				Stage.variables[arr_param[i]].persist = persist;
 			}
 			else {
-				Stage.variables[arr_param[i]].Set(arr_param[i+1]);
+				if (typeof arr_param[i+1] == 'string') {
+					// if value is a reference to other variables
+					var ref = Helper.findVar(arr_param[i+1]);
+					if (ref != null)
+						Stage.variables[arr_param[i]].Set(ref, persist);
+					else {
+						// is it an expression with supported operator
+						if (arr_param[i+1].search(/[+|\-|*|%|\/]/g) != -1)
+							Stage.variables[arr_param[i]].Set(eval(Stage.variables[arr_param[i]].Value() + arr_param[i+1]), persist);
+						// or a simple string to set
+						else
+							Stage.variables[arr_param[i]].Set(arr_param[i+1], persist);
+					}
+				}
+				else {
+					Stage.variables[arr_param[i]].Set(arr_param[i+1], persist);
+				}
 			}
 		}
 		else {
 			var uv = new UserVars();
 			if (typeof arr_param[i+1] == 'string') {
 				var ref = Helper.findVar(arr_param[i+1]);
-				uv.Set((ref != null) ? ref : arr_param[i+1]);
+				uv.Set((ref != null) ? ref : arr_param[i+1], persist);
 			}
 			else
-				uv.Set(arr_param[i+1]);
+				uv.Set(arr_param[i+1], persist);
 			Stage.variables[arr_param[i]] = uv;
 			uv = null;
 		}	
+		if (Stage.variables[arr_param[i]].Persist() && Helper.supportsLocalStorage())
+			localStorage["_persist_uv_"+arr_param[i]] = JSON.stringify(Stage.variables[arr_param[i]].Value());
 	}
 }
 // get - gets value of a user variable
@@ -1193,7 +1280,7 @@ function jump(param) {
 			Stage.pause = true;
 		}
 		else if (param.indexOf("http") != -1) {
-			var newwin = window.open(param);
+			var newwin = window.open(param, '_blank');
 			window.setTimeout('newwin.focus();', 250);
 		}
 		else {
@@ -1203,12 +1290,17 @@ function jump(param) {
 	}
 	else {
 		Stage.script.PushFrame();
-		var str_param = JSON.stringify(param);
-		var arr_param = str_param.replace(/[{|}]/g,'').split(/[\s|:|,]/g);
+		var arr_param = new Array();
+		for (prop in param) {
+			if (param.hasOwnProperty(prop)) {
+				arr_param.push(prop);
+				arr_param.push(JSON.stringify(param[prop]));
+			}
+		}
 		for (var i=0; i<arr_param.length; i+=2) {
-			arr_param[i] = eval(arr_param[i]);
-			arr_param[i+1] = eval(arr_param[i+1]);
+			//arr_param[i] = eval(arr_param[i]);
 			if (arr_param[i] == 'label') continue;
+			arr_param[i+1] = eval(arr_param[i+1]);
 
 			var val = Helper.getValue(arr_param[i]);
 			if (val != null) {
@@ -1216,7 +1308,7 @@ function jump(param) {
 					if (val >= arr_param[i+1])
 						Stage.script.SetFrame(param.label);
 				}
-				else if (typeof val ==  'string') {
+				else if (typeof val == 'string') {
 					if (val === arr_param[i+1])
 						Stage.script.SetFrame(param.label);
 				}
@@ -1323,48 +1415,36 @@ function scene(param) {
 }
 // actor - create and display character (layer 1)
 function actor(param) {
-	var idx = -1;
 	if (Stage.layers[1].length > 0) {
 		// look for same id
 		for (var i=0; i<Stage.layers[1].length; i++) {
 			if (Stage.layers[1][i].id == param.id) {
-				idx = i;
-				break;
+				// update an existing actor
+				Helper.processActor(Stage.layers[1][i], param);
+				// check if a reorder is needed
+				if (param.z_order) Stage.layers[1][i].z_order = param.z_order
+				// done updating, do not trickle down
+				Stage.layers[1][i].drawn = false;
+				Stage.layers[1][i].update = false;
+				if ((Stage.layers[1][i].visible && (Stage.layers[1][i].effects.indexOf('out')!=-1)) ||
+					(!Stage.layers[1][i].visible && (Stage.layers[1][i].effects.indexOf('in')!=-1)) ||
+					((param.position) && (param.position.search(/(left|right|center|auto)/g) != -1)))
+					Stage.Transition(Stage.layers[1][i].transTime);	
+				if (param.z_order && (Stage.layers[1][i].z_order != param.z_order)) {
+					Stage.layers[1][i].z_order = param.z_order
+					Stage.layers[1].sort(function(a,b){return a.z_order-b.z_order});
+				}
+				return;
 			}
-		}
-		if (idx != -1) {
-			// update an existing actor
-			var updchar = Helper.processActor(Stage.layers[1][idx], param);
-			// check if a reorder is needed
-			if (updchar != '') {
-				var chr = Stage.layers[1][idx];
-				Stage.layers[1].splice(idx, 1);
-				if (updchar == 'front')
-					Stage.layers[1].push(chr);
-				else if (updchar == 'back')
-					Stage.layers[1].unshift(chr);
-			}
-			// done updating, do not trickle down
-			Stage.layers[1][idx].drawn = false;
-			Stage.layers[1][idx].update = false;
-			//Stage.layers[1][idx].redraw = true;
-			if ((Stage.layers[1][idx].visible && (Stage.layers[1][idx].effects.indexOf('out')!=-1)) ||
-				(!Stage.layers[1][idx].visible && (Stage.layers[1][idx].effects.indexOf('in')!=-1)) ||
-				((param.position) && (param.position.search(/(left|right|center|auto)/g) != -1)))
-				Stage.Transition(Stage.layers[1][idx].transTime);	
-			return;
 		}
 	}
 	// this is a new actor
-	var chr = new Character(param.id);
-	//chr.Create(param.id);
+	var chr = new Character(param.id, param.z_order ? param.z_order : 0);
 	chr.nick = (param.nick) ? Helper.parseArg(param.nick) : param.id;
 	chr.color = (param.color) ? param.color : Stage.layers[4][0].tagColor;
-	var addchar = Helper.processActor(chr, param);
-	if (addchar == 'back')
-		Stage.layers[1].unshift(chr);
-	else
-		Stage.layers[1].push(chr);	
+	Helper.processActor(chr, param);
+	Stage.layers[1].push(chr);	
+	Stage.layers[1].sort(function(a,b){return a.z_order-b.z_order});
 	Stage.Transition(chr.transTime);
 	chr = null;
 }
@@ -1375,11 +1455,16 @@ function overlay(param) {
 }
 // atmosphere - create atmosphere effects (layer 3)
 function atmosphere(param) {
-	var str_param = JSON.stringify(param);
-	var arr_param = str_param.replace(/[{|}]/g,'').split(/[\s|:|,]/g);
+	var arr_param = new Array();
+	for (prop in param) {
+		if (param.hasOwnProperty(prop)) {
+			arr_param.push(prop);
+			arr_param.push(JSON.stringify(param[prop]));
+		}
+	}
 	
 	// for plugins compatibility, first parameter must identify type of atmo effect
-	var type = eval(arr_param[0]);
+	var type = arr_param[0]; //eval(arr_param[0]);
 	arr_param[1] = eval(arr_param[1]);
 	var action = 'start';
 	if (arr_param[1].toString().search(/(start|stop)/g) != -1)
@@ -1408,6 +1493,7 @@ function box(param) {
 	else {
 		Stage.layers[4][0].visible = false;
 		Stage.layers[4][0].text = '';
+		Stage.layers[4][0].balloon = null;
 	}
 	if (param.pos) Stage.layers[4][0].pos = param.pos;
 	if (param.back) {
@@ -1436,6 +1522,7 @@ function text(param) {
 	Stage.layers[4][0].alpha = 1;
 	Stage.layers[4][0].effects = "none";
 	Stage.layers[4][0].scrollOffsetY = 0;
+	Stage.layers[4][0].balloon = null;
 	if (typeof param == "string") {
 		Stage.layers[4][0].text = Helper.addTagToDialog(null, null, param, Stage.layers[4][0].cont);		
 	}
@@ -1505,6 +1592,7 @@ function menu(param) {
 	Stage.layers[4][0].visible = true;
 	Stage.layers[4][0].changed = true;
 	Stage.layers[4][0].inputFocus = true;
+	Stage.layers[4][0].balloon = null;
 }
 // button - create a canvas button (layer 4), independent of cform
 function button(param) {
@@ -1568,6 +1656,10 @@ function cform(param) {
 						Stage.layers[4][i].visible = false;
 						Stage.layers[4][i].inputFocus = false;
 						Stage.layers[4][i].redraw = true;
+						if (Stage.layers[4][i].aTimerOn) {
+							Stage.layers[4][i].aTimerOn = false;
+							clearTimeout(Stage.layers[4][i].aTimer);
+						}
 					}
 				}
 				break;
@@ -1888,342 +1980,371 @@ function form(param) {
 // checkpoint - loads/saves at a given checkpoint
 function checkpoint(param) {
 	if (!Helper.supportsLocalStorage()) return;
-
-	if (param == "save") {
-		localStorage.clear();
-		// Store script entry point
-		if (Stage.script.sequence[0] == label) {
-			localStorage["sequence"] = Stage.script.sequence[1];
-			localStorage["frame"] = Stage.script.frame;
+	
+	var cmd = param;
+	var chkpt = ''; 
+	if (Config.gameNamedCheckpts) {
+		if (typeof param == 'string') {
+			cmd = param;
+			chkpt = '_auto_';
 		}
 		else {
-			localStorage["sequence"] = '';
-			localStorage["frame"] = 0;
+			for (prop in param) {
+				if (param.hasOwnProperty(prop)) {
+					cmd = prop;
+					chkpt = param[prop];
+				}
+			}
+		}
+	}
+	if (cmd == "save") {
+		if (!Config.gameNamedCheckpts) 
+			localStorage.clear(); 
+		else {
+			if (chkpt != '') {
+				var pattern = "/^"+chkpt+"/g";
+				for (prop in localStorage) {
+					if (prop.match(eval(pattern))) {
+						localStorage.removeItem(prop);
+					}
+				}
+			}
+		}
+		// Store script entry point
+		if (Stage.script.sequence[0] == label) {
+			localStorage[chkpt+"sequence"] = Stage.script.sequence[1];
+			localStorage[chkpt+"frame"] = Stage.script.frame;
+		}
+		else {
+			localStorage[chkpt+"sequence"] = '';
+			localStorage[chkpt+"frame"] = 0;
 		}
 		// Store jump stack
-		localStorage["frameStack"] = JSON.stringify(Stage.script.frameStack);
+		localStorage[chkpt+"frameStack"] = JSON.stringify(Stage.script.frameStack);
 		// Store layer 0
-		localStorage["l0_count"] = Stage.layers[0].length;
+		localStorage[chkpt+"l0_count"] = Stage.layers[0].length;
 		for (var i=0; i<Stage.layers[0].length; i++) {
-			localStorage["l0_"+i+"_id"] = Stage.layers[0][i].context.canvas.id;
+			localStorage[chkpt+"l0_"+i+"_id"] = Stage.layers[0][i].context.canvas.id;
 			if (typeof Stage.layers[0][i].image == 'string')
-				localStorage["l0_"+i+"_src"] = Stage.layers[0][i].image;
+				localStorage[chkpt+"l0_"+i+"_src"] = Stage.layers[0][i].image;
 			else
-				localStorage["l0_"+i+"_src"] = Stage.layers[0][i].image.src;
-			localStorage["l0_"+i+"_obj_count"] = Stage.layers[0][i].objects.length;
+				localStorage[chkpt+"l0_"+i+"_src"] = Stage.layers[0][i].image.src;
+			localStorage[chkpt+"l0_"+i+"_obj_count"] = Stage.layers[0][i].objects.length;
 			for (var j=0; j<Stage.layers[0][i].objects.length; j++) {
-				localStorage["l0_"+i+"_obj_"+j+"_src"] = Stage.layers[0][i].objects[j].img.src;
-				localStorage["l0_"+i+"_obj_"+j+"_x"] = Stage.layers[0][i].objects[j].x;
-				localStorage["l0_"+i+"_obj_"+j+"_y"] = Stage.layers[0][i].objects[j].y;
+				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_src"] = Stage.layers[0][i].objects[j].img.src;
+				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_x"] = Stage.layers[0][i].objects[j].x;
+				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_y"] = Stage.layers[0][i].objects[j].y;
 			}
-			localStorage["l0_"+i+"_alpha"] = Stage.layers[0][i].alpha;
-			localStorage["l0_"+i+"_visible"] = Stage.layers[0][i].visible;
-			localStorage["l0_"+i+"_effects"] = Stage.layers[0][i].effects;
-			localStorage["l0_"+i+"_time"] = Stage.layers[0][i].transTime;
-			//if (Stage.layers[0][i].posMode != '')
-			//	localStorage["l0_"+i+"_posMode"] = Stage.layers[0][i].posMode;
-			//else
-			//	localStorage["l0_"+i+"_posMode"] = "undefined";
-			localStorage["l0_"+i+"_orientation"] = Stage.layers[0][i].orientation;
-			localStorage["l0_"+i+"_size"] = Stage.layers[0][i].size;
+			localStorage[chkpt+"l0_"+i+"_alpha"] = Stage.layers[0][i].alpha;
+			localStorage[chkpt+"l0_"+i+"_visible"] = Stage.layers[0][i].visible;
+			localStorage[chkpt+"l0_"+i+"_effects"] = Stage.layers[0][i].effects;
+			localStorage[chkpt+"l0_"+i+"_time"] = Stage.layers[0][i].transTime;
+			localStorage[chkpt+"l0_"+i+"_orientation"] = Stage.layers[0][i].orientation;
+			localStorage[chkpt+"l0_"+i+"_size"] = Stage.layers[0][i].size;
 		}
 		// Store layer 1
-		localStorage["l1_count"] = Stage.layers[1].length;
+		localStorage[chkpt+"l1_count"] = Stage.layers[1].length;
 		for (var i=0; i<Stage.layers[1].length; i++) {
-			localStorage["l1_"+i+"_id"] = Stage.layers[1][i].id;
-			localStorage["l1_"+i+"_nick"] = Stage.layers[1][i].nick;
-			localStorage["l1_"+i+"_color"] = Stage.layers[1][i].color;
-			localStorage["l1_"+i+"_spites_count"] = Stage.layers[1][i].sprites.length;
+			localStorage[chkpt+"l1_"+i+"_id"] = Stage.layers[1][i].id;
+			localStorage[chkpt+"l1_"+i+"_nick"] = Stage.layers[1][i].nick;
+			localStorage[chkpt+"l1_"+i+"_color"] = Stage.layers[1][i].color;
+			localStorage[chkpt+"l1_"+i+"_zorder"] = Stage.layers[1][i].z_order;
+			localStorage[chkpt+"l1_"+i+"_sprites_count"] = Stage.layers[1][i].sprites.length;
 			for (var j=0; j<Stage.layers[1][i].sprites.length; j++) {
-				localStorage["l1_"+i+"_sprites_"+j+"_id"] = Stage.layers[1][i].sprites[j].id;
-				localStorage["l1_"+i+"_sprites_"+j+"_src"] = Stage.layers[1][i].sprites[j].src.src;			
+				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"] = Stage.layers[1][i].sprites[j].id;
+				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"] = Stage.layers[1][i].sprites[j].src.src;			
+				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"] = Stage.layers[1][i].sprites[j].align;			
 			}
+			localStorage[chkpt+"l1_"+i+"_offset_x"] = Stage.layers[1][i].offset.vx;
+			localStorage[chkpt+"l1_"+i+"_offset_y"] = Stage.layers[1][i].offset.vy;
 			if (Stage.layers[1][i].avatar != null)
-				localStorage["l1_"+i+"_avatar"] = Stage.layers[1][i].avatar.src;
+				localStorage[chkpt+"l1_"+i+"_avatar"] = Stage.layers[1][i].avatar.src;
 			else
-				localStorage["l1_"+i+"_avatar"] = "undefined";
-			localStorage["l1_"+i+"_active"] = Stage.layers[1][i].activeSprite;
-			localStorage["l1_"+i+"_alpha"] = Stage.layers[1][i].alpha;
+				localStorage[chkpt+"l1_"+i+"_avatar"] = "undefined";
+			localStorage[chkpt+"l1_"+i+"_active"] = Stage.layers[1][i].activeSprite;
+			localStorage[chkpt+"l1_"+i+"_alpha"] = Stage.layers[1][i].alpha;
 			if (Stage.layers[1][i].prevFx != '')
-				localStorage["l1_"+i+"_effects"] = Stage.layers[1][i].prevFx;
+				localStorage[chkpt+"l1_"+i+"_effects"] = Stage.layers[1][i].prevFx;
 			else
-				localStorage["l1_"+i+"_effects"] = "undefined";
-			localStorage["l1_"+i+"_time"] = Stage.layers[1][i].transTime;
-			localStorage["l1_"+i+"_visible"] = Stage.layers[1][i].visible;
-			localStorage["l1_"+i+"_pending"] = Stage.layers[1][i].pendingRemoval;
-			localStorage["l1_"+i+"_posMode"] = Stage.layers[1][i].posMode;
-			//localStorage["l1_"+i+"_fxparam"] = Stage.layers[1][i].fxparam;
-			localStorage["l1_"+i+"_orientation"] = Stage.layers[1][i].orientation;
-			localStorage["l1_"+i+"_size"] = Stage.layers[1][i].size;
+				localStorage[chkpt+"l1_"+i+"_effects"] = "undefined";
+			localStorage[chkpt+"l1_"+i+"_time"] = Stage.layers[1][i].transTime;
+			localStorage[chkpt+"l1_"+i+"_visible"] = Stage.layers[1][i].visible;
+			localStorage[chkpt+"l1_"+i+"_pending"] = Stage.layers[1][i].pendingRemoval;
+			localStorage[chkpt+"l1_"+i+"_posMode"] = Stage.layers[1][i].posMode;
+			//localStorage[chkpt+"l1_"+i+"_fxparam"] = Stage.layers[1][i].fxparam;
+			localStorage[chkpt+"l1_"+i+"_orientation"] = Stage.layers[1][i].orientation;
+			localStorage[chkpt+"l1_"+i+"_size"] = Stage.layers[1][i].size;
 		}
 		// Store layer 2
-		localStorage["l2_count"] = Stage.layers[2].length;
+		localStorage[chkpt+"l2_count"] = Stage.layers[2].length;
 		for (var i=0; i<Stage.layers[2].length; i++) {
-			localStorage["l2_"+i+"_id"] = Stage.layers[2][i].context.canvas.id;
+			localStorage[chkpt+"l2_"+i+"_id"] = Stage.layers[2][i].context.canvas.id;
 			if (typeof Stage.layers[2][i].image == 'string')
-				localStorage["l2_"+i+"_src"] = Stage.layers[2][i].image;
+				localStorage[chkpt+"l2_"+i+"_src"] = Stage.layers[2][i].image;
 			else
-				localStorage["l2_"+i+"_src"] = Stage.layers[2][i].image.src;
-			localStorage["l2_"+i+"_alpha"] = Stage.layers[2][i].alpha;
-			localStorage["l2_"+i+"_visible"] = Stage.layers[2][i].visible;
-			localStorage["l2_"+i+"_effects"] = Stage.layers[2][i].effects;
-			localStorage["l2_"+i+"_time"] = Stage.layers[2][i].transTime;
-			localStorage["l2_"+i+"_scroll"] = Stage.layers[2][i].scroll;
-			localStorage["l2_"+i+"_offset_x"] = Stage.layers[2][i].offset.vx;
-			localStorage["l2_"+i+"_offset_y"] = Stage.layers[2][i].offset.vy;
-			//if (Stage.layers[2][i].posMode != '')
-			//	localStorage["l2_"+i+"_posMode"] = Stage.layers[2][i].posMode;
-			//else
-			//	localStorage["l2_"+i+"_posMode"] = "undefined";
-			localStorage["l2_"+i+"_orientation"] = Stage.layers[2][i].orientation;
-			localStorage["l2_"+i+"_size"] = Stage.layers[2][i].size;
+				localStorage[chkpt+"l2_"+i+"_src"] = Stage.layers[2][i].image.src;
+			localStorage[chkpt+"l2_"+i+"_alpha"] = Stage.layers[2][i].alpha;
+			localStorage[chkpt+"l2_"+i+"_visible"] = Stage.layers[2][i].visible;
+			localStorage[chkpt+"l2_"+i+"_effects"] = Stage.layers[2][i].effects;
+			localStorage[chkpt+"l2_"+i+"_time"] = Stage.layers[2][i].transTime;
+			localStorage[chkpt+"l2_"+i+"_scroll"] = Stage.layers[2][i].scroll;
+			localStorage[chkpt+"l2_"+i+"_offset_x"] = Stage.layers[2][i].offset.vx;
+			localStorage[chkpt+"l2_"+i+"_offset_y"] = Stage.layers[2][i].offset.vy;
+			localStorage[chkpt+"l2_"+i+"_orientation"] = Stage.layers[2][i].orientation;
+			localStorage[chkpt+"l2_"+i+"_size"] = Stage.layers[2][i].size;
 		}
 		// Store layer 3
-		localStorage["l3_count"] = Stage.layers[3].length;
+		localStorage[chkpt+"l3_count"] = Stage.layers[3].length;
 		for (var i=0; i<Stage.layers[3].length; i++) {
-			localStorage["l3_"+i+"_id"] = Stage.layers[3][i].context.canvas.id;
-			localStorage["l3_"+i+"_type"] = Stage.layers[3][i].type;
-			localStorage["l3_"+i+"_action"] = Stage.layers[3][i].action;
-			localStorage["l3_"+i+"_visible"] = Stage.layers[3][i].visible;
-			localStorage["l3_"+i+"_param"] = JSON.stringify(Stage.layers[3][i].saveparam);
+			localStorage[chkpt+"l3_"+i+"_id"] = Stage.layers[3][i].context.canvas.id;
+			localStorage[chkpt+"l3_"+i+"_type"] = Stage.layers[3][i].type;
+			localStorage[chkpt+"l3_"+i+"_action"] = Stage.layers[3][i].action;
+			localStorage[chkpt+"l3_"+i+"_visible"] = Stage.layers[3][i].visible;
+			localStorage[chkpt+"l3_"+i+"_param"] = JSON.stringify(Stage.layers[3][i].saveparam);
 		}
 		// Store layer 4
-		localStorage["l4_count"] = Stage.layers[4].length;
+		localStorage[chkpt+"l4_count"] = Stage.layers[4].length;
 		for (var i=0; i<Stage.layers[4].length; i++) {
-			localStorage["l4_"+i+"_type"] = Stage.layers[4][i].type;
+			localStorage[chkpt+"l4_"+i+"_type"] = Stage.layers[4][i].type;
 			if (Stage.layers[4][i].type == "box") {
-				localStorage["l4_"+i+"_visible"] = Stage.layers[4][i].visible;
-				localStorage["l4_"+i+"_text"] = Stage.layers[4][i].text;
-				localStorage["l4_"+i+"_pos"] = Stage.layers[4][i].pos;
-				localStorage["l4_"+i+"_back"] = Stage.layers[4][i].back;
+				localStorage[chkpt+"l4_"+i+"_visible"] = Stage.layers[4][i].visible;
+				localStorage[chkpt+"l4_"+i+"_text"] = Stage.layers[4][i].text;
+				localStorage[chkpt+"l4_"+i+"_pos"] = Stage.layers[4][i].pos;
+				localStorage[chkpt+"l4_"+i+"_back"] = Stage.layers[4][i].back;
 				if (Stage.layers[4][i].src != null)
-					localStorage["l4_"+i+"_src"] = Stage.layers[4][i].src;
+					localStorage[chkpt+"l4_"+i+"_src"] = Stage.layers[4][i].src;
 				else
-					localStorage["l4_"+i+"_src"] = "undefined";
+					localStorage[chkpt+"l4_"+i+"_src"] = "undefined";
 				if (Stage.layers[4][i].psrc != '')
-					localStorage["l4_"+i+"_prompt"] = Stage.layers[4][i].psrc;
+					localStorage[chkpt+"l4_"+i+"_prompt"] = Stage.layers[4][i].psrc;
 				else
-					localStorage["l4_"+i+"_prompt"] = "undefined";
+					localStorage[chkpt+"l4_"+i+"_prompt"] = "undefined";
 				if (Stage.layers[4][i].avatar != null)
-					localStorage["l4_"+i+"_avatar"] = Stage.layers[4][i].avatar.src;
+					localStorage[chkpt+"l4_"+i+"_avatar"] = Stage.layers[4][i].avatar.src;
 				else
-					localStorage["l4_"+i+"_avatar"] = "undefined";
-				localStorage["l4_"+i+"_cont"] = Stage.layers[4][i].cont;
-				localStorage["l4_"+i+"_fontFamily"] = Stage.layers[4][i].fontFamily;
-				localStorage["l4_"+i+"_fontSize"] = Stage.layers[4][i].fontSize;
-				localStorage["l4_"+i+"_lineHeight"] = Stage.layers[4][i].lineHeight;
-				localStorage["l4_"+i+"_fontWeight"] = Stage.layers[4][i].fontWeight;
-				localStorage["l4_"+i+"_fontColor"] = Stage.layers[4][i].fontColor;
-				localStorage["l4_"+i+"_tagFamily"] = Stage.layers[4][i].tagFamily;
-				localStorage["l4_"+i+"_tagSize"] = Stage.layers[4][i].tagSize;
-				localStorage["l4_"+i+"_tagWeight"] = Stage.layers[4][i].tagWeight;
-				localStorage["l4_"+i+"_tagColor"] = Stage.layers[4][i].tagColor;
-				localStorage["l4_"+i+"_timeout"] = Stage.layers[4][i].timeout;
-				localStorage["l4_"+i+"_textAlign"] = Stage.layers[4][i].textAlign;
-				localStorage["l4_"+i+"_offset_x"] = Stage.layers[4][i].textOffset.vx;
-				localStorage["l4_"+i+"_offset_y"] = Stage.layers[4][i].textOffset.vy;
-				localStorage["l4_"+i+"_inputFocus"] = Stage.layers[4][i].inputFocus;
-				localStorage["l4_"+i+"_alpha"] = Stage.layers[4][i].alpha;
-				localStorage["l4_"+i+"_effects"] = Stage.layers[4][i].effects;
-				localStorage["l4_"+i+"_jumpTo_count"] = Stage.layers[4][i].jumpTo.length;
+					localStorage[chkpt+"l4_"+i+"_avatar"] = "undefined";
+				if (Stage.layers[4][i].balloon != null)
+					localStorage[chkpt+"l4_"+i+"_balloon"] = Stage.layers[4][i].balloon;
+				else
+					localStorage[chkpt+"l4_"+i+"_balloon"] = "undefined";
+				localStorage[chkpt+"l4_"+i+"_cont"] = Stage.layers[4][i].cont;
+				localStorage[chkpt+"l4_"+i+"_fontFamily"] = Stage.layers[4][i].fontFamily;
+				localStorage[chkpt+"l4_"+i+"_fontSize"] = Stage.layers[4][i].fontSize;
+				localStorage[chkpt+"l4_"+i+"_lineHeight"] = Stage.layers[4][i].lineHeight;
+				localStorage[chkpt+"l4_"+i+"_fontWeight"] = Stage.layers[4][i].fontWeight;
+				localStorage[chkpt+"l4_"+i+"_fontColor"] = Stage.layers[4][i].fontColor;
+				localStorage[chkpt+"l4_"+i+"_tagFamily"] = Stage.layers[4][i].tagFamily;
+				localStorage[chkpt+"l4_"+i+"_tagSize"] = Stage.layers[4][i].tagSize;
+				localStorage[chkpt+"l4_"+i+"_tagWeight"] = Stage.layers[4][i].tagWeight;
+				localStorage[chkpt+"l4_"+i+"_tagColor"] = Stage.layers[4][i].tagColor;
+				localStorage[chkpt+"l4_"+i+"_timeout"] = Stage.layers[4][i].timeout;
+				localStorage[chkpt+"l4_"+i+"_textAlign"] = Stage.layers[4][i].textAlign;
+				localStorage[chkpt+"l4_"+i+"_offset_x"] = Stage.layers[4][i].textOffset.vx;
+				localStorage[chkpt+"l4_"+i+"_offset_y"] = Stage.layers[4][i].textOffset.vy;
+				localStorage[chkpt+"l4_"+i+"_inputFocus"] = Stage.layers[4][i].inputFocus;
+				localStorage[chkpt+"l4_"+i+"_alpha"] = Stage.layers[4][i].alpha;
+				localStorage[chkpt+"l4_"+i+"_effects"] = Stage.layers[4][i].effects;
+				localStorage[chkpt+"l4_"+i+"_jumpTo_count"] = Stage.layers[4][i].jumpTo.length;
 				for (var j=0; j<Stage.layers[4][i].jumpTo.length; j++) {
-					localStorage["l4_"+i+"jumpTo"+j+"hotspot_x"] = Stage.layers[4][i].jumpTo[j].hotspot[0];
-					localStorage["l4_"+i+"jumpTo"+j+"hotspot_y"] = Stage.layers[4][i].jumpTo[j].hotspot[1];
-					localStorage["l4_"+i+"jumpTo"+j+"link"] = Stage.layers[4][i].jumpTo[j].link;
+					localStorage[chkpt+"l4_"+i+"jumpTo"+j+"hotspot_x"] = Stage.layers[4][i].jumpTo[j].hotspot[0];
+					localStorage[chkpt+"l4_"+i+"jumpTo"+j+"hotspot_y"] = Stage.layers[4][i].jumpTo[j].hotspot[1];
+					localStorage[chkpt+"l4_"+i+"jumpTo"+j+"link"] = Stage.layers[4][i].jumpTo[j].link;
 				}
 			}
 			else {
-				localStorage["l4_"+i+"_type"] = Stage.layers[4][i].type;
-				localStorage["l4_"+i+"_id"] = Stage.layers[4][i].id;
+				localStorage[chkpt+"l4_"+i+"_type"] = Stage.layers[4][i].type;
+				localStorage[chkpt+"l4_"+i+"_id"] = Stage.layers[4][i].id;
 				if (Stage.layers[4][i].group != '')
-					localStorage["l4_"+i+"_group"] = Stage.layers[4][i].group;
+					localStorage[chkpt+"l4_"+i+"_group"] = Stage.layers[4][i].group;
 				else
-					localStorage["l4_"+i+"_group"] = "undefined";
-				localStorage["l4_"+i+"_param"] = JSON.stringify(Stage.layers[4][i].saveparam);			
-				localStorage["l4_"+i+"_text"] = Stage.layers[4][i].text;
-				localStorage["l4_"+i+"_visible"] = Stage.layers[4][i].visible;
+					localStorage[chkpt+"l4_"+i+"_group"] = "undefined";
+				localStorage[chkpt+"l4_"+i+"_param"] = JSON.stringify(Stage.layers[4][i].saveparam);			
+				localStorage[chkpt+"l4_"+i+"_text"] = Stage.layers[4][i].text;
+				localStorage[chkpt+"l4_"+i+"_visible"] = Stage.layers[4][i].visible;
 				if ((Stage.layers[4][i].link != null) && (Stage.layers[4][i].link.length > 0)) {
-					localStorage["l4_"+i+"_link_count"] = Stage.layers[4][i].link.length;
+					localStorage[chkpt+"l4_"+i+"_link_count"] = Stage.layers[4][i].link.length;
 					for (var j=0; j<Stage.layers[4][i].link.length; j+=2) {
-						localStorage["l4_"+i+"_link_"+j] = Stage.layers[4][i].link[j].toString().split(/[\s|(|)|{|}]/g, 2)[1];
-						localStorage["l4_"+i+"_link_"+(j+1)] = JSON.stringify(Stage.layers[4][i].link[j+1]);
+						localStorage[chkpt+"l4_"+i+"_link_"+j] = Stage.layers[4][i].link[j].toString().split(/[\s|(|)|{|}]/g, 2)[1];
+						localStorage[chkpt+"l4_"+i+"_link_"+(j+1)] = JSON.stringify(Stage.layers[4][i].link[j+1]);
 					}
 				}
 				else {
-					localStorage["l4_"+i+"_link_count"] = 0;				
-					//localStorage["l4_"+i+"_link_0"] = "undefined";
-					//localStorage["l4_"+i+"_link_1"] = "undefined";
+					localStorage[chkpt+"l4_"+i+"_link_count"] = 0;				
+					//localStorage[chkpt+"l4_"+i+"_link_0"] = "undefined";
+					//localStorage[chkpt+"l4_"+i+"_link_1"] = "undefined";
 				}
 			}
 		}
 		// Store sounds
 		for (var i=0; i<4; i++) {
-			localStorage["s"+i+"_count"] = Stage.sounds[i].length;
+			localStorage[chkpt+"s"+i+"_count"] = Stage.sounds[i].length;
 			for (var j=0; j<Stage.sounds[i].length; j++) {
-				localStorage["s"+i+"_"+j+"_src"] = Stage.sounds[i][j].src;
-				localStorage["s"+i+"_"+j+"_repeat"] = Stage.sounds[i][j].repeat;
-				localStorage["s"+i+"_"+j+"_delay"] = Stage.sounds[i][j].delay;
-				localStorage["s"+i+"_"+j+"_isStopping"] = Stage.sounds[i][j].isStopping;
-				localStorage["s"+i+"_"+j+"_isPaused"] = Stage.sounds[i][j].isPaused;
+				localStorage[chkpt+"s"+i+"_"+j+"_src"] = Stage.sounds[i][j].src;
+				localStorage[chkpt+"s"+i+"_"+j+"_repeat"] = Stage.sounds[i][j].repeat;
+				localStorage[chkpt+"s"+i+"_"+j+"_delay"] = Stage.sounds[i][j].delay;
+				localStorage[chkpt+"s"+i+"_"+j+"_isStopping"] = Stage.sounds[i][j].isStopping;
+				localStorage[chkpt+"s"+i+"_"+j+"_isPaused"] = Stage.sounds[i][j].isPaused;
 			}
 		}
 		// Store video?? No need. Videos are non-persistent data anyway
 		// Store user variables
-		var str_uv = JSON.stringify(Stage.variables);
-		if (str_uv != '{}') {
-			var arr_uv = str_uv.replace(/[{|}]/g,'').split(/[\s|:|,]/g);
-			localStorage["uv_count"] = arr_uv.length/5;
-			for (var i=0; i<arr_uv.length; i+=5) {
-				arr_uv[i] = eval(arr_uv[i]);
-				localStorage["uv"+i/5+"_name"] = arr_uv[i];
-				localStorage["uv"+i/5+"_value"] = Stage.variables[arr_uv[i]].Value();
-				localStorage["uv"+i/5+"_type"] = Stage.variables[arr_uv[i]].Type();
+		var uv_count = 0;
+		for (prop in Stage.variables) {
+			if (Stage.variables.hasOwnProperty(prop)) {
+				localStorage[chkpt+"uv"+uv_count+"_name"] = prop;
+				localStorage[chkpt+"uv"+uv_count+"_value"] = JSON.stringify(Stage.variables[prop].Value());
+				localStorage[chkpt+"uv"+uv_count+"_type"] = Stage.variables[prop].Type();
+				localStorage[chkpt+"uv"+uv_count+"_persist"] = (Stage.variables[prop].persist) ? Stage.variables[prop].persist : false;
+				uv_count++;
 			}
-			arr_uv = null;
 		}
-		else {
-			localStorage["uv_count"] = 0;
-		}
+		localStorage[chkpt+"uv_count"] = uv_count;
 		// Store forms
-		localStorage["forms_count"] = Stage.formStack.length;
+		localStorage[chkpt+"forms_count"] = Stage.formStack.length;
 		for (var i=0; i<Stage.formStack.length; i++) {
-			localStorage["formStack_"+i] = Stage.formStack[i];
+			localStorage[chkpt+"formStack_"+i] = Stage.formStack[i];
 		}
-		localStorage["forms_style_count"] = Stage.formStyle.length;
+		localStorage[chkpt+"forms_style_count"] = Stage.formStyle.length;
 		for (var i=0; i<Stage.formStyle.length; i++) {
-			localStorage["formStyle_"+i] = Stage.formStyle[i];
+			localStorage[chkpt+"formStyle_"+i] = Stage.formStyle[i];
 		}
 		// Store config
-		localStorage["Config"] = JSON.stringify(Config);
+		localStorage[chkpt+"Config"] = JSON.stringify(Config);
 	}
-	else if (param == "load") {
-		if (localStorage.length <= 0) {
+	else if (cmd == "load") {
+		var chkpt_exist = false;
+		if (chkpt != '') {
+			var pattern = "/^"+chkpt+"/g";
+			for (prop in localStorage) {
+				if (prop.match(eval(pattern))) {
+					chkpt_exist = true;
+					break;
+				}
+			}
+		}
+		else chkpt_exist = true;
+		if ((localStorage.length <= 0) || !chkpt_exist){
 			alert ("No checkpoint data found!\nStarting a new game instead...");
 			return;
 		}
-		// at this point, Stage.Init has been called with empty classes
 		// populate layer 0
 		Stage.layers[0].splice(0, Stage.layers[0].length);
-		for (var i=0; i<parseInt(localStorage["l0_count"]); i++) {
+		for (var i=0; i<parseInt(localStorage[chkpt+"l0_count"]); i++) {
 			var bg = new Backdrop();
 			bg.type = 'scene';
 			var obj = new Array();
-			for (var j=0; j<parseInt(localStorage["l0_"+i+"_obj_count"]); j++) {
+			for (var j=0; j<parseInt(localStorage[chkpt+"l0_"+i+"_obj_count"]); j++) {
 				var item = {src:'', x:0, y:0};
-				item.src = localStorage["l0_"+i+"_obj_"+j+"_src"];
-				item.x = parseInt(localStorage["l0_"+i+"_obj_"+j+"_x"]);
-				item.y = parseInt(localStorage["l0_"+i+"_obj_"+j+"_y"]);
+				item.src = localStorage[chkpt+"l0_"+i+"_obj_"+j+"_src"];
+				item.x = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_x"]);
+				item.y = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_y"]);
 				obj.push(item);
 			}
-			bg.Create(localStorage["l0_"+i+"_id"], localStorage["l0_"+i+"_src"], obj);
-			bg.effects = localStorage["l0_"+i+"_effects"];
-			bg.alpha = parseFloat(localStorage["l0_"+i+"_alpha"]);
-			bg.visible = (localStorage["l0_"+i+"_visible"] == "true");
-			bg.transTime = parseFloat(localStorage["l0_"+i+"_time"]);
-			//if (localStorage["l0_"+i+"_posMode"] != "undefined")
-			//	bg.posMode = localStorage["l0_"+i+"_posMode"];
-			//else
-			//	bg.posMode = '';
-			bg.orientation = parseFloat(localStorage["l0_"+i+"_orientation"]);
-			bg.rotation = parseFloat(localStorage["l0_"+i+"_orientation"]);
-			bg.size = parseFloat(localStorage["l0_"+i+"_size"]);
-			bg.scale = parseFloat(localStorage["l0_"+i+"_size"]);
+			bg.Create(localStorage[chkpt+"l0_"+i+"_id"], localStorage[chkpt+"l0_"+i+"_src"], obj);
+			bg.effects = localStorage[chkpt+"l0_"+i+"_effects"];
+			bg.alpha = parseFloat(localStorage[chkpt+"l0_"+i+"_alpha"]);
+			bg.visible = (localStorage[chkpt+"l0_"+i+"_visible"] == "true");
+			bg.transTime = parseFloat(localStorage[chkpt+"l0_"+i+"_time"]);
+			bg.orientation = parseFloat(localStorage[chkpt+"l0_"+i+"_orientation"]);
+			bg.rotation = parseFloat(localStorage[chkpt+"l0_"+i+"_orientation"]);
+			bg.size = parseFloat(localStorage[chkpt+"l0_"+i+"_size"]);
+			bg.scale = parseFloat(localStorage[chkpt+"l0_"+i+"_size"]);
 			Stage.layers[0].push(bg);
 			obj = null; bg = null;
 		}
 		// populate layer 1
 		Stage.layers[1].splice(0, Stage.layers[1].length);
-		for (var i=0; i<parseInt(localStorage["l1_count"]); i++) {
-			var chr = new Character(localStorage["l1_"+i+"_id"]);
+		for (var i=0; i<parseInt(localStorage[chkpt+"l1_count"]); i++) {
+			var chr = new Character(localStorage[chkpt+"l1_"+i+"_id"]);
 			//chr.type = 'actor';
-			//chr.Create(localStorage["l1_"+i+"_id"]);
-			chr.nick = localStorage["l1_"+i+"_nick"];
-			chr.color = localStorage["l1_"+i+"_color"];
-			for (var j=0; j<parseInt(localStorage["l1_"+i+"_spites_count"]); j++) {
-				chr.AddSprite(localStorage["l1_"+i+"_sprites_"+j+"_id"], localStorage["l1_"+i+"_sprites_"+j+"_src"]);
+			//chr.Create(localStorage[chkpt+"l1_"+i+"_id"]);
+			chr.nick = localStorage[chkpt+"l1_"+i+"_nick"];
+			chr.color = localStorage[chkpt+"l1_"+i+"_color"];
+			chr.z_order = parseInt(localStorage[chkpt+"l1_"+i+"_zorder"]);
+			for (var j=0; j<parseInt(localStorage[chkpt+"l1_"+i+"_sprites_count"]); j++) {
+				chr.AddSprite(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"], 
+							  localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"],
+							  localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"]);
 			}
-			if (localStorage["l1_"+i+"_avatar"] != "undefined")
-				chr.AddAvatar(localStorage["l1_"+i+"_avatar"]);
+			if (localStorage[chkpt+"l1_"+i+"_avatar"] != "undefined")
+				chr.AddAvatar(localStorage[chkpt+"l1_"+i+"_avatar"]);
 			else 
 				chr.AddAvatar('');
-			chr.activeSprite = parseInt(localStorage["l1_"+i+"_active"]);
-			chr.alpha = parseFloat(localStorage["l1_"+i+"_alpha"]);
-			//chr.effects = localStorage["l1_"+i+"_effects"];
-			if (localStorage["l1_"+i+"_effects"] != "undefined")
-				chr.prevFx = localStorage["l1_"+i+"_effects"];
+			chr.activeSprite = parseInt(localStorage[chkpt+"l1_"+i+"_active"]);
+			chr.offset = new Vector2d(parseInt(localStorage[chkpt+"l1_"+i+"_offset_x"]), parseInt(localStorage[chkpt+"l1_"+i+"_offset_y"]))
+			chr.alpha = parseFloat(localStorage[chkpt+"l1_"+i+"_alpha"]);
+			//chr.effects = localStorage[chkpt+"l1_"+i+"_effects"];
+			if (localStorage[chkpt+"l1_"+i+"_effects"] != "undefined")
+				chr.prevFx = localStorage[chkpt+"l1_"+i+"_effects"];
 			else
 				chr.prevFx = 'done';
-			chr.transTime = parseFloat(localStorage["l1_"+i+"_time"]);
-			chr.visible = (localStorage["l1_"+i+"_visible"] == "true");
-			chr.pendingRemoval = (localStorage["l1_"+i+"_pending"] == "true");
-			chr.posMode = localStorage["l1_"+i+"_posMode"];
-			//chr.fxparam = localStorage["l1_"+i+"_fxparam"];
-			chr.orientation = parseFloat(localStorage["l1_"+i+"_orientation"]);
-			chr.rotation = parseFloat(localStorage["l1_"+i+"_orientation"]);
-			chr.size = parseFloat(localStorage["l1_"+i+"_size"]);
-			chr.scale = parseFloat(localStorage["l1_"+i+"_size"]);
+			chr.transTime = parseFloat(localStorage[chkpt+"l1_"+i+"_time"]);
+			chr.visible = (localStorage[chkpt+"l1_"+i+"_visible"] == "true");
+			chr.pendingRemoval = (localStorage[chkpt+"l1_"+i+"_pending"] == "true");
+			chr.posMode = localStorage[chkpt+"l1_"+i+"_posMode"];
+			//chr.fxparam = localStorage[chkpt+"l1_"+i+"_fxparam"];
+			chr.orientation = parseFloat(localStorage[chkpt+"l1_"+i+"_orientation"]);
+			chr.rotation = parseFloat(localStorage[chkpt+"l1_"+i+"_orientation"]);
+			chr.size = parseFloat(localStorage[chkpt+"l1_"+i+"_size"]);
+			chr.scale = parseFloat(localStorage[chkpt+"l1_"+i+"_size"]);
 			Stage.layers[1].push(chr);
 			chr = null;
 		}
 		// populate layer 2
 		Stage.layers[2].splice(0, Stage.layers[2].length);
-		for (var i=0; i<parseInt(localStorage["l2_count"]); i++) {
+		for (var i=0; i<parseInt(localStorage[chkpt+"l2_count"]); i++) {
 			var ovl = new Backdrop();
 			ovl.type = 'overlay';
-			ovl.Create(localStorage["l2_"+i+"_id"], localStorage["l2_"+i+"_src"], null);
-			ovl.effects = localStorage["l2_"+i+"_effects"];
-			ovl.alpha = parseFloat(localStorage["l2_"+i+"_alpha"]);
-			ovl.visible = (localStorage["l2_"+i+"_visible"] == "true");
-			ovl.transTime = parseFloat(localStorage["l2_"+i+"_time"]);
-			ovl.scroll = (localStorage["l2_"+i+"_scroll"] == "true");
-			ovl.offset = new Vector2d(parseInt(localStorage["l2_"+i+"_offset_x"]), parseInt(localStorage["l2_"+i+"_offset_y"]))
-			//if (localStorage["l2_"+i+"_posMode"] != "undefined")
-			//	ovl.posMode = localStorage["l2_"+i+"_posMode"];
-			//else
-			//	ovl.posMode = '';
-			ovl.orientation = parseFloat(localStorage["l2_"+i+"_orientation"]);
-			ovl.rotation = parseFloat(localStorage["l2_"+i+"_orientation"]);
-			ovl.size = parseFloat(localStorage["l2_"+i+"_size"]);
-			ovl.scale = parseFloat(localStorage["l2_"+i+"_size"]);
+			ovl.Create(localStorage[chkpt+"l2_"+i+"_id"], localStorage[chkpt+"l2_"+i+"_src"], null);
+			ovl.effects = localStorage[chkpt+"l2_"+i+"_effects"];
+			ovl.alpha = parseFloat(localStorage[chkpt+"l2_"+i+"_alpha"]);
+			ovl.visible = (localStorage[chkpt+"l2_"+i+"_visible"] == "true");
+			ovl.transTime = parseFloat(localStorage[chkpt+"l2_"+i+"_time"]);
+			ovl.scroll = (localStorage[chkpt+"l2_"+i+"_scroll"] == "true");
+			ovl.offset = new Vector2d(parseInt(localStorage[chkpt+"l2_"+i+"_offset_x"]), parseInt(localStorage[chkpt+"l2_"+i+"_offset_y"]))
+			ovl.orientation = parseFloat(localStorage[chkpt+"l2_"+i+"_orientation"]);
+			ovl.rotation = parseFloat(localStorage[chkpt+"l2_"+i+"_orientation"]);
+			ovl.size = parseFloat(localStorage[chkpt+"l2_"+i+"_size"]);
+			ovl.scale = parseFloat(localStorage[chkpt+"l2_"+i+"_size"]);
 			Stage.layers[2].push(ovl);
 			ovl = null;
 		}
 		// populate layer 3
 		Stage.layers[3].splice(0, Stage.layers[3].length);
-		for (var i=0; i<parseInt(localStorage["l3_count"]); i++) {
-			var atm = new Atmosphere(localStorage["l3_"+i+"_id"]);
-			var param = JSON.parse(localStorage["l3_"+i+"_param"]);
-			//atm.Create(localStorage["l3_"+i+"_id"]);
-			atm.Init(localStorage["l3_"+i+"_type"], param);
-			atm.action = localStorage["l3_"+i+"_action"];
-			atm.visible = (localStorage["l3_"+i+"_visible"] == "true");
+		for (var i=0; i<parseInt(localStorage[chkpt+"l3_count"]); i++) {
+			var atm = new Atmosphere(localStorage[chkpt+"l3_"+i+"_id"]);
+			var param = JSON.parse(localStorage[chkpt+"l3_"+i+"_param"]);
+			//atm.Create(localStorage[chkpt+"l3_"+i+"_id"]);
+			atm.Init(localStorage[chkpt+"l3_"+i+"_type"], param);
+			atm.action = localStorage[chkpt+"l3_"+i+"_action"];
+			atm.visible = (localStorage[chkpt+"l3_"+i+"_visible"] == "true");
 			Stage.layers[3].push(atm);
 			atm = null;
 		}
 		// populate layer 4
 		Stage.layers[4].splice(0, Stage.layers[4].length);
-		for (var i=0; i<parseInt(localStorage["l4_count"]); i++) {
-			if (localStorage["l4_"+i+"_type"] == 'box') {
+		for (var i=0; i<parseInt(localStorage[chkpt+"l4_count"]); i++) {
+			if (localStorage[chkpt+"l4_"+i+"_type"] == 'box') {
 				var sb = new ScriptBox();
 				sb.Create(Stage.canvas.width, Stage.canvas.height);
-				sb.visible = (localStorage["l4_"+i+"_visible"] == "true");
-				sb.text = localStorage["l4_"+i+"_text"];
-				sb.pos = localStorage["l4_"+i+"_pos"];
-				sb.back = localStorage["l4_"+i+"_back"];
-				if (localStorage["l4_"+i+"_src"] != "undefined")
-					sb.src = localStorage["l4_"+i+"_src"];
+				sb.visible = (localStorage[chkpt+"l4_"+i+"_visible"] == "true");
+				sb.text = localStorage[chkpt+"l4_"+i+"_text"];
+				sb.pos = localStorage[chkpt+"l4_"+i+"_pos"];
+				sb.back = localStorage[chkpt+"l4_"+i+"_back"];
+				if (localStorage[chkpt+"l4_"+i+"_src"] != "undefined")
+					sb.src = localStorage[chkpt+"l4_"+i+"_src"];
 				else
 					sb.src = null;
-				if (localStorage["l4_"+i+"_prompt"] != "undefined") {
-					sb.psrc = localStorage["l4_"+i+"_prompt"];
+				if (localStorage[chkpt+"l4_"+i+"_prompt"] != "undefined") {
+					sb.psrc = localStorage[chkpt+"l4_"+i+"_prompt"];
 					sb.prompt.src = sb.psrc;
 				}
 				else 
 					sb.psrc = '';
-				if (localStorage["l4_"+i+"_avatar"] != "undefined") {
+				if (localStorage[chkpt+"l4_"+i+"_avatar"] != "undefined") {
 					for (var j in Stage.layers[1]) {
 						if (Stage.layers[1][j].avatar && 
-						   (Stage.layers[1][j].avatar.src.search(localStorage["l4_"+i+"_avatar"])!=-1)) {
+						   (Stage.layers[1][j].avatar.src.search(localStorage[chkpt+"l4_"+i+"_avatar"])!=-1)) {
 							sb.avatar = Stage.layers[1][j].avatar;
 							break;
 						}
@@ -2231,28 +2352,32 @@ function checkpoint(param) {
 				}
 				else
 					sb.avatar = null;
-				sb.cont = (localStorage["l4_"+i+"_cont"] == "true");
-				sb.fontFamily = localStorage["l4_"+i+"_fontFamily"];
-				sb.fontSize = localStorage["l4_"+i+"_fontSize"];
-				sb.lineHeight = localStorage["l4_"+i+"_lineHeight"];
-				sb.fontWeight = localStorage["l4_"+i+"_fontWeight"];
-				sb.fontColor = localStorage["l4_"+i+"_fontColor"];
-				sb.tagFamily = localStorage["l4_"+i+"_tagFamily"];
-				sb.tagSize = localStorage["l4_"+i+"_tagSize"];
-				sb.tagWeight = localStorage["l4_"+i+"_tagWeight"];
-				sb.tagColor = localStorage["l4_"+i+"_tagColor"];
-				sb.timeout = parseFloat(localStorage["l4_"+i+"_timeout"]);
-				sb.textAlign = localStorage["l4_"+i+"_textAlign"];
-				sb.textOffset.vx = parseInt(localStorage["l4_"+i+"_offset_x"]);
-				sb.textOffset.vy = parseInt(localStorage["l4_"+i+"_offset_y"]);
-				sb.inputFocus = (localStorage["l4_"+i+"_inputFocus"] == "true");
-				sb.alpha = parseFloat(localStorage["l4_"+i+"_alpha"]);
-				sb.effects = localStorage["l4_"+i+"_effects"];
-				for (var j=0; j<parseInt(localStorage["l4_"+i+"_jumpTo_count"]); j++) {
+				if (localStorage[chkpt+"l4_"+i+"_balloon"] != "undefined")
+					sb.balloon = localStorage[chkpt+"l4_"+i+"_balloon"];
+				else
+					sb.balloon = null;
+				sb.cont = (localStorage[chkpt+"l4_"+i+"_cont"] == "true");
+				sb.fontFamily = localStorage[chkpt+"l4_"+i+"_fontFamily"];
+				sb.fontSize = localStorage[chkpt+"l4_"+i+"_fontSize"];
+				sb.lineHeight = localStorage[chkpt+"l4_"+i+"_lineHeight"];
+				sb.fontWeight = localStorage[chkpt+"l4_"+i+"_fontWeight"];
+				sb.fontColor = localStorage[chkpt+"l4_"+i+"_fontColor"];
+				sb.tagFamily = localStorage[chkpt+"l4_"+i+"_tagFamily"];
+				sb.tagSize = localStorage[chkpt+"l4_"+i+"_tagSize"];
+				sb.tagWeight = localStorage[chkpt+"l4_"+i+"_tagWeight"];
+				sb.tagColor = localStorage[chkpt+"l4_"+i+"_tagColor"];
+				sb.timeout = parseFloat(localStorage[chkpt+"l4_"+i+"_timeout"]);
+				sb.textAlign = localStorage[chkpt+"l4_"+i+"_textAlign"];
+				sb.textOffset.vx = parseInt(localStorage[chkpt+"l4_"+i+"_offset_x"]);
+				sb.textOffset.vy = parseInt(localStorage[chkpt+"l4_"+i+"_offset_y"]);
+				sb.inputFocus = (localStorage[chkpt+"l4_"+i+"_inputFocus"] == "true");
+				sb.alpha = parseFloat(localStorage[chkpt+"l4_"+i+"_alpha"]);
+				sb.effects = localStorage[chkpt+"l4_"+i+"_effects"];
+				for (var j=0; j<parseInt(localStorage[chkpt+"l4_"+i+"_jumpTo_count"]); j++) {
 					var menuItem = {hotspot:[], link:''};
-					menuItem.link = localStorage["l4_"+i+"jumpTo"+j+"link"];
-					menuItem.hotspot = [parseInt(localStorage["l4_"+i+"jumpTo"+j+"hotspot_x"]),
-										parseInt(localStorage["l4_"+i+"jumpTo"+j+"hotspot_y"])];
+					menuItem.link = localStorage[chkpt+"l4_"+i+"jumpTo"+j+"link"];
+					menuItem.hotspot = [parseInt(localStorage[chkpt+"l4_"+i+"jumpTo"+j+"hotspot_x"]),
+										parseInt(localStorage[chkpt+"l4_"+i+"jumpTo"+j+"hotspot_y"])];
 					sb.jumpTo.push(menuItem);
 				}			
 				Stage.layers[4].push(sb);
@@ -2261,26 +2386,26 @@ function checkpoint(param) {
 			else {
 				var element = new ActiveImage();
 				var link = new Array();
-				element.saveparam = JSON.parse(localStorage["l4_"+i+"_param"]);
-				element.type = localStorage["l4_"+i+"_type"];
+				element.saveparam = JSON.parse(localStorage[chkpt+"l4_"+i+"_param"]);
+				element.type = localStorage[chkpt+"l4_"+i+"_type"];
 				CformElements[element.type]['_init'](element, element.saveparam);
-				if (localStorage["l4_"+i+"_group"] != "undefined")
-					element.group = localStorage["l4_"+i+"_group"];
-				element.text = localStorage["l4_"+i+"_text"];
-				element.visible = (localStorage["l4_"+i+"_visible"] == "true");
-				for (var j=0; j<parseInt(localStorage["l4_"+i+"_link_count"]); j+=2) {
-					link.push(eval(localStorage["l4_"+i+"_link_"+j]));
-					link.push(JSON.parse(localStorage["l4_"+i+"_link_"+(j+1)]));
+				if (localStorage[chkpt+"l4_"+i+"_group"] != "undefined")
+					element.group = localStorage[chkpt+"l4_"+i+"_group"];
+				element.text = localStorage[chkpt+"l4_"+i+"_text"];
+				element.visible = (localStorage[chkpt+"l4_"+i+"_visible"] == "true");
+				for (var j=0; j<parseInt(localStorage[chkpt+"l4_"+i+"_link_count"]); j+=2) {
+					link.push(eval(localStorage[chkpt+"l4_"+i+"_link_"+j]));
+					link.push(JSON.parse(localStorage[chkpt+"l4_"+i+"_link_"+(j+1)]));
 				}
 				if (link.length > 0)
 					element.link = link;
 				else
 					element.link = null;
-				/*if ((localStorage["l4_"+i+"_link_0"] != "undefined") && 
-					(localStorage["l4_"+i+"_link_1"] != "undefined")) {
+				/*if ((localStorage[chkpt+"l4_"+i+"_link_0"] != "undefined") && 
+					(localStorage[chkpt+"l4_"+i+"_link_1"] != "undefined")) {
 					var link = new Array();
-					link.push(eval(localStorage["l4_"+i+"_link_0"]));
-					link.push(JSON.parse(localStorage["l4_"+i+"_link_1"]));
+					link.push(eval(localStorage[chkpt+"l4_"+i+"_link_0"]));
+					link.push(JSON.parse(localStorage[chkpt+"l4_"+i+"_link_1"]));
 					element.link = link;
 				}*/
 				Stage.layers[4].push(element);
@@ -2290,49 +2415,64 @@ function checkpoint(param) {
 		// Populate sounds
 		for (var i=0; i<4; i++) {
 			Stage.sounds[i].splice(0, Stage.sounds[i].length);
-			for (var j=0; j<parseInt(localStorage["s"+i+"_count"]); j++) {
+			for (var j=0; j<parseInt(localStorage[chkpt+"s"+i+"_count"]); j++) {
 				var s = new Sounds();
-				s.src = localStorage["s"+i+"_"+j+"_src"];
-				s.repeat = parseInt(localStorage["s"+i+"_"+j+"_repeat"]);
-				s.delay = parseFloat(localStorage["s"+i+"_"+j+"_delay"]);
-				s.isStopping = (localStorage["s"+i+"_"+j+"_isStopping"] == "true");
-				s.isPaused = (localStorage["s"+i+"_"+j+"_isPaused"] == "true");
+				s.src = localStorage[chkpt+"s"+i+"_"+j+"_src"];
+				s.repeat = parseInt(localStorage[chkpt+"s"+i+"_"+j+"_repeat"]);
+				s.delay = parseFloat(localStorage[chkpt+"s"+i+"_"+j+"_delay"]);
+				s.isStopping = (localStorage[chkpt+"s"+i+"_"+j+"_isStopping"] == "true");
+				s.isPaused = (localStorage[chkpt+"s"+i+"_"+j+"_isPaused"] == "true");
 				Stage.sounds[i].push(s);
 				s = null;
 			}
 		}
 		// populate user variables
 		Stage.variables = {};
-		for (var i=0; i<parseInt(localStorage["uv_count"]); i++) {
+		for (var i=0; i<parseInt(localStorage[chkpt+"uv_count"]); i++) {
 			var uv = new UserVars();
-			if (localStorage["uv"+i+"_type"] == "number")
-				uv.Set(parseFloat(localStorage["uv"+i+"_value"]));
-			else if (localStorage["uv"+i+"_type"] == "boolean")
-				uv.Set((localStorage["uv"+i+"_value"] == "true"));
-			else
-				uv.Set(localStorage["uv"+i+"_value"]);
-			Stage.variables[localStorage["uv"+i+"_name"]] = uv;
+			uv.Set(JSON.parse(localStorage[chkpt+"uv"+i+"_value"]),(localStorage[chkpt+"uv"+i+"_persist"] == "true"));
+			Stage.variables[localStorage[chkpt+"uv"+i+"_name"]] = uv;
 			uv = null;
 		}
+		// overwrite persistent user variables
+		for (prop in localStorage) {
+			if (prop.match(/^_persist_uv_/g)) {
+				var uv = new UserVars();
+				uv.Set(JSON.parse(localStorage[prop]), true);
+				Stage.variables[prop.replace(/^_persist_uv_/g,'')] = uv;
+				uv = null;
+			}
+		}
+		
 		// populate form stack and style
 		Stage.formStack.splice(0, Stage.formStack.length);
-		for (var i=0; i<parseInt(localStorage["forms_count"]); i++) {
-			Stage.formStack.push(localStorage["formStack_"+i]);
+		for (var i=0; i<parseInt(localStorage[chkpt+"forms_count"]); i++) {
+			Stage.formStack.push(localStorage[chkpt+"formStack_"+i]);
 		}
 		Stage.formStyle.splice(0, Stage.formStyle.length);
-		for (var i=0; i<parseInt(localStorage["forms_style_count"]); i++) {
-			Stage.formStyle.push(localStorage["formStyle_"+i]);
+		for (var i=0; i<parseInt(localStorage[chkpt+"forms_style_count"]); i++) {
+			Stage.formStyle.push(localStorage[chkpt+"formStyle_"+i]);
 		}
 		// populate Config
-		Config = JSON.parse(localStorage["Config"]);
+		Config = JSON.parse(localStorage[chkpt+"Config"]);
 		Helper.configUpdate("activeTheme");
 		
 		// populate frameStack
-		Stage.script.frameStack = JSON.parse(localStorage["frameStack"])
+		Stage.script.frameStack = JSON.parse(localStorage[chkpt+"frameStack"])
 		// then jump to checkpoint location
-		if (localStorage["sequence"] != '')
-			Stage.script.sequence = eval(localStorage["sequence"]);
-		Stage.script.frame = parseInt(localStorage["frame"]);
+		if (localStorage[chkpt+"sequence"] != '')
+			Stage.script.sequence = eval(localStorage[chkpt+"sequence"]);
+		Stage.script.frame = parseInt(localStorage[chkpt+"frame"]);
+	}
+	else if (cmd == 'clear') {
+		if (chkpt != '') {
+			var pattern = "/^"+chkpt+"/g";
+			for (prop in localStorage) {
+				if (prop.match(eval(pattern))) {
+					localStorage.removeItem(prop);
+				}
+			}
+		}
 	}
 }
 
@@ -2344,16 +2484,21 @@ function checkpoint(param) {
 function UserVars() {
 	this.value = 0;
 	this.type = 0;
+	this.persist = false;
 }
-UserVars.prototype.Set = function(v) {
+UserVars.prototype.Set = function(v,p) {
 	this.value = v;
 	this.type = typeof v;
+	if (p) this.persist = p;		
 }
 UserVars.prototype.Value = function() {
 	return this.value;
 }
 UserVars.prototype.Type = function() {
 	return this.type;
+}
+UserVars.prototype.Persist = function() {
+	return this.persist;
 }
 ///////////////////////////////////////////////////////////////////////////////
 // Audio/Video elements
@@ -2620,8 +2765,7 @@ Backdrop.prototype.Reset = function(init) {
 	this.redraw = true;
 }
 Backdrop.prototype.Update = function(elapsed) {
-	if (this.isready)
-		Helper.processEffects(this, elapsed);
+	if (this.isready) Helper.processEffects(this, elapsed);
 	return this.update;
 }
 Backdrop.prototype.Draw = function() {
@@ -2740,11 +2884,11 @@ var CformElements = {
 			// create a user variable named param.name
 			var val = Helper.findVar(escape(param.name));
 			if (val != null) {
-				Stage.variables[escape(param.name)].Set(obj.timeout);
+				Stage.variables[escape(param.name)].Set(obj.timeout, false);
 			}
 			else {
 				var uv = new UserVars();
-				uv.Set(obj.timeout);
+				uv.Set(obj.timeout, false);
 				Stage.variables[escape(param.name)] = uv;
 			}
 			obj.countup = !(obj.timeout > 0);
@@ -2941,9 +3085,11 @@ function ScriptBox() {
 	this.pos = 'bottom';
 	this.back = 'dim';
 	this.src = null;
+	this.balloon = null;
 	this.context = 0;
 	this.canvasText = new CanvasText;
 	this.dimStyle = new Array();
+	this.balloonStyle = new Array();
 	this.jumpTo = new Array();
 	this.origin = new Vector2d(0,0);		// gui origin is topleft
 		
@@ -2979,8 +3125,8 @@ ScriptBox.prototype.Create = function(w, h) {
 	this.src = '';
 	this.vpwidth = w;	// viewport dimensions
 	this.vpheight = h;
-	this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2; 	//1/8;
-	this.origin.vy = this.vpheight * (1-Config.boxHeight);	//3/4;
+	this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
+	this.origin.vy = this.vpheight * (1-Config.boxHeight);
 	
 	// create a default script box: dim at bottom
 	var canvas = document.createElement('canvas');
@@ -3000,31 +3146,57 @@ ScriptBox.prototype.Update = function(elapsed) {
 	var that = this;
 	if (this.changed || this.fxupdate) {
 		if (this.changed) {
-			switch (this.pos) {
-				case 'bottom':
-					this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
-					this.origin.vy = this.vpheight * (1-Config.boxHeight);
-					this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-					this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
-					break;
-				case 'center':
-					this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
-					this.origin.vy = this.vpheight * (1-Config.boxHeight)/2;
-					this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-					this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
-					break;
-				case 'top':
-					this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
-					this.origin.vy = 0;
-					this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-					this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
-					break;
-				case 'full':
-					this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
-					this.origin.vy = this.vpheight * (1-Config.boxFullHeight)/2;
-					this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-					this.context.canvas.setAttribute('height', this.vpheight * Config.boxFullHeight)
-					break;
+			if (!this.balloon) {
+				switch (this.pos) {
+					case 'bottom':
+						this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
+						this.origin.vy = this.vpheight * (1-Config.boxHeight);
+						this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+						this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+						break;
+					case 'center':
+						this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
+						this.origin.vy = this.vpheight * (1-Config.boxHeight)/2;
+						this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+						this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+						break;
+					case 'top':
+						this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
+						this.origin.vy = 0;
+						this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+						this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
+						break;
+					case 'full':
+						this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
+						this.origin.vy = this.vpheight * (1-Config.boxFullHeight)/2;
+						this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
+						this.context.canvas.setAttribute('height', this.vpheight * Config.boxFullHeight)
+						break;
+				}
+			}
+			else {
+				var xoffset = 0, yoffset = 0;
+				for (var i in Stage.layers[1]) {
+					if (Stage.layers[1][i].id == this.balloon) {
+						// TODO: race issue: when checkpoint loading, actor sprite haven't completed
+						// loading yet when actor origin is used below, so set a default to half of 
+						// viewport height instead of half of actor sprite
+						if (Stage.layers[1][i].origin.vy <= 0)
+							yoffset = this.vpheight * (1 - Config.balloonHeight)/2;
+						else
+							yoffset = Stage.layers[1][i].pos.vy - Stage.layers[1][i].origin.vy/2 
+								  - Config.balloonHeight * this.vpheight * 0.5;
+						if (Stage.layers[1][i].pos.vx >= this.vpwidth/2)
+							xoffset = Stage.layers[1][i].pos.vx - Config.balloonWidth * this.vpwidth * 0.75;
+						else
+							xoffset = Stage.layers[1][i].pos.vx - Config.balloonWidth * this.vpwidth * 0.25;
+						break;
+					}
+				}
+				this.origin.vx = xoffset;
+				this.origin.vy = yoffset;
+				this.context.canvas.setAttribute('width', this.vpwidth * Config.balloonWidth);
+				this.context.canvas.setAttribute('height', this.vpheight * Config.balloonHeight);
 			}
 			switch (this.back) {
 				case 'image':
@@ -3107,29 +3279,60 @@ ScriptBox.prototype.Draw = function() {
 	
 	if (this.visible == true) {
 		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);	
-		if (this.back == 'dim') {
+		if (!this.balloon) {
+			if (this.back == 'dim') {
+				this.context.globalAlpha = 0.5;
+				if (this.dimStyle.length > 1) {
+					var grd=this.context.createLinearGradient(0,0,0,this.context.canvas.height);
+					grd.addColorStop(0,this.dimStyle[1]);
+					grd.addColorStop(1/this.context.canvas.height,this.dimStyle[0]);
+					grd.addColorStop(1,this.dimStyle[1]);
+					this.context.fillStyle=grd;
+				} 
+				else {
+					this.context.fillStyle = this.dimStyle[0];
+				}
+				this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
+			}
+			if ((this.back == 'image') && (this.src != null)) {
+				this.context.globalAlpha = 1;		
+				this.context.drawImage(this.image, 0, 0, this.context.canvas.width,this.context.canvas.height);
+			}
+		}
+		else {
 			this.context.globalAlpha = 0.5;
-			if (this.dimStyle.length > 1) {
+			this.context.lineWidth = 2;
+			this.context.strokeStyle = this.balloonStyle[0];
+			
+			if (this.balloonStyle.length > 2) {
 				var grd=this.context.createLinearGradient(0,0,0,this.context.canvas.height);
-				grd.addColorStop(0,this.dimStyle[1]);
-				grd.addColorStop(1/this.context.canvas.height,this.dimStyle[0]);
-				grd.addColorStop(1,this.dimStyle[1]);
+				grd.addColorStop(0,this.balloonStyle[1]);
+				grd.addColorStop(1,this.balloonStyle[2]);
 				this.context.fillStyle=grd;
 			} 
-			else {
-				this.context.fillStyle = this.dimStyle[0];
+			else if (this.balloonStyle.length > 1){
+				this.context.fillStyle = this.balloonStyle[1];
 			}
-			this.context.fillRect(0,0,this.context.canvas.width,this.context.canvas.height);
-		}
-		if ((this.back == 'image') && (this.src != null)) {
-			this.context.globalAlpha = 1;		
-			this.context.drawImage(this.image, 0, 0, this.context.canvas.width,this.context.canvas.height);
+			
+			var balloon_ptr = true;
+			for (var i in Stage.layers[1]) {
+				if (Stage.layers[1][i].id == this.balloon) {
+					if (Stage.layers[1][i].pos.vx >= this.vpwidth/2)
+						balloon_ptr = false;
+					break;
+				}
+			}
+			Helper.createBalloon(this.context,
+								 0,this.lineHeight,this.context.canvas.width,this.context.canvas.height,
+								 10,balloon_ptr);
+			this.context.fill();
+			this.context.stroke();
 		}
 		if (this.text != '') {
 			this.context.globalAlpha = 1;
 			// draw the avatar if any
 			var avatarOffsetX = 0;
-			if (Config.actorShowAvatar == true) {
+			if ((Config.actorShowAvatar == true) && (!this.balloon)){
 				if (this.avatar != null) {
 					avatarOffsetX = this.avatar.width;
 					this.context.drawImage(this.avatar, 
@@ -3140,7 +3343,7 @@ ScriptBox.prototype.Draw = function() {
 			var ret = this.canvasText.drawText({
 				text:this.text,
 				x: this.textOffset.vx + avatarOffsetX,
-				y: this.textOffset.vy, // + this.scrollOffsetY,
+				y: this.textOffset.vy + ((this.balloon) ? this.lineHeight : 0), // + this.scrollOffsetY,
 				align: this.textAlign,
 				alpha: this.alpha,
 				boxWidth:this.context.canvas.width-2*this.textOffset.vx - avatarOffsetX,
@@ -3151,7 +3354,7 @@ ScriptBox.prototype.Draw = function() {
 				//vncanvas doesn't use cache or return this.image
 				this.curLineCount = ret.linecount;
 				if (ret.hotspot.length == 0) {
-					if ((this.effects == 'none') && (this.psrc != ''))
+					if ((this.effects == 'none') && (this.psrc != '') && (!this.balloon))
 						this.context.drawImage(this.prompt, 
 											   ret.endpt[0]>>0, 
 											   (ret.endpt[1] - this.prompt.height)>>0);
@@ -3261,7 +3464,7 @@ Script.prototype.PopFrame = function() {
 ///////////////////////////////////////////////////////////////////////////////
 // Actors
 ///////////////////////////////////////////////////////////////////////////////
-function Character(id) {
+function Character(id, order) {
 	this.type = 'actor';
 	//this.context = 0;
 	this.sprites = new Array();
@@ -3282,7 +3485,7 @@ function Character(id) {
 	this.origin = new Vector2d(0,0);		// actor origin is bottom center
 	this.pos = new Vector2d(0,0);
 	this.target_pos = new Vector2d(0,0);
-	this.offset = new Vector2d(0,0);		// dummy
+	this.offset = new Vector2d(0,0);
 	this.spriteDim = new Vector2d(0,0);
 	this.posMode = 'auto';
 		
@@ -3300,6 +3503,7 @@ function Character(id) {
 	this.wait = true;
 		
 	this.id = id;
+	this.z_order = order;
 	var canvas = document.createElement('canvas');
 	canvas.id = escape(id);
 	this.context = canvas.getContext('2d');
@@ -3310,17 +3514,27 @@ function Character(id) {
 	canvas = null;
 	//return this.context.canvas.id;
 }
-Character.prototype.AddSprite = function(tag, file) {
+Character.prototype.AddSprite = function(tag, file, valign) {
 	var that = this;
 	var idx = -1;
 	if (this.sprites.length > 1) {
 		for (var i in this.sprites) {
 			if (this.sprites[i].id == tag) {
 				if (this.sprites[i].src.src.search(file) != -1) {
-					// this is same sprite, just do nothing
+					// this is same sprite, set to active and update alignment
 					this.isready = true;
 					this.update = false;
 					this.activeSprite = i;
+					if (this.sprites[this.activeSprite].align == 'roof')
+						this.offset.vy = -Stage.canvas.height*(2*Config.actorYPosition-1) + this.sprites[this.activeSprite].src.height;
+					else if (this.sprites[this.activeSprite].align == 'top')
+						this.offset.vy = -Stage.canvas.height*(Config.actorYPosition) + this.sprites[this.activeSprite].src.height;
+					else if (this.sprites[this.activeSprite].align == 'center')
+						this.offset.vy = -Stage.canvas.height*(Config.actorYPosition-0.5) + this.sprites[this.activeSprite].src.height*0.5;
+					else if (this.sprites[this.activeSprite].align == 'bottom')
+						this.offset.vy = -Stage.canvas.height*(Config.actorYPosition-1);
+					else
+						this.offset.vy = 0;
 					return;
 				}
 				else {
@@ -3334,7 +3548,7 @@ Character.prototype.AddSprite = function(tag, file) {
 	this.isready = false;
 	if (idx == -1) {
 		var image = new Image();
-		var newSprite = {id:tag, src:image};
+		var newSprite = {id:tag, src:image, align:(valign)?valign:'floor'};
 		this.sprites.push(newSprite);
 		image = null;
 	} 
@@ -3342,6 +3556,7 @@ Character.prototype.AddSprite = function(tag, file) {
 		var tmpSprite = this.sprites[i];
 		this.sprites.splice(i, 1)
 		tmpSprite.src = new Image();
+		tmpSprite.align = (valign)?valign:'floor';
 		this.sprites.push(tmpSprite);
 		tmpSprite.src = null; tmpSprite = null;
 	}
@@ -3353,12 +3568,23 @@ Character.prototype.AddSprite = function(tag, file) {
 		that.context.canvas.setAttribute('width', dim);
 		that.context.canvas.setAttribute('height', dim);
 		that.origin = new Vector2d(dim/2, dim/2 + that.spriteDim.vy/2);
+		if (that.sprites[that.sprites.length-1].align == 'roof')
+			that.offset.vy = -Stage.canvas.height*(2*Config.actorYPosition-1) + that.sprites[that.sprites.length-1].src.height;
+		else if (that.sprites[that.sprites.length-1].align == 'top')
+			that.offset.vy = -Stage.canvas.height*(Config.actorYPosition) + that.sprites[that.sprites.length-1].src.height;
+		else if (that.sprites[that.sprites.length-1].align == 'center')
+			that.offset.vy = -Stage.canvas.height*(Config.actorYPosition-0.5) + that.sprites[that.sprites.length-1].src.height*0.5;
+		else if (that.sprites[that.sprites.length-1].align == 'bottom')
+			that.offset.vy = -Stage.canvas.height*(Config.actorYPosition-1);
+		else
+			that.offset.vy = 0;
 		that.isready = true;
 	}, false);
 	this.sprites[this.sprites.length-1].src.src = Helper.parseArg(file);
 	this.activeSprite = this.sprites.length-1;
 	this.update = false;
 }
+
 Character.prototype.RemoveSprite = function(tag) {
 	if (this.sprites.length > 1) {
 		for (var i in this.sprites) {
@@ -3504,7 +3730,7 @@ var AtmoEffects = {
 			obj.particles = new Array(obj.numParticles);
 			for (var i=0; i<obj.numParticles; i++) {
 				obj.particles[i] = new Particle();
-				obj.particles[i].Create(obj.context.canvas,obj.direction,0.5,0.2);
+				obj.particles[i].Create(obj.context.canvas,obj.direction,0.25,0.25);
 			}
 			obj.visible = true;
 			// saves
@@ -3698,7 +3924,7 @@ Atmosphere.prototype.Draw = function() {
 	if (!this.isready) return false;
 	if (!this.redraw) return false;
 	if (this.visible) {
-		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);		
+		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);
 		this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
 		AtmoEffects[this.type]['_draw'](this);
 	}	
@@ -3756,15 +3982,13 @@ var Stage = {
 	redraw: 0,
 	update: 0,
 	pause: 0,
-	script: 0,
-	
+	script: 0,	
 	/* user inputs */
 	coord: new Vector2d(0,0),
 	click: new Vector2d(0,0),
 	utimer: 0,
 	utimerOn: false,
 	inputFocus: true,
-	
 	/* event handling */
 	mouseMove: false,
 	mouseClick: false,
@@ -3773,23 +3997,19 @@ var Stage = {
 	mouseOut: false,
 	touchStart: false,
 	touchEnd: false,
-	
 	/*	FPS count */
 	fps: 0,
 	curtime: 0,
 	prevtime: 0,
 	framecount: 0,
-	
 	/* camera movement */
-	// use coord as cameraPos
 	targetPos: new Vector2d(0,0),
 	prevPos: new Vector2d(0,0),
 	camTime: 0,
-	
-	/* temporary static data */
+	/* temporary data */
 	transTime: 0,
 	spritePos: new Array(8),
-
+	shake: 0,
 	/* 	Normally shouldn't need more than 5 layers,
 		the higher the layer, the higher Z order
 			- background = 0: backdrop layer
@@ -3799,25 +4019,21 @@ var Stage = {
 			- interface  = 4: script box, buttons, ads
 	*/
 	layers: new Array(5),
-	
 	/*	User variables that the script can set/get
 		useful for checking conditions, etc.
 	*/
 	variables: {},
-	
-	/*	Sounds to play, 3 types of sound
+	/*	Sounds to play, 3+1 types of sound
 			- bgm = 0: background music
 			- bgs = 1: background sound
 			- se  = 2: sound effects
 			- voice = 3: dialog vocals
 	*/
-	sounds: new Array(4),
-	
+	sounds: new Array(4),	
 	/* 	Videos to play, currently only one video at a time
 			- for intros, cutscenes, etc.
 	*/
 	videos: new Array(),
-	
 	/* 	Forms can be used for user required input/configuration
 			- top menu (for new game, continue or options)
 			- options menu
@@ -3902,6 +4118,7 @@ var Stage = {
 		this.layers[3] = new Array();	//atmosphere
 		this.layers[4] = new Array();	//gui
 		// create an auto-position lookup table, up to 8 simultaneous characters
+		// which is more than enough, else stage will look crowded
 		for (var j=0; j<8; j++) {
 			var table = new Array();
 			for (var i=1; i<j+2; i++) {
@@ -4002,8 +4219,12 @@ var Stage = {
 			}
 		}
 		this.update = running_update;
+		// update stage transition time
 		if ((this.update) && (this.transTime > 0)) {
 			this.transTime = Math.max(0, this.transTime - elapsed/1000);
+			if (this.transTime <=0) {
+				this.shake = 0;
+			}
 		}
 		// reset clicked, assumed processing done
 		this.mouseClick = false;
@@ -4044,7 +4265,7 @@ var Stage = {
 							this.layers[1][i].target_pos.vx = this.spritePos[count-1][j++];
 							Helper.interpolatePosition(this.layers[1][i]);
 						}
-						if (Helper.drawElements(this.layers[1][i],1))
+						if (Helper.drawElements(this.layers[1][i],10 + this.layers[1][i].z_order))
 							running_draw = true;
 					}
 					else if (this.layers[1][i].pendingRemoval) {
@@ -4074,7 +4295,7 @@ var Stage = {
 					this.context.restore();
 				}
 				else {
-					if (Helper.drawElements(this.layers[2][i], 2)) 
+					if (Helper.drawElements(this.layers[2][i], 20)) 
 						running_draw = true;
 				}
 			}
@@ -4155,11 +4376,11 @@ var Stage = {
 			}
 		}
 	},
-	AddDepth: function(layer, dist) {
+	AddDepth: function(order, dist) {
 		if (!Config.actorPerspective) return 0;
-		if (layer > 1) return 0;
+		if (order >= 2) return 0;
 		// process only background and foreground layers
-		return ((layer+1) * 0.1 * dist);
+		return ((order+1) * 0.1 * dist);
 	},
 	GetMousePosition: function(obj, event) {
 		var pos = new Vector2d(event.pageX, event.pageY);

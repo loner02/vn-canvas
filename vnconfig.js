@@ -17,12 +17,16 @@ Theme1 = {
 	// 		if only one color, solid fill
 	// 		if two colors, gradient fill
 	boxDimStyle:		"#808080 #000000",
-	// image box background
+	//	image box background
 	boxImageStyle:		"back-image.png",
 	// 	name tag style	
 	boxTagStyle:		"bold 14px Verdana #c8ffc8",
 	// 	menu hilite color	
 	boxMenuHilite:		"#404040",
+	//	speech balloon fill style
+	balloonFillStyle:	"#000000 #808080",
+	//	speech balloon outline color
+	balloonStrokeStyle: "#FFFFFF",
 }
 
 // Globals for configuration
@@ -49,7 +53,10 @@ Config = {
 	boxFullHeight:		0.875,
 	//  scroll speed relative to a preset speed
 	boxScrollSpeed:		1.0,
-	
+	//	speech balloon size
+	balloonWidth:		0.5,
+	balloonHeight:		0.2,
+
 	// Actors
 	// 	show actor avatar in script box	
 	actorShowAvatar:	true,
@@ -94,4 +101,6 @@ Config = {
 	gameAllowMacro:		true,
 	//	allow custom preload
 	gameAllowPreload:	false,
+	//	allow use of named checkpoints
+	gameNamedCheckpts:	false,
 }
