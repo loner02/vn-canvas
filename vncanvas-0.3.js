@@ -43,6 +43,11 @@
 ******************************************************************************/
 /******************************************************************************
 Revision history:
+Version 0.3 Brenda
+04.10.12 - Added 'map' and 'tile' navigation
+04.06.12 - Added custom 'animation' set
+		 - Added tryit editor for developers
+		 - Bugfix on movement effects (broken due to 'nowait')
 Version 0.2 Althea
 03.06.12 - Added 'z_order' for actor
 		 - Setting a variable to null deletes it
@@ -477,6 +482,12 @@ var Helper = {
 			suffix = '_in';
 		if (param.effect) {
 			var effect = param.effect;
+			if (Stage.animations[param.effect] != null) {
+				effect = Stage.animations[param.effect][1];
+				chr.transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
+				if (Stage.animations[param.effect].length > 2)
+					Helper.queueAnimation('actor', param, Stage.animations[param.effect].slice(2));
+			}
 			chr.wait = true;
 			if (param.effect.indexOf('nowait')!=-1) {
 				chr.wait = false;
@@ -534,6 +545,12 @@ var Helper = {
 				// show the previous overlay
 				if (param.effect) {
 					var effect = param.effect;
+					if (Stage.animations[param.effect] != null) {
+						effect = Stage.animations[param.effect][1];
+						obj[0].transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
+						if (Stage.animations[param.effect].length > 2)
+							Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
+					}
 					obj[0].wait = true;
 					if (param.effect.indexOf('nowait')!=-1) {
 						obj[0].wait = false;
@@ -549,6 +566,8 @@ var Helper = {
 					obj[0].effects = '_in';
 					obj[0].wait = true;
 				}
+				if (param.time != null) 
+					obj[0].transTime = (param.time>0) ? param.time : 0.1;
 				obj[0].drawn = false;
 				obj[0].update = false;
 				return;
@@ -557,6 +576,12 @@ var Helper = {
 			obj[0].effects = '_out';
 			if (param.effect) {
 				var effect = param.effect;
+				if (Stage.animations[param.effect] != null) {
+					effect = Stage.animations[param.effect][1];
+					obj[0].transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
+					if (Stage.animations[param.effect].length > 2)
+						Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
+				}
 				obj[0].wait = true;
 				if (param.effect.indexOf('nowait')!=-1) {
 					obj[0].wait = false;
@@ -568,6 +593,8 @@ var Helper = {
 				if (TransEffects[fxarr[0]]['_init'])
 					TransEffects[fxarr[0]]['_init'](obj[0], obj[0].fxparam);
 			}
+			if (param.time != null) 
+				obj[0].transTime = (param.time>0) ? param.time : 0.1;
 			obj[0].drawn = false;
 			obj[0].update = false;
 			nextid = parseInt(obj[0].context.canvas.id.substr(2))+1;
@@ -591,11 +618,18 @@ var Helper = {
 		}
 		bd.Create('bd' + nextid, param.src, (objects.length > 0) ? objects : null);
 		if (param.effect) {
-			if (param.effect.indexOf('nowait')!=-1) {
-				bd.wait = false;
-				param.effect = param.effect.replace('nowait','');
+			var fxset = param.effect;
+			if (Stage.animations[param.effect] != null) {
+				fxset = Stage.animations[param.effect][1];
+				bd.transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
+				if (Stage.animations[param.effect].length > 2)
+					Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
 			}
-			var fxarr = param.effect.split(' ');
+			if (fxset.indexOf('nowait')!=-1) {
+				bd.wait = false;
+				fxset = fxset.replace('nowait','');
+			}
+			var fxarr = fxset.split(' ');
 			bd.effects = fxarr[0] + '_in';
 			if (fxarr.length > 1) 
 				bd.fxparam = fxarr.slice(1);
@@ -762,6 +796,7 @@ var Helper = {
 		else
 			return (min.toString() + ':' + ((sec<10)?'0':'') + sec.toString());
 	},
+	// Helper function to create balloon dialogs
 	createBalloon: function (ctx, x, y, w, h, r, ptr) {
 		if (w < 2 * r) r = w / 2;
 		if (h < 2 * r) r = h / 2;
@@ -789,7 +824,39 @@ var Helper = {
 		ctx.arcTo(x, h, x, y, r);
 		ctx.arcTo(x, y, w, y, r); */
 		ctx.closePath();
-	}
+	},
+	// Helper function to queue animation set in script lines
+	queueAnimation: function (type, param, aset) {
+		var newLines = new Array();
+		for (var i=0; i<aset.length; i+=2) {
+			if (type == 'scene') newLines.push(scene);
+			if (type == 'overlay') newLines.push(overlay);
+			if (type == 'actor') newLines.push(actor);
+			var newParam = {};
+			for (prop in param) {
+				if (param.hasOwnProperty(prop)) {
+					if (prop.search(/(src|sprite|avatar|nick|color|say|balloon|append|remove|voice)/g) == -1)
+						newParam[prop] = param[prop];
+				}
+			}
+			newParam.time = aset[i];
+			newParam.effect = aset[i+1];
+			newLines.push(newParam);
+		}
+		Stage.script.Insert(newLines);
+	},
+	// Helper function to check map adjacency
+	checkMapAccess: function(mapname, locationid) {
+		if (this.findVar("_nav_loc") != null) {
+			var ret = this.findVar(mapname+'#'+Stage.variables["_nav_loc"].Value());
+			if ( ret != null) {
+				for (var i in ret)
+					if (ret[i] == locationid) return true;
+				return false;
+			}
+		}
+		return true;
+	},
 }
 // Function to determine optimal animation frame
 window.requestAnimFrame = (function(callback){
@@ -1272,6 +1339,10 @@ function set(param) {
 function get(param) {
 	return Helper.findVar(param.name);
 }
+// animation - define an animation set
+function animation(param) {
+	Stage.animations[param[0]] = param.slice(1);
+}
 // jump - continues execution at given label
 function jump(param) {
 	if (typeof param == 'string') {
@@ -1321,6 +1392,74 @@ function jump(param) {
 	}
 	Stage.layers[4][0].jumpTo.splice(0,Stage.layers[4][0].jumpTo.length);
 }
+// tile - navigate scenes using tiles
+function tile(param) {
+	// create navigation user variables if non-existent
+	if (Helper.findVar("_nav_loc") == null) {
+		var uv = new UserVars();
+		uv.Set("", false);
+		Stage.variables["_nav_loc"] = uv;
+	}
+	if (Helper.findVar("_nav_dir") == null) {
+		var uv = new UserVars();
+		uv.Set(0, false);	//0:N, 1:E, 2:S, 3:W
+		Stage.variables["_nav_dir"] = uv;
+	}
+	if (Helper.findVar("_nav_move") == null) {
+		var uv = new UserVars();
+		uv.Set("", false);	//stay or "", forward, left, back, right
+		Stage.variables["_nav_move"] = uv;
+	}
+	
+	Stage.variables["_nav_loc"].Set(param.id, false);
+	if (Stage.variables["_nav_move"].Value() == "forward") {
+		jump(param.link[Stage.variables["_nav_dir"].Value()]);
+	}
+	else if (Stage.variables["_nav_move"].Value() == "back") {
+		jump(param.link[(Stage.variables["_nav_dir"].Value()+2)%4]);
+	}
+	else if (Stage.variables["_nav_move"].Value() == "left") {
+		if (Stage.variables["_nav_dir"].Value() == 0)
+			Stage.variables["_nav_dir"].Set(3, false);
+		else
+			Stage.variables["_nav_dir"].Set(Stage.variables["_nav_dir"].Value()-1, false);
+		var sparam = {};
+		sparam.src = param.wall[Stage.variables["_nav_dir"].Value()];
+		sparam.effect = "dissolve";
+		scene(sparam);
+	}
+	else if (Stage.variables["_nav_move"].Value() == "right") {
+		Stage.variables["_nav_dir"].Set((Stage.variables["_nav_dir"].Value()+1)%4, false);
+		var sparam = {};
+		sparam.src = param.wall[Stage.variables["_nav_dir"].Value()];
+		sparam.effect = "dissolve";
+		scene(sparam);
+	}
+	else {
+		var sparam = {};
+		sparam.src = param.wall[Stage.variables["_nav_dir"].Value()];
+		sparam.effect = "dissolve";
+		scene(sparam);
+	}
+	Stage.variables["_nav_move"].Set("",false);
+}
+// map - define map adjacency
+function map(param) {
+	if (Helper.findVar("_nav_loc") == null) {
+		var uv = new UserVars();
+		uv.Set("", false);
+		Stage.variables["_nav_loc"] = uv;
+	}
+	for (prop in param) {
+		if (param.hasOwnProperty(prop) && (prop != 'id')) {
+			var uv = new UserVars();
+			param[prop].push(prop);
+			uv.Set(param[prop], false);
+			Stage.variables[param.id+'#'+prop] = uv;
+		}
+	}
+}
+// preload - manually preload resources
 function preload(param) {
 	// TODO: here's a crude preload support
 	if (Config.gameAllowPreload) {
@@ -1450,8 +1589,9 @@ function actor(param) {
 }
 // overlay - displays an overlay image (layer 2)
 function overlay(param) {
-	Stage.Transition(param.time);
+	//Stage.Transition(param.time);
 	Helper.processBackdrop(Stage.layers[2], 'overlay', param);
+	Stage.Transition(Stage.layers[2][Stage.layers[2].length-1].transTime);
 }
 // atmosphere - create atmosphere effects (layer 3)
 function atmosphere(param) {
@@ -2208,6 +2348,16 @@ function checkpoint(param) {
 		for (var i=0; i<Stage.formStyle.length; i++) {
 			localStorage[chkpt+"formStyle_"+i] = Stage.formStyle[i];
 		}
+		// Store animation sets
+		var aset_count = 0;
+		for (prop in Stage.animations) {
+			if (Stage.animations.hasOwnProperty(prop)) {
+				localStorage[chkpt+"animation"+aset_count+"_name"] = prop;
+				localStorage[chkpt+"animation"+aset_count+"_value"] = JSON.stringify(Stage.animations[prop]);
+				aset_count++;
+			}
+		}
+		localStorage[chkpt+"aset_count"] = aset_count;
 		// Store config
 		localStorage[chkpt+"Config"] = JSON.stringify(Config);
 	}
@@ -2452,6 +2602,11 @@ function checkpoint(param) {
 		Stage.formStyle.splice(0, Stage.formStyle.length);
 		for (var i=0; i<parseInt(localStorage[chkpt+"forms_style_count"]); i++) {
 			Stage.formStyle.push(localStorage[chkpt+"formStyle_"+i]);
+		}
+		// populate animations
+		Stage.animations = [];
+		for (var i=0; i<parseInt(localStorage[chkpt+"aset_count"]); i++) {
+			Stage.animations[localStorage[chkpt+"animation"+i+"_name"]] = JSON.parse(localStorage[chkpt+"animation"+i+"_value"]);
 		}
 		// populate Config
 		Config = JSON.parse(localStorage[chkpt+"Config"]);
@@ -2818,6 +2973,7 @@ var CformElements = {
 			if (param.tip) obj.tooltip = param.tip;
 		},
 		_update: function (obj, elapsed) {
+			if (!Helper.checkMapAccess(obj.group, obj.id)) return;
 			if (obj.prev_state != obj.state) {
 				obj.prev_state = obj.state;
 				obj.redraw = true;	
@@ -2837,6 +2993,7 @@ var CformElements = {
 			}
 		},
 		_draw: function (obj) {
+			if (!Helper.checkMapAccess(obj.group, obj.id)) return;
 			if ((obj.sprites.length>1) && (obj.state=='hover'))
 				obj.DrawImageOrFill(obj.sprites[1]);
 			else if ((obj.sprites.length>2) && (obj.state=='clicked'))
@@ -3461,6 +3618,11 @@ Script.prototype.PopFrame = function() {
 		this.frame = ret_frame[1];
 	}
 }
+Script.prototype.Insert = function(newScript) {
+	for (var i=0; i<newScript.length; i++) {
+		this.sequence.splice(this.frame+2+i,0,newScript[i]);
+	}
+}
 ///////////////////////////////////////////////////////////////////////////////
 // Actors
 ///////////////////////////////////////////////////////////////////////////////
@@ -4030,6 +4192,10 @@ var Stage = {
 			- voice = 3: dialog vocals
 	*/
 	sounds: new Array(4),	
+	/*	Custom defined animations
+			- reusable for actor, scenes and overlays
+	*/
+	animations: new Array(),
 	/* 	Videos to play, currently only one video at a time
 			- for intros, cutscenes, etc.
 	*/
@@ -4320,6 +4486,8 @@ var Stage = {
 			// draw tooltips if any
 			for (var i in this.layers[4]) {
 				if (this.redraw && this.layers[4][i].visible) {
+					if (!Helper.checkMapAccess(this.layers[4][i].group, this.layers[4][i].id))
+						continue;
 					if ((this.layers[4][i].state == 'hover') && (this.layers[4][i].tooltip)){
 						if (this.transTime <= 0)
 							Helper.showTooltip(this.layers[4][i].tooltip);
@@ -4454,6 +4622,8 @@ var Stage = {
 			//$('#debug').html(eval(Stage.coord.vx - Stage.targetPos.vx) +', '+ eval(Stage.coord.vy-Stage.targetPos.vy));
 			//$('#debug').html(Stage.click.vx +', '+ Stage.click.vy);
 			//$('#debug').html(this.script.frame/2 + ' ' + this.update);
+			//if (Helper.findVar("_nav_loc") != null)
+			//	$('#debug').html(this.variables["_nav_loc"].Value()+' '+this.variables["_nav_dir"].Value());		
 			$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2);
 		}
 		// update the stage
