@@ -1,77 +1,79 @@
 =Revision History=
 {{{
 Version 0.3 Brenda
+04.14.12 - Added lookAhead option to preload next resources while idle
+	 - Converted 'timer' cform element to a generic text display element
+	 - Bugfix: added actor 'voice' to auto preload
+	 - Bugfix: added Config-defined format in auto preload
+	 - Bugfix: repeat 'animation' fix
 04.10.12 - Added 'map' and 'tile' navigation
 04.06.12 - Added custom 'animation' set
-		 - Added tryit editor for developers
-		 - Bugfix on movement effects (broken due to 'nowait')
+	 - Added tryit editor for developers (in demo section)
+	 - Bugfix on movement effects (broken due to 'nowait')
 Version 0.2 Althea
 03.06.12 - Added 'z_order' for actor
-		 - Setting a variable to null deletes it
-		 - Support persistent user variable
-		 - Support multiple named 'checkpoints'
+	 - Setting a variable to null deletes it
+	 - Support persistent user variable
+	 - Support multiple named 'checkpoints'
 03.04.12 - Added screen actions 'shake', 'snap'
 03.01.12 - Added speech 'balloon' in actor
-		 - Added arrays in user variables
+	 - Added arrays in user variables
 02.28.12 - Added 'voice' dub in-sync with dialog
-		 - Added 'nowait' argument to effects
+	 - Added 'nowait' argument to effects
 02.27.12 - Expand user variables for more active use
-		 - Several bugfixes
+	 - Several bugfixes
 02.24.12 - Recode 'cform' (to be plugin-ready)
-		 - Bugfix on user variable checkpoint save
 02.21.12 - Improved memory handling (avoid leaks ?)
-		 - Modify Vector2d class
+	 - Modify Vector2d class
 02.13.12 - Recode 'atmosphere' (to be plugin-ready)
 02.12.12 - Recode effects (to be plugin-ready)
 02.10.12 - Recode 'box', script, stage and 'button'
-		 - Added 'preload'
-		 - Selectable 'video-on-canvas' or 'video-element'
+	 - Added 'preload'
+	 - Selectable 'video-on-canvas' or 'video-element'
 02.09.12 - Added vector2d class (in anticipation of some future features)
-		 - Optimized 'particles' for performance
-		 - Recode 'scene', 'overlay'
-		 - Recode 'actor'
+	 - Optimized 'particles' for performance
+	 - Recode 'scene', 'overlay'
+	 - Recode 'actor'
 02.06.12 - Recode 'user variables'
-		 - Recode 'audio', 'video'
-		 - Recode 'form'
-		 - Bug fix for iOS user inputs
+	 - Recode 'audio', 'video'
+	 - Recode 'form'
+	 - Bug fix for iOS user inputs
 02.05.12 - Recode for "cleaner" encapsulation thru functional inheritance
-		 - Recode 'atmosphere'
+	 - Recode 'atmosphere'
 Version 0.1 Preview
 02.02.12 - Added atmosphere 'snow', 'rain' direction
 01.31.12 - Updated cutscene/movie to play in canvas
-		 - Optimized method encapsulation
+	 - Optimized method encapsulation
 01.28.12 - Bugfix for non-modal dialog while checkpoint loading
-		 - Bugfix for cross-browser compatibility (re:image constructor)
-		 - Added timer cform element
-		 - Added animated picture cform element
+	 - Bugfix for cross-browser compatibility (re:image constructor)
+	 - Added timer cform element
+	 - Added animated picture cform element						
 01.25.12 - Added macro for custom javascript
 01.12.12 - Updated scene and overlay to accept HTML color
-		 - Updated button (cform) to accept HTML color
-		 - Optimized memory footprint (a bit)
+	 - Updated button (cform) to accept HTML color
+	 - Optimized memory footprint (a bit)
 01.11.12 - Added word filter
-		 - Added URL jump
-		 - Simplified atmosphere, added cloud and beam
+	 - Added URL jump
+	 - Simplified atmosphere, added cloud and beam						
 01.09.12 - Added themes
-		 - Forms can be instantiated in-game
+	 - Forms can be instantiated in-game
 01.06.12 - Implemented text effects
 01.04.12 - Bug fix: avatar, checkpoint
-		 - Implemented additional actor effects
-		 - Implemented additional overlay effects
-		 - Implemented additional background effects
-12.30.11 - Simplified 'audio'
+	 - Implemented additional actor effects
+	 - Implemented additional overlay effects
+	 - Implemented additional background effects						
+12.30.11 - Simplified 'audio'						
 12.29.11 - Added configuration file (just the basics)
 12.28.11 - Added a subset of HTML forms
 12.26.11 - Simplified 'set' and 'jump'
 12.25.11 - Added actor avatar
-		 - Updated checkpoint saves to include avatar and forms
+	 - Updated checkpoint saves to include avatar and forms
 12.24.11 - Added video for intros, cutscenes, endings
-		 - Updated demo and docs
-12.21.11 - Added canvas forms (buttons only... so far)
+12.21.11 - Added cforms (buttons only... so far)
 12.20.11 - Added basic saves using checkpoint
-         - Completed initial demo
 12.08.11 - Added overlay and atmosphere basics
 12.06.11 - Added actor basics
 12.05.11 - Added script box, flow control using jump
 12.01.11 - Basics for background image, music/sounds, flow control using wait
-11.27.11 - File creation
+11.27.11 - Initial creation
 }}}
