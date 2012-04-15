@@ -103,4 +103,7 @@ Config = {
 	gameAllowPreload:	false,
 	//	allow use of named checkpoints
 	gameNamedCheckpts:	false,
+	//	allow look ahead so the most immediate resources after the
+	//	current script line may be preloaded
+	gameAllowLookAhead: true,
 }

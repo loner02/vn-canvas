@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-//  Visual Novel JAVASCRIPT for HTML5 CANVAS by [lo'ner]                     //
+//  Visual Novel JAVASCRIPT Engine for HTML5 CANVAS by [lo'ner]              //
 //  Author: oclabbao@yahoo.com, oclabbao@gmail.com                           //
 //  Based on:                                                                //
 //      Construct2 - HTML5 game creator (www.scirra.com)                     //
@@ -8,7 +8,7 @@
 //      Ren'Py Python VN engine (www.renpy.org)                              //
 //  Requires:                                                                //
 //      CanvasText by Pere Monfort Pàmies (www.pmphp.net, www.canvastext.com)//
-//          - modded to support \n and hover in text                         //
+//          - modded to support \n, hover and scroll in text                 //
 //      [Optional] JQuery by John Resig (jquery.com)                         //
 //  Rationale:                                                               //
 //      A generic engine, whether event or messaging based, is a bit bloated //
@@ -44,6 +44,11 @@
 /******************************************************************************
 Revision history:
 Version 0.3 Brenda
+04.14.12 - Added lookAhead option to preload next resources while idle
+		 - Converted 'timer' cform element to a generic text display element
+		 - Bugfix: added actor 'voice' to auto preload
+		 - Bugfix: added Config-defined format in auto preload
+		 - Bugfix: repeat 'animation' fix
 04.10.12 - Added 'map' and 'tile' navigation
 04.06.12 - Added custom 'animation' set
 		 - Added tryit editor for developers
@@ -53,7 +58,7 @@ Version 0.2 Althea
 		 - Setting a variable to null deletes it
 		 - Support persistent user variable
 		 - Support multiple named 'checkpoints'
-03.04.12 - Added screen actions 'shake, 'snap'
+03.04.12 - Added screen actions 'shake', 'snap'
 03.01.12 - Added speech 'balloon' in actor
 		 - Added arrays in user variables
 02.28.12 - Added 'voice' dub in-sync with dialog
@@ -165,8 +170,8 @@ var Helper = {
 	    var js = document.createElement("script");
 	    js.type = "text/javascript";
 	    js.src = jsFilePath;
-	    //document.getElementsByTagName('head')[0].appendChild(js);
-		document.body.appendChild(js);
+	    document.getElementsByTagName('head')[0].appendChild(js);
+		//document.body.appendChild(js);
 		js = null;
 	},
 	// Function to check support for localStorage
@@ -552,9 +557,9 @@ var Helper = {
 							Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
 					}
 					obj[0].wait = true;
-					if (param.effect.indexOf('nowait')!=-1) {
+					if (effect.indexOf('nowait')!=-1) {
 						obj[0].wait = false;
-						effect = param.effect.replace('nowait','');
+						effect = effect.replace('nowait','');
 					}
 					var fxarr = effect.split(' ');
 					obj[0].effects = fxarr[0] + '_in';
@@ -577,15 +582,16 @@ var Helper = {
 			if (param.effect) {
 				var effect = param.effect;
 				if (Stage.animations[param.effect] != null) {
+					// just use first animation in the set
 					effect = Stage.animations[param.effect][1];
 					obj[0].transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
-					if (Stage.animations[param.effect].length > 2)
-						Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
+					//if (Stage.animations[param.effect].length > 2)
+					//	Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
 				}
 				obj[0].wait = true;
-				if (param.effect.indexOf('nowait')!=-1) {
+				if (effect.indexOf('nowait')!=-1) {
 					obj[0].wait = false;
-					effect = param.effect.replace('nowait','');
+					effect = effect.replace('nowait','');
 				}
 				var fxarr = effect.split(' ');
 				obj[0].effects = fxarr[0] + '_out';
@@ -857,6 +863,72 @@ var Helper = {
 		}
 		return true;
 	},
+	// Helper function to preload resources
+	preloadResources: function(seq, param) {
+		if ((seq == scene) || (seq == overlay)) {
+			if ((param.src) && (Helper.checkIfImage(param.src))) {
+				var newImage = new Image();
+				newImage.src = param.src;
+				newImage = null;
+			}						
+			if (param.objects) {
+				for (var j=0; j<param.objects.length; j+=3) {
+					var newImage = new Image();
+					newImage.src = param.objects[j];
+					newImage = null;
+				}
+			}
+		}
+		if (seq == actor) {
+			if (param.sprite) {
+				var newImage = new Image();
+				newImage.src = param.sprite[1];
+				newImage = null;
+			}
+			if (param.avatar) {
+				var newImage = new Image();
+				newImage.src = param.avatar;
+				newImage = null;
+			}
+			if (param.voice) {
+				for (var j=0; j<Config.audioFormat.length; j++) {
+					var newAudio = new Audio();
+					newAudio.preload = 'auto';
+					newAudio.autoplay = false;
+					newAudio.src = param.voice + '.' + Config.audioFormat[j];
+					newAudio = null;
+				}
+			}
+		}
+		if (seq == audio) {
+			var soundfile, soundformat;
+			if (param.bgm) soundfile = param.bgm;
+			if (param.bgs) soundfile = param.bgs;
+			if (param.se) soundfile = param.se;
+			if (param.format) soundformat = param.format;
+			else soundformat = Config.audioFormat;
+			for (var j=0; j<soundformat.length; j++) {
+				var newAudio = new Audio();
+				newAudio.preload = 'auto';
+				newAudio.autoplay = false;
+				newAudio.src = soundfile + '.' + soundformat[j];
+				newAudio = null;
+			}
+		}
+		if (seq == video) {
+			var videofile, videoformat;
+			if (param.src) videofile = param.src;
+			if (param.format) videoformat = param.format;
+			else videoformat = Config.movieFormat;
+			for (var j=0; j<videoformat.length; j++) {
+				var newVideo = document.createElement('video');
+				newVideo.preload = 'auto';
+				newVideo.autoplay = false;
+				newVideo.src = videofile + '.' + videoformat[j];
+				newVideo = null;
+			}
+		}
+	},
 }
 // Function to determine optimal animation frame
 window.requestAnimFrame = (function(callback){
@@ -886,7 +958,68 @@ window.onresize = (function(){
 });
 
 ///////////////////////////////////////////////////////////////////////////////
-// Effects class
+// Rect class
+///////////////////////////////////////////////////////////////////////////////
+function Rect(x, y, w, h) {
+	this.x = x;
+	this.y = y;
+	this.w = w;
+	this.h = h;
+}
+///////////////////////////////////////////////////////////////////////////////
+// 2D vector class
+///////////////////////////////////////////////////////////////////////////////
+function Vector2d(x, y) {
+	this.vx = x;
+	this.vy = y;
+}
+Vector2d.prototype.copy = function (vec2) {
+	this.vx = vec2.vx;
+	this.vy = vec2.vy;
+};
+Vector2d.prototype.scale = function (scale) {
+	this.vx *= scale;
+	this.vy *= scale;
+};
+Vector2d.prototype.add = function (vec2) {
+	this.vx += vec2.vx;
+	this.vy += vec2.vy;
+};
+Vector2d.prototype.sub = function (vec2) {
+	this.vx -= vec2.vx;
+	this.vy -= vec2.vy;
+};
+Vector2d.prototype.equal = function (vec2) {
+	return ((this.vx == vec2.vx) && (this.vy == vec2.vy));
+};
+Vector2d.prototype.length = function () {
+	return Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+};
+Vector2d.prototype.lengthSquared = function () {
+	return this.vx * this.vx + vec.vy * vec.vy;
+},
+Vector2d.prototype.normalize = function () {
+	var len = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+	if (len) {
+		this.vx /= len;
+		this.vy /= len;
+	}
+    return len;
+};
+Vector2d.prototype.rotate = function (angle) {
+	var vx = this.vx,
+		vy = this.vy,
+		cosVal = Math.cos(angle),
+		sinVal = Math.sin(angle);
+		this.vx = vx * cosVal - vy * sinVal;
+		this.vy = vx * sinVal + vy * cosVal;
+};
+Vector2d.prototype.lerp = function (vec1, vec2, amt) {
+	this.vx = (1-amt) * vec1.vx + (amt) * vec2.vx;
+	this.vy = (1-amt) * vec1.vy + (amt) * vec2.vy;
+};
+///////////////////////////////////////////////////////////////////////////////
+// Transition Effects plug-ins
 ///////////////////////////////////////////////////////////////////////////////
 var TransEffects = {
 	// effect completed
@@ -1170,67 +1303,6 @@ var TransEffects = {
 		}
 	}
 };
-///////////////////////////////////////////////////////////////////////////////
-// Rect class
-///////////////////////////////////////////////////////////////////////////////
-function Rect(x, y, w, h) {
-	this.x = x;
-	this.y = y;
-	this.w = w;
-	this.h = h;
-}
-///////////////////////////////////////////////////////////////////////////////
-// 2D vector class
-///////////////////////////////////////////////////////////////////////////////
-function Vector2d(x, y) {
-	this.vx = x;
-	this.vy = y;
-}
-Vector2d.prototype.copy = function (vec2) {
-	this.vx = vec2.vx;
-	this.vy = vec2.vy;
-};
-Vector2d.prototype.scale = function (scale) {
-	this.vx *= scale;
-	this.vy *= scale;
-};
-Vector2d.prototype.add = function (vec2) {
-	this.vx += vec2.vx;
-	this.vy += vec2.vy;
-};
-Vector2d.prototype.sub = function (vec2) {
-	this.vx -= vec2.vx;
-	this.vy -= vec2.vy;
-};
-Vector2d.prototype.equal = function (vec2) {
-	return ((this.vx == vec2.vx) && (this.vy == vec2.vy));
-};
-Vector2d.prototype.length = function () {
-	return Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-};
-Vector2d.prototype.lengthSquared = function () {
-	return this.vx * this.vx + vec.vy * vec.vy;
-},
-Vector2d.prototype.normalize = function () {
-	var len = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-	if (len) {
-		this.vx /= len;
-		this.vy /= len;
-	}
-    return len;
-};
-Vector2d.prototype.rotate = function (angle) {
-	var vx = this.vx,
-		vy = this.vy,
-		cosVal = Math.cos(angle),
-		sinVal = Math.sin(angle);
-		this.vx = vx * cosVal - vy * sinVal;
-		this.vy = vx * sinVal + vy * cosVal;
-};
-Vector2d.prototype.lerp = function (vec1, vec2, amt) {
-	this.vx = (1-amt) * vec1.vx + (amt) * vec2.vx;
-	this.vy = (1-amt) * vec1.vy + (amt) * vec2.vy;
-};
 
 ///////////////////////////////////////////////////////////////////////////////
 // Script method callback/handlers
@@ -1463,88 +1535,37 @@ function map(param) {
 function preload(param) {
 	// TODO: here's a crude preload support
 	if (Config.gameAllowPreload) {
-		if ((typeof param == 'string') && (param == 'auto')){
-			var seq = Stage.script.sequence;
-			for (var i=Stage.script.frame; i<seq.length; i+=2) {
-				if ((seq[i] == scene) || (seq[i] == overlay)) {
-					if ((seq[i+1].src) && (Helper.checkIfImage(seq[i+1].src))) {
-						var newImage = new Image();
-						newImage.src = seq[i+1].src;
-						newImage = null;
-					}						
-					if (seq[i+1].objects) {
-						for (var j=0; j<seq[i+1].objects.length; j+=3) {
-							var newImage = new Image();
-							newImage.src = seq[i+1].objects[j];
-							newImage = null;
-						}
-					}
+		setTimeout(function() {
+			if ((typeof param == 'string') && (param == 'auto')){
+				var seq = Stage.script.sequence;
+				for (var i=Stage.script.frame; i<seq.length; i+=2) {
+					Helper.preloadResources(seq[i], seq[i+1]);
 				}
-				if (seq[i] == actor) {
-					if (seq[i+1].sprite) {
-						var newImage = new Image();
-						newImage.src = seq[i+1].sprite[1];
-						newImage = null;
-					}
-					if (seq[i+1].avatar) {
-						var newImage = new Image();
-						newImage.src = seq[i+1].avatar;
-						newImage = null;
-					}
+				seq = null;
+				return;
+			}
+			var preloadObj = new Array(param.length);
+			for (var i=0; i<param.length; i++) {
+				if (Helper.checkIfImage(param[i])) {
+					preloadObj[i] = new Image();
+					preloadObj[i].src = param[i];
 				}
-				if (seq[i] == audio) {
-					var soundfile;
-					if (seq[i+1].bgm) soundfile = seq[i+1].bgm;
-					if (seq[i+1].bgs) soundfile = seq[i+1].bgs;
-					if (seq[i+1].se) soundfile = seq[i+1].se;
-					if (seq[i+1].format) {
-						for (var j=0; j<seq[i+1].format.length; j++) {
-							var newAudio = new Audio();
-							newAudio.preload = 'auto';
-							newAudio.autoplay = false;
-							newAudio.src = soundfile + '.' + seq[i+1].format[j];
-							newAudio = null;
-						}
-					}
+				if (Helper.checkIfAudio(param[i])) {
+					preloadObj[i] = new Audio();
+					preloadObj[i].preload = 'auto';
+					preloadObj[i].autoplay = false;
+					preloadObj[i].src = param[i];
 				}
-				if (seq[i] == video) {
-					var videofile;
-					if (seq[i+1].src) videofile = seq[i+1].src;
-					if (seq[i+1].format) {
-						for (var j=0; j<seq[i+1].format.length; j++) {
-							var newVideo = document.createElement('video');
-							newVideo.preload = 'auto';
-							newVideo.autoplay = false;
-							newVideo.src = videofile + '.' + seq[i+1].format[j];
-							newVideo = null;
-						}
-					}
+				if (Helper.checkIfVideo(param[i])) {
+					preloadObj[i] = document.createElement('video');
+					preloadObj[i].preload = 'auto';
+					preloadObj[i].autoplay = false;
+					preloadObj[i].src = param[i];
 				}
+				preloadObj[i] = null;
 			}
-			seq = null;
-			return;
-		}
-		var preloadObj = new Array(param.length);
-		for (var i=0; i<param.length; i++) {
-			if (Helper.checkIfImage(param[i])) {
-				preloadObj[i] = new Image();
-				preloadObj[i].src = param[i];
-			}
-			if (Helper.checkIfAudio(param[i])) {
-				preloadObj[i] = new Audio();
-				preloadObj[i].preload = 'auto';
-				preloadObj[i].autoplay = false;
-				preloadObj[i].src = param[i];
-			}
-			if (Helper.checkIfVideo(param[i])) {
-				preloadObj[i] = document.createElement('video');
-				preloadObj[i].preload = 'auto';
-				preloadObj[i].autoplay = false;
-				preloadObj[i].src = param[i];
-			}
-			preloadObj[i] = null;
-		}
-		preloadObj = null;
+			preloadObj = null;
+		}, 250);
 	}
 }
 // scene - displays a background (layer 0)
@@ -1744,13 +1765,7 @@ function button(param) {
 	bt = null;
 }
 // timer - create a canvas form timer (layer 4)
-function timer(param) {
-	var tm = new ActiveImage();
-	tm.saveparam = param;
-	CformElements['timer']['_init'](tm, param);
-	Stage.layers[4].push(tm);
-	tm = null;
-}
+// removed as of v.0.3.1
 // picture - create a canvas form animated image (layer 4)
 function picture(param) {
 	var pic = new ActiveImage();
@@ -1758,6 +1773,17 @@ function picture(param) {
 	CformElements['picture']['_init'](pic, param);
 	Stage.layers[4].push(pic);
 	pic = null;
+}
+// marquee - create a canvas form animated text (layer 4)
+function marquee(param) {
+	var mq = new ActiveImage();
+	mq.saveparam = param;
+	if (/timer/i.test(param.name))
+		CformElements['timer']['_init'](mq, param);
+	else
+		CformElements['marquee']['_init'](mq, param);
+	Stage.layers[4].push(mq);
+	mq = null;
 }
 // cfelement - create a custom cform element
 function cfelement(param) {
@@ -2957,7 +2983,7 @@ Backdrop.prototype.Draw = function() {
 	return true;
 }
 ///////////////////////////////////////////////////////////////////////////////
-// Canvas Form elements
+// Canvas Form elements plug-ins
 ///////////////////////////////////////////////////////////////////////////////
 var CformElements = {
 	button: {
@@ -3081,7 +3107,37 @@ var CformElements = {
 			obj.DrawImageOrFill(obj.sprites[0]);
 		},
 	},
-}
+	marquee: {
+		_init: function (obj, param) {
+			obj.type = "marquee";
+			obj.fps = (param.fps > 1) ? param.fps : 1;
+			if (param.timeout) obj.timeout = param.timeout;
+			if (param.link) obj.link = param.link;
+			var rect = new Rect(param.x, param.y, param.w, param.h);
+			obj.Create(param.name, rect, null);
+
+			// add the text to sprites array
+			for (var i in param.frames) 
+				obj.sprites.push(param.frames[i]);
+			obj.text = param.frames[0];
+		},
+		_update: function (obj, elapsed) {
+			if ((!obj.aTimerOn) && (obj.sprites.length > 2)) {
+				obj.aTimer = setTimeout(function() {
+					obj.countup++;
+					obj.countup %= obj.sprites.length-1;
+					obj.redraw = true;
+					obj.text = obj.sprites[obj.countup+1];
+					if (obj.visible) obj.aTimerOn = false;
+				}, 1000/obj.fps);
+				obj.aTimerOn = true;
+			}
+		},
+		_draw: function (obj) {
+			obj.DrawImageOrFill(obj.sprites[0]);
+		},
+	},
+};
 ///////////////////////////////////////////////////////////////////////////////
 // Selectable/clickable image; use for buttons, imagemaps, etc.
 ///////////////////////////////////////////////////////////////////////////////
@@ -3619,8 +3675,13 @@ Script.prototype.PopFrame = function() {
 	}
 }
 Script.prototype.Insert = function(newScript) {
-	for (var i=0; i<newScript.length; i++) {
+	for (var i=0; i<newScript.length; i+=2) {
+		if ((this.sequence[this.frame+2+i] == newScript[i]) &&
+			(JSON.stringify(this.sequence[this.frame+3+i]) == JSON.stringify(newScript[i+1]))) {
+			this.sequence.splice(this.frame+2+i,2);
+		}
 		this.sequence.splice(this.frame+2+i,0,newScript[i]);
+		this.sequence.splice(this.frame+3+i,0,newScript[i+1]);
 	}
 }
 ///////////////////////////////////////////////////////////////////////////////
@@ -3835,7 +3896,7 @@ Character.prototype.Draw = function() {
 	return true;
 }
 ///////////////////////////////////////////////////////////////////////////////
-// Atmosphere special effects
+// Atmosphere special effects plug-ins
 ///////////////////////////////////////////////////////////////////////////////
 var AtmoEffects = {
 	rain: {
@@ -4049,7 +4110,7 @@ var AtmoEffects = {
 			obj.context.restore();
 		}
 	}
-}
+};
 function Atmosphere(id) {
 	this.alpha = 0;
 	//this.isready = false;
@@ -4172,6 +4233,8 @@ var Stage = {
 	transTime: 0,
 	spritePos: new Array(8),
 	shake: 0,
+	stageIdle: 0,
+	lookAheadFrame: 0,
 	/* 	Normally shouldn't need more than 5 layers,
 		the higher the layer, the higher Z order
 			- background = 0: backdrop layer
@@ -4225,6 +4288,8 @@ var Stage = {
 		// for camera integrator
 		this.targetPos.copy(this.coord);
 		this.prevPos.copy(this.coord);
+		// idle detection
+		this.stageIdle = false;
 		// add event listeners here for user inputs
 		Helper.addEvent(this.canvas, 'mousemove', function(e) {
 			Stage.mouseOut = false;
@@ -4624,12 +4689,34 @@ var Stage = {
 			//$('#debug').html(this.script.frame/2 + ' ' + this.update);
 			//if (Helper.findVar("_nav_loc") != null)
 			//	$('#debug').html(this.variables["_nav_loc"].Value()+' '+this.variables["_nav_dir"].Value());		
-			$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2);
+			$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2 + ' Idle: ' + this.stageIdle);
 		}
 		// update the stage
 		this.Update(elapsed);	
 		// draw the stage
 		this.Draw();
+		// check for idle
+		this.stageIdle = false;
+		if (this.pause && (this.transTime <= 0) && (this.fps > 30)) {
+			this.stageIdle = true;
+			if (Config.gameAllowLookAhead && (this.script.frame > this.lookAheadFrame)) {
+				// look for resources to preload
+				for (var i=this.script.frame; i<this.script.sequence.length; i+=2) {
+					if ((this.script.sequence[i] == actor) ||
+						(this.script.sequence[i] == scene) ||
+						(this.script.sequence[i] == overlay) ||
+						(this.script.sequence[i] == audio) ||
+						(this.script.sequence[i] == video)) {
+						this.lookAheadFrame = i;
+						setTimeout(function() {
+							Helper.preloadResources(Stage.script.sequence[Stage.lookAheadFrame],
+													Stage.script.sequence[Stage.lookAheadFrame+1]);
+						}, 250);
+						break;
+					}
+				}
+			}
+		}
 		// setup next timer tick
 		requestAnimFrame(function(){
 			Stage.Tick(interval);
@@ -4639,7 +4726,7 @@ var Stage = {
 
 // ensure config is not null
 var Config = {};
-// finally, the script and config is loaded
+// finally, the script, config and plugins are loaded
 for (var j in TOC) {
 	Helper.includeJs(TOC[j]);
 }
