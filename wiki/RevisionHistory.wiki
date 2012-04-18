@@ -1,6 +1,9 @@
 =Revision History=
 {{{
 Version 0.3 Brenda
+04.17.12 - Added 'skip read text' function for quick replay
+	 -   not thoroughly tested, use with caution
+	 - Added toggle mode for 'button'
 04.14.12 - Added lookAhead option to preload next resources while idle
 	 - Converted 'timer' cform element to a generic text display element
 	 - Bugfix: added actor 'voice' to auto preload
