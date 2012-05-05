@@ -1,6 +1,13 @@
 =Revision History=
 {{{
 Version 0.3 Brenda
+05.04.12 - Added auto-revealing map to 'tile' navigation
+	 - Bugfix: local storage persist flag fix
+04.23.12 - Optimized 'skip' text storage
+	 - Bugfix: sprite reuse using tags
+	 - Support multiple avatars reuse thru tags
+	 - Added screen action 'fall'
+04.22.12 - Added actor 'stats' plugin
 04.17.12 - Added 'skip read text' function for quick replay
 	 -   not thoroughly tested, use with caution
 	 - Added toggle mode for 'button'
