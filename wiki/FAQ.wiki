@@ -6,6 +6,11 @@ It's a less-popular game genre (compared to MMORPGs, RTS, FPS, etc.), mostly use
 ==Why make another engine?==
 Actually, this just started as a study in HTML5 that has gone a little too way out of hand. :) Admittedly, there's a lot of better engines out there.
 
+==How do I play a Visual Novel?==
+Normally, it's just read, click on the choices and continue. VNs usually have little or no gameplay. Unless you add minigames, but VN players are not usually arcade players.
+
+For vn-canvas, however, I borrowed some features from VN's distant cousin RPG, such as map and tile navigation. This is a less direct way of asking the question "Where do you want to go?", and gives the player some "exploration" capabilities for non-linear play.
+
 ==Can I sell something I make with it?==
 I'm no expert in licenses but I think so. What I'm providing you is a free pen and paper to write your novel, but the novel is entirely yours to do whatever you want with it.
 
