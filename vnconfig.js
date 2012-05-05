@@ -27,6 +27,13 @@ Theme1 = {
 	balloonFillStyle:	"#000000 #808080",
 	//	speech balloon outline color
 	balloonStrokeStyle: "#FFFFFF",
+	
+	// Automap
+	//	automap hide mask color
+	automapMask:		"#C0C0C0",
+	//	automap pointer fill and stroke
+	automapPointer:		"#FF0000 #800000"
+	
 }
 
 // Globals for configuration

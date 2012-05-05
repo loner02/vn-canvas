@@ -26,10 +26,10 @@
 ///////////////////////////////////////////////////////////////////////////////
 /******************************************************************************
 	Copyright © 2012 by OCLabbao a.k.a [lo'ner]
-	
+
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as published 
-	by the Free Software Foundation, either version 3 of the License, or
+    by the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
     This program is distributed in the hope that it will be useful,
@@ -44,6 +44,15 @@
 /******************************************************************************
 Revision history:
 Version 0.3 Brenda
+05.04.12 - Added auto-revealing map to 'tile' navigation
+		 - Bugfix: local storage variable persist flag fix
+04.23.12 - Optimized 'skip' text storage
+		 - Bugfix: sprite reuse using tags
+		 - Support multiple avatars reuse thru tags
+		 - Added screen action 'fall'
+04.22.12 - Added actor 'stats' plugin
+04.17.12 - Added 'skip read text' function for quick replay
+		 - Added toggle mode for 'button'
 04.14.12 - Added lookAhead option to preload next resources while idle
 		 - Converted 'timer' cform element to a generic text display element
 		 - Bugfix: added actor 'voice' to auto preload
@@ -116,7 +125,7 @@ Version 0.1 Preview
 		 - Updated demo and docs
 12.21.11 - Added canvas forms (buttons only... so far)
 12.20.11 - Added basic saves using checkpoint
-         - Completed initial demo
+		- Completed initial demo
 12.08.11 - Added overlay and atmosphere basics
 12.06.11 - Added actor basics
 12.05.11 - Added script box, flow control using jump
@@ -146,7 +155,7 @@ var Helper = {
 			}
 		}
 		Helper._registry = null;
-    },	
+	},
 	addEvent: function (obj, evType, fn, useCapture) {
 		this.initialise();
 		if (typeof obj == 'string')
@@ -167,11 +176,11 @@ var Helper = {
 	},
 	// Function for including external javascript files
 	includeJs: function (jsFilePath) {
-	    var js = document.createElement("script");
-	    js.type = "text/javascript";
-	    js.src = jsFilePath;
-	    document.getElementsByTagName('head')[0].appendChild(js);
-		//document.body.appendChild(js);
+		var js = document.createElement("script");
+		js.type = "text/javascript";
+		js.src = jsFilePath;
+		//document.getElementsByTagName('head')[0].appendChild(js);
+		document.body.appendChild(js);
 		js = null;
 	},
 	// Function to check support for localStorage
@@ -188,22 +197,39 @@ var Helper = {
 			return Stage.variables[id].Value();
 		return null;
 	},
-	// Helper function to obtain value from stage or config variables
+	// Helper function to obtain value from stage or config variables or actor stats
 	getValue: function (id) {
-		var ret = Helper.findVar(id);
+		var ret = Helper.findStat(id);
+		if (ret != null) return ret;
+		ret = Helper.findVar(id);
 		if (ret != null) return ret;
 		return (Config[id]);
 	},
 	// Helper function to set value to stage or config variables
 	setValue: function (id, value) {
-		var ret = Helper.findVar(id);
-		if (ret != null)
-			Stage.variables[id].Set(value, false);
+		var ret = Helper.findStat(id);
+		if (ret != null) {
+			var arr_str = id.split('_');
+			for (var j in Stage.layers[1]) {
+				if (Stage.layers[1][j].id == arr_str[0]) {
+					Stage.layers[1][j].stats[arr_str[1]] = value;
+					if (Stats[arr_str[1]]['_update']) {
+						Stats[arr_str[1]]['_update'](Stage.layers[1][j], Stage.layers[1][j].stats);
+					}
+					break;
+				}
+			}
+		}
 		else {
-			Config[id] = value;
-			// a configuration variable has changed, reflect it back
-			Helper.configUpdate(id);
-			Stage.redraw = true;
+			ret = Helper.findVar(id);
+			if (ret != null)
+				Stage.variables[id].Set(value, false);
+			else {
+				Config[id] = value;
+				// a configuration variable has changed, reflect it back
+				Helper.configUpdate(id);
+				Stage.redraw = true;
+			}
 		}
 	},
 	// Helper function to update game config
@@ -265,19 +291,19 @@ var Helper = {
 				}
 				// configure CanvasText
 				Stage.layers[4][0].canvasText.config({
-			        canvas: Stage.layers[4][0].context.canvas,
-			        context: Stage.layers[4][0].context,
-			        fontFamily: Stage.layers[4][0].fontFamily,
-			        fontSize: Stage.layers[4][0].fontSize,
-			        fontWeight: Stage.layers[4][0].fontWeight,
-			        fontColor: Stage.layers[4][0].fontColor,
-			        lineHeight: Stage.layers[4][0].lineHeight
-			    });			
+					canvas: Stage.layers[4][0].context.canvas,
+					context: Stage.layers[4][0].context,
+					fontFamily: Stage.layers[4][0].fontFamily,
+					fontSize: Stage.layers[4][0].fontSize,
+					fontWeight: Stage.layers[4][0].fontWeight,
+					fontColor: Stage.layers[4][0].fontColor,
+					lineHeight: Stage.layers[4][0].lineHeight
+				});
 				Stage.layers[4][0].canvasText.defineClass("menu", {
-			        fontFamily: Stage.layers[4][0].fontFamily,
-			        fontSize: Stage.layers[4][0].fontSize,
-			        fontWeight: Stage.layers[4][0].fontWeight,
-			        fontColor: Stage.layers[4][0].fontColor,
+					fontFamily: Stage.layers[4][0].fontFamily,
+					fontSize: Stage.layers[4][0].fontSize,
+					fontWeight: Stage.layers[4][0].fontWeight,
+					fontColor: Stage.layers[4][0].fontColor,
 					fontStyle: "italic"
 				});
 				break;
@@ -439,7 +465,7 @@ var Helper = {
 		if (param.sprite) {
 			if (typeof param.sprite == 'string') {
 				for (var i in chr.sprites) {
-					if (chr.sprites[i] == param.sprite) {
+					if (chr.sprites[i].id == param.sprite) {
 						if (chr.visible) {
 							chr.prevSprite = chr.activeSprite;
 							chr.alpha = 0;
@@ -457,7 +483,36 @@ var Helper = {
 				chr.AddSprite(param.sprite[0], param.sprite[1], param.sprite[2]);
 			}
 		}
-		if (param.avatar) chr.AddAvatar(param.avatar);
+		//if (param.avatar) chr.AddAvatar(param.avatar);
+		if (param.avatar != null) {
+			if (typeof param.avatar == 'string') {
+				if (param.avatar && !Helper.checkIfImage(param.avatar)) {
+					for (var i in chr.avatars) {
+						if (chr.avatars[i].id == param.avatar) {
+							chr.AddAvatar(chr.avatars[i].src);
+							break;
+						}
+					}
+				}
+				else {
+					chr.AddAvatar(param.avatar);
+				}
+			}
+			else {
+				var found = false;
+				for (var i in chr.avatars) {
+					if (chr.avatars[i].id == param.avatar[0]) {
+						chr.avatars[i].src = param.avatar[1];
+						found = true;
+						break;
+					}
+				}
+				if (!found) {
+					chr.avatars.push({id:param.avatar[0], src:param.avatar[1]});
+				}
+				chr.AddAvatar(param.avatar[1]);
+			}
+		}
 		if (param.position) {
 			var subs = param.position.split(' ');
 			for (var i in subs) {
@@ -691,7 +746,8 @@ var Helper = {
 		Stage.context.drawImage(obj.context.canvas,
 								Stage.AddDepth(order/10, Stage.canvas.width/2 - Stage.coord.vx) + 
 								Stage.shake * Stage.transTime * Math.sin(Stage.transTime*10*Math.PI),
-								Stage.AddDepth(order/10, Stage.canvas.height/2 - Stage.coord.vy)/2,
+								Stage.AddDepth(order/10, Stage.canvas.height/2 - Stage.coord.vy)/2 +
+								Stage.fall * Stage.transTime * Math.sin(Stage.transTime*10*Math.PI),
 								obj.context.canvas.width,
 								obj.context.canvas.height);	
 		Stage.context.restore();
@@ -831,6 +887,35 @@ var Helper = {
 		ctx.arcTo(x, y, w, y, r); */
 		ctx.closePath();
 	},
+	// Helper function to create pointer for automap
+	createPointer: function (ctx, x, y, w, h, rot) {
+		ctx.beginPath();
+		if (rot == 0) {
+			ctx.moveTo(x+0.5*w,y+0.1*h);
+			ctx.lineTo(x+0.9*w,y+0.9*h);
+			ctx.lineTo(x+0.5*w,y+0.75*h);
+			ctx.lineTo(x+0.1*w,y+0.9*h);
+		}
+		if (rot == 1) {
+			ctx.moveTo(x+0.9*w,y+0.5*h);
+			ctx.lineTo(x+0.1*w,y+0.9*h);
+			ctx.lineTo(x+0.25*w,y+0.5*h);
+			ctx.lineTo(x+0.1*w,y+0.1*h);
+		}
+		if (rot == 2) {
+			ctx.moveTo(x+0.5*w,y+0.9*h);
+			ctx.lineTo(x+0.1*w,y+0.1*h);
+			ctx.lineTo(x+0.5*w,y+0.25*h);
+			ctx.lineTo(x+0.9*w,y+0.1*h);
+		}
+		if (rot == 3) {
+			ctx.moveTo(x+0.1*w,y+0.5*h);
+			ctx.lineTo(x+0.9*w,y+0.1*h);
+			ctx.lineTo(x+0.75*w,y+0.5*h);
+			ctx.lineTo(x+0.9*w,y+0.9*h);
+		}
+		ctx.closePath();
+	},
 	// Helper function to queue animation set in script lines
 	queueAnimation: function (type, param, aset) {
 		var newLines = new Array();
@@ -881,14 +966,25 @@ var Helper = {
 		}
 		if (seq == actor) {
 			if (param.sprite) {
-				var newImage = new Image();
-				newImage.src = param.sprite[1];
-				newImage = null;
+				if (typeof param.sprite != 'string') {
+					var newImage = new Image();
+					newImage.src = param.sprite[1];
+					newImage = null;
+				}
 			}
 			if (param.avatar) {
-				var newImage = new Image();
-				newImage.src = param.avatar;
-				newImage = null;
+				if (typeof param.avatar == 'string') {
+					if (Helper.checkIfImage(param.avatar)) {
+						var newImage = new Image();
+						newImage.src = param.avatar;
+						newImage = null;
+					}
+				}
+				else {
+					var newImage = new Image();
+					newImage.src = param.avatar[1];
+					newImage = null;
+				}
 			}
 			if (param.voice) {
 				for (var j=0; j<Config.audioFormat.length; j++) {
@@ -929,17 +1025,55 @@ var Helper = {
 			}
 		}
 	},
+	// Helper function to skip previously read text for quick replay
+	skipReadText: function() {
+		if (this.findVar("_skip_text") != true) return false;
+		if (!Stage.inputFocus) return false;
+		if (!this.supportsLocalStorage()) return false;
+		if ((Stage.script.sequence[0] != label) || (localStorage["_persist_skip_"+Stage.script.sequence[1]] == null))
+			return false;
+		var tmp = JSON.parse(localStorage["_persist_skip_"+Stage.script.sequence[1]]);
+		for (var i=0; i<tmp.length; i+=2) {
+			if ((Stage.script.frame >= tmp[i]) && (Stage.script.frame <= tmp[i+1]))
+				return true;
+		}
+		return false;
+	},
+	// Helper function to build default stats for a character
+	buildStats: function() {
+		if (Stats == null) return null;
+		var newStats = {};
+		for (prop in Stats) {
+			if (Stats.hasOwnProperty(prop)) {
+					newStats[prop] = Stats[prop]._value[0];
+			}
+		}
+		return newStats;
+	},
+	// Helper function to look for actor stat
+	findStat: function (id) {
+		if (Stage.layers[1].length > 0) {
+			var arr_str = id.split('_');
+			if ((arr_str.length > 1) && (arr_str[0].length > 0)){
+				for (var i in Stage.layers[1]) {
+					if (Stage.layers[1][i].id == arr_str[0])
+						return Stage.layers[1][i].stats[arr_str[1]];
+				}
+			}
+		}
+		return null;
+	},
 }
 // Function to determine optimal animation frame
 window.requestAnimFrame = (function(callback){
-    return window.requestAnimationFrame ||
-    window.webkitRequestAnimationFrame ||
-    window.mozRequestAnimationFrame ||
-    window.oRequestAnimationFrame ||
-    window.msRequestAnimationFrame ||
-    function(callback){
-        window.setTimeout(callback, 1000 / 60);
-    };
+	return window.requestAnimationFrame ||
+	window.webkitRequestAnimationFrame ||
+	window.mozRequestAnimationFrame ||
+	window.oRequestAnimationFrame ||
+	window.msRequestAnimationFrame ||
+	function(callback){
+		window.setTimeout(callback, 1000 / 60);
+	};
 })();
 // Helper function on window resize
 window.onresize = (function(){
@@ -1004,7 +1138,7 @@ Vector2d.prototype.normalize = function () {
 		this.vx /= len;
 		this.vy /= len;
 	}
-    return len;
+	return len;
 };
 Vector2d.prototype.rotate = function (angle) {
 	var vx = this.vx,
@@ -1308,7 +1442,7 @@ var TransEffects = {
 // Script method callback/handlers
 ///////////////////////////////////////////////////////////////////////////////
 // label - marks a position in the script
-function label(param) { /*alert(param);*/ }
+function label(param) { }
 // message - display a message box
 function message(param) { alert(param); }
 // wait - pauses execution
@@ -1335,6 +1469,10 @@ function screen(param) {
 				Stage.shake = param.shake;
 				Stage.Transition(param.duration ? param.duration: Config.transTime);
 			}
+			if (prop == 'fall') {
+				Stage.fall = param.fall;
+				Stage.Transition(param.duration ? param.duration: Config.transTime);
+			}
 			if (prop == 'snap') {
 				var img = Stage.canvas.toDataURL("image/"+param.snap);
 				window.open(img,'_blank','width='+Stage.canvas.width+',height='+Stage.canvas.height);
@@ -1359,52 +1497,103 @@ function set(param) {
 			persist = true;
 		}
 		arr_param[i+1] = eval(arr_param[i+1]);
-		var value = Helper.findVar(arr_param[i]);
+		var value = Helper.findStat(arr_param[i]);
 		if (value != null) {
-			if (arr_param[i+1] == null) {
-				if (Stage.variables[arr_param[i]].Persist() && Helper.supportsLocalStorage())
-					localStorage.removeItem("_persist_uv_"+arr_param[i]);
-				delete(Stage.variables[arr_param[i]]);
-				return;
+			/* set actor stat */
+			var arr_str = arr_param[i].split('_');
+			var stat = value;
+			if (typeof Stats[arr_str[1]]._value[0] == 'number') {
+				if (typeof arr_param[i+1] == 'number')
+					stat = arr_param[i+1];
+				else if (typeof arr_param[i+1] == 'string') {
+					if (arr_param[i+1].search(/[+|\-|*|%|\/]/g) != -1)
+						stat = eval(stat + arr_param[i+1]);
+				}
+				stat = Math.max(Stats[arr_str[1]]._value[0], Math.min(Stats[arr_str[1]]._value[1], stat));
 			}
-			if (Stage.variables[arr_param[i]].Type() == 'object') {
-				// assumes array, just push new value
-				Stage.variables[arr_param[i]].Value().push(arr_param[i+1]);
-				Stage.variables[arr_param[i]].persist = persist;
+			else if (typeof Stats[arr_str[1]]._value[0] == 'boolean') {
+				if (typeof arr_param[i+1] == 'number')
+					stat = (arr_param[i+1]==0) ? Stats[arr_str[1]]._value[0] : Stats[arr_str[1]]._value[1];
+				else if (typeof arr_param[i+1] == 'string') {
+					if (arr_param[i+1].search(/!/g) != -1)
+						stat = !stat;
+				}
+				else if (typeof arr_param[i+1] == 'boolean')
+					stat = arr_param[i+1];
 			}
-			else {
-				if (typeof arr_param[i+1] == 'string') {
-					// if value is a reference to other variables
-					var ref = Helper.findVar(arr_param[i+1]);
-					if (ref != null)
-						Stage.variables[arr_param[i]].Set(ref, persist);
-					else {
-						// is it an expression with supported operator
-						if (arr_param[i+1].search(/[+|\-|*|%|\/]/g) != -1)
-							Stage.variables[arr_param[i]].Set(eval(Stage.variables[arr_param[i]].Value() + arr_param[i+1]), persist);
-						// or a simple string to set
-						else
-							Stage.variables[arr_param[i]].Set(arr_param[i+1], persist);
+			else if (typeof Stats[arr_str[1]]._value[0] == 'string') {
+				if (typeof arr_param[i+1] == 'number') {
+					if ((arr_param[i+1] >= 0) && (arr_param[i+1] < Stats[arr_str[1]]._value.length))
+						stat = Stats[arr_str[1]]._value[arr_param[i+1]];
+				}
+				else if (typeof arr_param[i+1] == 'string') {
+					for (var j in Stats[arr_str[1]]._value) {
+						if (arr_param[i+1] == Stats[arr_str[1]]._value[j]) {
+							stat = arr_param[i+1];
+							break;
+						}
 					}
 				}
-				else {
-					Stage.variables[arr_param[i]].Set(arr_param[i+1], persist);
-				}
 			}
+			Helper.setValue(arr_param[i], stat);
+			//for (var j in Stage.layers[1]) {
+			//	if (Stage.layers[1][j].id == arr_str[0]) {
+			//		Stage.layers[1][j].stats[arr_str[1]] = stat;
+			//		break;
+			//	}
+			//}
 		}
 		else {
-			var uv = new UserVars();
-			if (typeof arr_param[i+1] == 'string') {
-				var ref = Helper.findVar(arr_param[i+1]);
-				uv.Set((ref != null) ? ref : arr_param[i+1], persist);
+			/* set user variable */
+			value = Helper.findVar(arr_param[i]);
+			if (value != null) {
+				if (arr_param[i+1] == null) {
+					if (Stage.variables[arr_param[i]].Persist() && Helper.supportsLocalStorage())
+						localStorage.removeItem("_persist_uv_"+arr_param[i]);
+					delete(Stage.variables[arr_param[i]]);
+					return;
+				}
+				if (Stage.variables[arr_param[i]].Type() == 'object') {
+					// assumes array, just push new value
+					Stage.variables[arr_param[i]].Value().push(arr_param[i+1]);
+					Stage.variables[arr_param[i]].persist = persist;
+				}
+				else {
+					if (typeof arr_param[i+1] == 'string') {
+						// if value is a reference to other variables
+						var ref = Helper.findVar(arr_param[i+1]);
+						if (ref != null)
+							Stage.variables[arr_param[i]].Set(ref, persist);
+						else {
+							// is it an expression with supported operator
+							if (arr_param[i+1].search(/[+|\-|*|%|\/]/g) != -1)
+								Stage.variables[arr_param[i]].Set(eval(Stage.variables[arr_param[i]].Value() + arr_param[i+1]), persist);
+							else if (arr_param[i+1].search(/!/g) != -1)
+								Stage.variables[arr_param[i]].Set(!Stage.variables[arr_param[i]].Value());
+							// or a simple string to set
+							else
+								Stage.variables[arr_param[i]].Set(arr_param[i+1], persist);
+						}
+					}
+					else {
+						Stage.variables[arr_param[i]].Set(arr_param[i+1], persist);
+					}
+				}
 			}
-			else
-				uv.Set(arr_param[i+1], persist);
-			Stage.variables[arr_param[i]] = uv;
-			uv = null;
-		}	
-		if (Stage.variables[arr_param[i]].Persist() && Helper.supportsLocalStorage())
-			localStorage["_persist_uv_"+arr_param[i]] = JSON.stringify(Stage.variables[arr_param[i]].Value());
+			else {
+				var uv = new UserVars();
+				if (typeof arr_param[i+1] == 'string') {
+					var ref = Helper.findVar(arr_param[i+1]);
+					uv.Set((ref != null) ? ref : arr_param[i+1], persist);
+				}
+				else
+					uv.Set(arr_param[i+1], persist);
+				Stage.variables[arr_param[i]] = uv;
+				uv = null;
+			}	
+			if (Stage.variables[arr_param[i]].Persist() && Helper.supportsLocalStorage())
+				localStorage["_persist_uv_"+arr_param[i]] = JSON.stringify(Stage.variables[arr_param[i]].Value());
+		}
 	}
 }
 // get - gets value of a user variable
@@ -1514,6 +1703,59 @@ function tile(param) {
 		scene(sparam);
 	}
 	Stage.variables["_nav_move"].Set("",false);
+	
+	if (param.map && (Helper.findVar("_nav_automap") != null)) {
+		var val = Stage.variables["_nav_automap"].Value();
+		val[param.map[0]][param.map[1]] = 1;
+		Stage.variables["_nav_automap"].Set(val, false);
+		
+		if (Helper.findVar("_nav_pos") == null) {
+			var uv = new UserVars();
+			uv.Set(0, false);
+			Stage.variables["_nav_pos"] = uv;
+		}
+		Stage.variables["_nav_pos"].Set(param.map, false);
+		
+		// force an automap redraw
+		for (var i in Stage.layers[3]) {
+			if (Stage.layers[3][i].type == 'minimap') {
+				Stage.layers[3][i].redraw = true;
+				break;
+			}
+		}
+	}
+}
+// automap - display an auto-revealing map, to be used with tiles
+function automap(param) {
+	// automap uses atmo, tile uses scene
+	if (typeof param == 'string') {
+		var sparam = {};
+		if (param == 'hide') sparam.minimap = 'stop';
+		if (param == 'show') sparam.minimap = 'start';
+		atmosphere(sparam);		
+	}
+	else {
+		if (param.src) {
+			if (Helper.findVar("_nav_automap") == null) {
+				var uv = new UserVars();
+				uv.Set(0, false);
+				Stage.variables["_nav_automap"] = uv;
+			}
+
+			var val = new Array(param.size[0]);
+			for (var i=0; i<val.length; i++) {
+				val[i] = new Array(param.size[1]);
+				for (var j=0; j<val[i].length; j++)
+					val[i][j] = 0;
+			}
+			Stage.variables["_nav_automap"].Set(val, false);
+			var sparam = {};
+			sparam.minimap = param.src;
+			sparam.offset = (param.offset) ? param.offset : new Array(0,0);
+			sparam.size = param.size;
+			atmosphere(sparam);
+		}
+	}
 }
 // map - define map adjacency
 function map(param) {
@@ -1760,12 +2002,18 @@ function button(param) {
 	// check existing button w/ same id ?
 	var bt = new ActiveImage();
 	bt.saveparam = param;
-	CformElements['button']['_init'](bt, param);
+	if (/toggle/i.test(param.name))
+		CformElements['toggle']['_init'](bt, param);
+	else
+		CformElements['button']['_init'](bt, param);
 	Stage.layers[4].push(bt);
 	bt = null;
 }
 // timer - create a canvas form timer (layer 4)
-// removed as of v.0.3.1
+// removed as of v.0.3.1, added stub for compatibility
+function timer(param) {
+	marquee(param);
+}
 // picture - create a canvas form animated image (layer 4)
 function picture(param) {
 	var pic = new ActiveImage();
@@ -1929,8 +2177,8 @@ function video(param) {
 					"m4v": 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"',
 					"ogg": 'video/ogg; codecs="theora, vorbis"',
 					"ogv": 'video/ogg; codecs="theora, vorbis"',
-					"webm": 'video/webm; codecs="vp8, vorbis"',			
-					"webmv": 'video/webm; codecs="vp8, vorbis"'};			
+					"webm": 'video/webm; codecs="vp8, vorbis"',
+					"webmv": 'video/webm; codecs="vp8, vorbis"'};
 	var v = new Movie();
 	v.src = null;
 	var videoformat = (param.format) ? param.format : Config.movieFormat;
@@ -2048,7 +2296,7 @@ function submit(param) {
 			Stage.activeForm.parent.removeChild(Stage.activeForm.newForm);
 			Stage.activeForm = null;
 			Stage.pause = false;
-        }, false);
+		}, false);
 	try { return element; }
 	finally { element = null; }
 }
@@ -2164,8 +2412,15 @@ function checkpoint(param) {
 		}
 	}
 	if (cmd == "save") {
-		if (!Config.gameNamedCheckpts) 
-			localStorage.clear(); 
+		if (!Config.gameNamedCheckpts) {
+			//localStorage.clear(); 
+			var pattern = "/_persist_/g";
+			for (prop in localStorage) {
+				if (!prop.match(eval(pattern))) {
+					localStorage.removeItem(prop);
+				}
+			}
+		}
 		else {
 			if (chkpt != '') {
 				var pattern = "/^"+chkpt+"/g";
@@ -2227,6 +2482,10 @@ function checkpoint(param) {
 				localStorage[chkpt+"l1_"+i+"_avatar"] = Stage.layers[1][i].avatar.src;
 			else
 				localStorage[chkpt+"l1_"+i+"_avatar"] = "undefined";
+			if (Stage.layers[1][i].avatars != null)
+				localStorage[chkpt+"l1_"+i+"_avatars"] = JSON.stringify(Stage.layers[1][i].avatars);
+			else
+				localStorage[chkpt+"l1_"+i+"_avatars"] = "undefined";
 			localStorage[chkpt+"l1_"+i+"_active"] = Stage.layers[1][i].activeSprite;
 			localStorage[chkpt+"l1_"+i+"_alpha"] = Stage.layers[1][i].alpha;
 			if (Stage.layers[1][i].prevFx != '')
@@ -2240,6 +2499,7 @@ function checkpoint(param) {
 			//localStorage[chkpt+"l1_"+i+"_fxparam"] = Stage.layers[1][i].fxparam;
 			localStorage[chkpt+"l1_"+i+"_orientation"] = Stage.layers[1][i].orientation;
 			localStorage[chkpt+"l1_"+i+"_size"] = Stage.layers[1][i].size;
+			localStorage[chkpt+"l1_"+i+"_stats"] = JSON.stringify(Stage.layers[1][i].stats);
 		}
 		// Store layer 2
 		localStorage[chkpt+"l2_count"] = Stage.layers[2].length;
@@ -2360,7 +2620,12 @@ function checkpoint(param) {
 				localStorage[chkpt+"uv"+uv_count+"_name"] = prop;
 				localStorage[chkpt+"uv"+uv_count+"_value"] = JSON.stringify(Stage.variables[prop].Value());
 				localStorage[chkpt+"uv"+uv_count+"_type"] = Stage.variables[prop].Type();
-				localStorage[chkpt+"uv"+uv_count+"_persist"] = (Stage.variables[prop].persist) ? Stage.variables[prop].persist : false;
+				if (Stage.variables[prop].persist) {
+					localStorage[chkpt+"uv"+uv_count+"_persist"] =  true;
+					localStorage["_persist_uv_"+prop] = JSON.stringify(Stage.variables[prop].Value());
+				}
+				else
+					localStorage[chkpt+"uv"+uv_count+"_persist"] =  false;
 				uv_count++;
 			}
 		}
@@ -2446,6 +2711,10 @@ function checkpoint(param) {
 				chr.AddAvatar(localStorage[chkpt+"l1_"+i+"_avatar"]);
 			else 
 				chr.AddAvatar('');
+			if (localStorage[chkpt+"l1_"+i+"_avatars"] != "undefined")
+				chr.avatars = JSON.parse(localStorage[chkpt+"l1_"+i+"_avatars"]);
+			else 
+				chr.avatars = [];
 			chr.activeSprite = parseInt(localStorage[chkpt+"l1_"+i+"_active"]);
 			chr.offset = new Vector2d(parseInt(localStorage[chkpt+"l1_"+i+"_offset_x"]), parseInt(localStorage[chkpt+"l1_"+i+"_offset_y"]))
 			chr.alpha = parseFloat(localStorage[chkpt+"l1_"+i+"_alpha"]);
@@ -2463,6 +2732,7 @@ function checkpoint(param) {
 			chr.rotation = parseFloat(localStorage[chkpt+"l1_"+i+"_orientation"]);
 			chr.size = parseFloat(localStorage[chkpt+"l1_"+i+"_size"]);
 			chr.scale = parseFloat(localStorage[chkpt+"l1_"+i+"_size"]);
+			chr.stats = JSON.parse(localStorage[chkpt+"l1_"+i+"_stats"]);
 			Stage.layers[1].push(chr);
 			chr = null;
 		}
@@ -2670,7 +2940,7 @@ function UserVars() {
 UserVars.prototype.Set = function(v,p) {
 	this.value = v;
 	this.type = typeof v;
-	if (p) this.persist = p;		
+	if (p) this.persist = p;
 }
 UserVars.prototype.Value = function() {
 	return this.value;
@@ -2691,7 +2961,7 @@ function Sounds() {
 	this.repeat = -1;
 	this.delay = 0;
 	this.isStopping = false;
-	this.isPaused = false;		
+	this.isPaused = false;
 }
 Sounds.prototype.Play = function(init) {
 	var that = this;
@@ -2838,7 +3108,7 @@ function Form(id) {
 	newHeading.innerHTML = id;
 	this.newForm.appendChild(newHeading);
 	var newHr = document.createElement("hr");
-	this.newForm.appendChild(newHr);		
+	this.newForm.appendChild(newHr);
 	this.newFieldset.id = "_fieldset_";
 	this.newForm.appendChild(this.newFieldset);
 
@@ -2954,8 +3224,8 @@ Backdrop.prototype.Draw = function() {
 	if (!this.redraw) return false;
 	
 	if (this.visible) {
-		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);		
-		this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));		
+		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);
+		this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
 		if (this.rotation != 0) {
 			this.context.translate(this.context.canvas.width/2, this.context.canvas.height/2);
 			this.context.rotate(this.rotation * Math.PI/180);
@@ -3026,6 +3296,41 @@ var CformElements = {
 				obj.DrawImageOrFill(obj.sprites[2]);
 			else
 				obj.DrawImageOrFill(obj.sprites[0]);
+		},
+	},
+	toggle: {
+		_init: function (obj, param) {
+			obj.type = "toggle";
+			CformElements.button._init(obj, param);
+		},
+		_update: function (obj, elapsed) {
+			if (!Helper.checkMapAccess(obj.group, obj.id)) return;
+			if (obj.prev_state != obj.state) {
+				obj.prev_state = obj.state;
+				obj.redraw = true;	
+				if ((obj.state == 'hover') || (obj.state == 'clicked')) {
+					obj.inputFocus = true;
+					if (obj.tooltip != '') Stage.Transition(1.0);
+				}
+				else
+					obj.inputFocus = false;
+			}
+			if (Stage.mouseClick && obj.inputFocus) {
+				if (obj.link != null) {
+					obj.link[0](obj.link[1]);
+					Stage.pause = false;
+				}
+				/* swap base and click images */
+				var newbase = obj.sprites.pop();
+				var newclick = obj.sprites.shift();
+				obj.sprites.unshift(newbase);
+				obj.sprites.push(newclick);
+				newbase = null; newclick = null;
+				obj.redraw = true;
+			}
+		},
+		_draw: function (obj) {
+			CformElements.button._draw(obj);
 		},
 	},
 	picture: {
@@ -3230,7 +3535,7 @@ ActiveImage.prototype.IsLoaded = function() {
 		if (this.rect.h == 0) {
 			this.context.canvas.setAttribute('height',this.sprites[idx].height);
 			this.rect.h = this.sprites[0].height;
-		}			
+		}
 		else 
 			this.context.canvas.setAttribute('height',this.rect.h);
 	}
@@ -3267,7 +3572,7 @@ ActiveImage.prototype.Draw = function() {
 			this.context.rect(this.rect.x,this.rect.y,this.rect.w,this.rect.h);
 			this.context.closePath();
 		}
-	}			
+	}
 	this.redraw = false;
 	this.update = true;
 	return true;
@@ -3312,7 +3617,7 @@ function ScriptBox() {
 	this.visible = false;
 	this.inputFocus = false;
 	this.timeout = 0;
-		
+
 	this.text = '';					// text display
 	this.prompt = new Image();
 	this.avatar = null;
@@ -3320,7 +3625,7 @@ function ScriptBox() {
 	this.alpha = 1;
 	this.effects = 'none';
 	this.scrollOffsetY = 0;
-		
+
 	this.fontFamily = 'Verdana';		// font properties
 	this.fontColor = 'white';
 	this.fontSize = '14px';
@@ -3345,13 +3650,13 @@ ScriptBox.prototype.Create = function(w, h) {
 	var canvas = document.createElement('canvas');
 	this.context = canvas.getContext('2d');
 	this.context.canvas.setAttribute('width', this.vpwidth * Config.boxWidth);
-	this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);			
+	this.context.canvas.setAttribute('height', this.vpheight * Config.boxHeight);
 	// create prompt this.images
 	if (this.psrc != '') {
 		Helper.addEvent(this.prompt, 'load', function() {
 			that.isready = true;
 		}, false);
-		this.prompt.src = this.psrc;			
+		this.prompt.src = this.psrc;
 	}
 	canvas = null;
 }
@@ -3470,7 +3775,7 @@ ScriptBox.prototype.Update = function(elapsed) {
 				this.fxupdate = false;
 				break;
 		}
-		this.changed = false;			
+		this.changed = false;
 		this.redraw = true;
 	}
 	if (this.CheckHoverOnHotspot()) {
@@ -3491,7 +3796,7 @@ ScriptBox.prototype.Draw = function() {
 	if (!this.redraw) return false;
 	
 	if (this.visible == true) {
-		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);	
+		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);
 		if (!this.balloon) {
 			if (this.back == 'dim') {
 				this.context.globalAlpha = 0.5;
@@ -3581,7 +3886,7 @@ ScriptBox.prototype.Draw = function() {
 			// draw hover
 			if ((this.jumpTo.length > 0) && (this.menuHover != -1)) {
 				this.context.save();
-				this.context.globalAlpha = 0.25;						
+				this.context.globalAlpha = 0.25;
 				this.context.fillStyle = Config.activeTheme.boxMenuHilite;
 				this.context.fillRect(5,this.jumpTo[this.menuHover].hotspot[1] - this.lineHeight + 4,
 										this.context.canvas.width - 10,this.lineHeight);
@@ -3633,6 +3938,28 @@ Script.prototype.Init = function(name) {
 	this.frame = 0;
 }
 Script.prototype.Update = function() {
+	if (Helper.supportsLocalStorage()) {
+		if (Stage.script.sequence[0] == label) {
+			var tmp = new Array();
+			if (localStorage["_persist_skip_"+Stage.script.sequence[1]] != null)
+				tmp = JSON.parse(localStorage["_persist_skip_"+Stage.script.sequence[1]]);
+			if ((tmp.length == 0) || (tmp.length%2 == 1)) tmp.push(Stage.script.frame);
+			else {
+				var found = false;
+				for (var i=0; i<tmp.length; i+=2) {
+					if ((Stage.script.frame >= tmp[i]) && (Stage.script.frame <= tmp[i+1]+2)) {
+						if (Stage.script.frame > tmp[i+1]) tmp.splice(i+1,1,Stage.script.frame);
+						found = true;
+						break;
+					}
+				}
+				if (!found) tmp.push(Stage.script.frame);
+			}
+			localStorage["_persist_skip_"+Stage.script.sequence[1]] = JSON.stringify(tmp);
+			Stage.skipTextUpdated = true;
+			tmp = null;
+		}
+	}
 	if (this.sequence.length > this.frame) {
 		if (typeof(this.sequence[this.frame]) == "function") {
 			this.sequence[this.frame](this.sequence[this.frame+1]);
@@ -3692,6 +4019,7 @@ function Character(id, order) {
 	//this.context = 0;
 	this.sprites = new Array();
 	this.avatar = null;
+	this.avatars = new Array();				// avatar array with tags
 	//this.id = '';
 	this.nick = '';
 	this.color = 0;
@@ -3704,14 +4032,15 @@ function Character(id, order) {
 	this.visible = true;
 	this.pendingRemoval = false;
 	this.activeSpriteRemoval = false;
-		
+	this.stats = Helper.buildStats();
+
 	this.origin = new Vector2d(0,0);		// actor origin is bottom center
 	this.pos = new Vector2d(0,0);
 	this.target_pos = new Vector2d(0,0);
 	this.offset = new Vector2d(0,0);
 	this.spriteDim = new Vector2d(0,0);
 	this.posMode = 'auto';
-		
+
 	this.effects = 'done';
 	this.prevFx = '';
 	this.fxparam = '';
@@ -3724,7 +4053,7 @@ function Character(id, order) {
 	this.size = 1;
 	//this.transTime = 1;
 	this.wait = true;
-		
+
 	this.id = id;
 	this.z_order = order;
 	var canvas = document.createElement('canvas');
@@ -3822,7 +4151,7 @@ Character.prototype.RemoveSprite = function(tag) {
 				else if (i < this.activeSprite) {
 					this.sprites[i].src = null;
 					this.sprites.splice(i, 1);
-					this.activeSprite = Math.max(this.activeSprite-1, 0);						
+					this.activeSprite = Math.max(this.activeSprite-1, 0);
 				}
 				else {
 					this.activeSpriteRemoval = true;
@@ -3866,10 +4195,10 @@ Character.prototype.Draw = function() {
 	if (this.activeSprite > this.sprites.length-1) return false;
 	
 	if (this.visible) {
-		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);		
+		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);
 		if (this.prevSprite >= 0) {
 			this.context.globalAlpha = Math.max(0, Math.min(1, this.target_alpha-this.alpha));
-			this.context.drawImage(this.sprites[this.prevSprite].src, 								   
+			this.context.drawImage(this.sprites[this.prevSprite].src, 
 								((this.context.canvas.width - this.spriteDim.vx)/2)>>0,
 								((this.context.canvas.height - this.spriteDim.vy)/2)>>0);
 			if (this.target_alpha - this.alpha <= 0) this.prevSprite = -1;
@@ -3890,7 +4219,7 @@ Character.prototype.Draw = function() {
 			this.activeSprite = Math.max(this.activeSprite-1, 0);
 			this.activeSpriteRemoval = false;
 		}
-	}					
+	}
 	this.redraw = false;
 	if (this.drawn) this.update = true;
 	return true;
@@ -3935,7 +4264,7 @@ var AtmoEffects = {
 			obj.context.lineWidth = "1";
 			obj.context.strokeStyle = "rgb(255, 255, 255)";
 			obj.context.beginPath();
-			for (var i=0; i<obj.numParticles; i++) {			
+			for (var i=0; i<obj.numParticles; i++) {
 				obj.context.moveTo(obj.particles[i].pos.vx, obj.particles[i].pos.vy);
 				obj.context.lineTo(obj.particles[i].pos.vx - obj.particles[i].size.vx, 
 									obj.particles[i].pos.vy - obj.particles[i].size.vy);
@@ -3980,7 +4309,7 @@ var AtmoEffects = {
 		_draw: function(obj) {
 			obj.context.lineWidth = "1";
 			obj.context.strokeStyle = "rgb(255, 255, 255)";
-			obj.context.fillStyle = 'white';			
+			obj.context.fillStyle = 'white';
 			obj.context.beginPath();
 			for (var i=0; i<obj.numParticles; i++) {
 				obj.context.moveTo(obj.particles[i].pos.vx, obj.particles[i].pos.vy);
@@ -4094,7 +4423,7 @@ var AtmoEffects = {
 		},
 		_draw: function(obj) {
 			obj.context.fillStyle = obj.mask;
-			obj.context.fillRect(0, 0, obj.context.canvas.width, obj.context.canvas.height);		
+			obj.context.fillRect(0, 0, obj.context.canvas.width, obj.context.canvas.height);
 			obj.context.save();
 			obj.context.globalCompositeOperation = "destination-out";
 			var grd = obj.context.createRadialGradient(Stage.coord.vx, Stage.coord.vy, 0,
@@ -4108,6 +4437,75 @@ var AtmoEffects = {
 			obj.context.closePath();
 			obj.context.fill();
 			obj.context.restore();
+		}
+	},
+	minimap: {
+		_init: function(obj, param) {
+			if (param.minimap.search(/(start|stop)/g) == -1) {
+				obj.src = param.minimap;
+				obj.size = param.size;
+				obj.pos = new Vector2d(param.offset[0], param.offset[1]);
+				obj.alpha = 0;
+			}
+			obj.isready = false;
+			obj.image = new Image();
+			Helper.addEvent(obj.image, 'load', function() {
+				obj.isready = true;
+				obj.visible = true;
+				obj.dimx = obj.image.width/obj.size[0];
+				obj.dimy = obj.image.height/obj.size[1];
+			}, false);
+			obj.image.src = obj.src;
+			// saves
+			obj.saveparam.minimap = obj.src;
+			// size saved in param
+		},
+		_update: function(obj, elapsed) {
+			if (obj.action == 'stop') {
+				if (obj.alpha > 0) {
+					obj.alpha -= elapsed/(Config.transTime * 1000)
+					obj.redraw = true;
+				}
+				else {
+					obj.image = null;
+					obj.visible = false;
+				}
+			}
+			else {
+				if (obj.alpha < 0.6) {
+					obj.alpha += elapsed/(Config.transTime * 1000);
+					obj.alpha = Math.min(0.6, obj.alpha);
+					obj.redraw = true;
+				}
+			}
+		},
+		_draw: function(obj) {
+			// draw map cover or image
+			obj.context.save();
+			obj.context.fillStyle = Config.activeTheme.automapMask;
+			var val = Stage.variables["_nav_automap"].Value();
+			for (var i=0; i<obj.size[0]; i++) {
+				for (var j=0; j<obj.size[1]; j++) {
+					if (!val[i][j])
+						obj.context.fillRect(i*obj.dimx+obj.pos.vx, j*obj.dimy+obj.pos.vy, obj.dimx, obj.dimy);
+					else
+						obj.context.drawImage(obj.image, i*obj.dimx, j*obj.dimy, obj.dimx, obj.dimy,
+											  i*obj.dimx+obj.pos.vx, j*obj.dimy+obj.pos.vy, obj.dimx, obj.dimy)
+				}
+			}
+			obj.context.restore();
+			if (Helper.findVar("_nav_pos") != null) {
+				obj.context.save();
+				var subs = Config.activeTheme.automapPointer.split(' ');
+				obj.context.fillStyle = subs[0];
+				obj.context.strokeStyle = subs[1];
+				val = Stage.variables["_nav_pos"].Value();
+				Helper.createPointer(obj.context, val[0]*obj.dimx+obj.pos.vx, val[1]*obj.dimy+obj.pos.vy, 
+										obj.dimx, obj.dimy, Stage.variables["_nav_dir"].Value());
+				obj.context.fill();
+				obj.context.stroke();
+				obj.context.restore();
+			}
 		}
 	}
 };
@@ -4126,11 +4524,11 @@ function Atmosphere(id) {
 	canvas.id = escape(id);
 	this.context = canvas.getContext('2d');
 	this.context.canvas.setAttribute('width', Stage.canvas.width);
-	this.context.canvas.setAttribute('height', Stage.canvas.height);	
+	this.context.canvas.setAttribute('height', Stage.canvas.height);
 	this.isready = true;
-	this.update = false;		
+	this.update = false;
 	canvas = null;
-	//return this.context.canvas.id;	
+	//return this.context.canvas.id;
 }
 Atmosphere.prototype.Init = function(type, param) { 
 	this.type = type;
@@ -4233,8 +4631,10 @@ var Stage = {
 	transTime: 0,
 	spritePos: new Array(8),
 	shake: 0,
+	fall:0,
 	stageIdle: 0,
 	lookAheadFrame: 0,
+	skipTextUpdated: 0,
 	/* 	Normally shouldn't need more than 5 layers,
 		the higher the layer, the higher Z order
 			- background = 0: backdrop layer
@@ -4297,27 +4697,27 @@ var Stage = {
 			Stage.mouseDown = false;
 			Stage.mouseMove = true;
 			Stage.HandleEvents(e);
-        }, false);
+		}, false);
 		Helper.addEvent(this.canvas, 'mousedown', function(e) {
 			if (e.which != 1) return;
 			Stage.mouseDown = true;
 			Stage.HandleEvents(e);
-        }, false);
+		}, false);
 		//Helper.addEvent(this.canvas, 'click', function(e) {
 		Helper.addEvent(this.canvas, 'mouseup', function(e) {
 			if (e.which != 1) return;
 			Stage.mouseUp = true;
 			Stage.mouseDown = false;
 			Stage.HandleEvents(e);
-        }, false);
+		}, false);
 		Helper.addEvent(this.canvas, 'mouseover', function(e) {
 			Stage.mouseOut = false;
 			Stage.HandleEvents(e);
-        }, false);
+		}, false);
 		Helper.addEvent(this.canvas, 'mouseout', function(e) {
 			Stage.mouseOut = true;
 			//Stage.HandleEvents(e);
-        }, false);
+		}, false);
 		Helper.addEvent(this.canvas, 'touchstart', function(e) {
 			e.preventDefault();
 			Stage.mouseOut = false;
@@ -4418,8 +4818,10 @@ var Stage = {
 			}
 		}
 		// update the script
-		if (this.update && !this.pause) {
-			this.script.Update()
+		//if (this.update && !this.pause) {
+		if (this.update) {
+			if (!(this.pause &&	!Helper.skipReadText()))
+				this.script.Update()
 		}
 		// play sounds if any
 		for (var idx in this.sounds) {
@@ -4455,6 +4857,7 @@ var Stage = {
 			this.transTime = Math.max(0, this.transTime - elapsed/1000);
 			if (this.transTime <=0) {
 				this.shake = 0;
+				this.fall = 0;
 			}
 		}
 		// reset clicked, assumed processing done
@@ -4470,7 +4873,7 @@ var Stage = {
 							(this.layers[4].length > 1)	))
 			this.context.clearRect(0,0,this.canvas.width,this.canvas.height);
 
-		var running_draw = false;			
+		var running_draw = false;
 		// draw background here
 		for (var i in this.layers[0]) {
 			if (this.layers[0][i].Draw()) running_draw = true;
@@ -4577,7 +4980,7 @@ var Stage = {
 		if (this.mouseOut) return;
 		// all mouse and touch moves
 		this.targetPos = (this.touchStart) ? this.GetTouchPosition(this.canvas, evt) :
-											 this.GetMousePosition(this.canvas, evt);			 
+											 this.GetMousePosition(this.canvas, evt);
 		// mouse click / touch end
 		if (this.mouseUp || this.touchEnd) {
 			this.click.copy(this.coord);	// used only for debug
@@ -4688,7 +5091,7 @@ var Stage = {
 			//$('#debug').html(Stage.click.vx +', '+ Stage.click.vy);
 			//$('#debug').html(this.script.frame/2 + ' ' + this.update);
 			//if (Helper.findVar("_nav_loc") != null)
-			//	$('#debug').html(this.variables["_nav_loc"].Value()+' '+this.variables["_nav_dir"].Value());		
+			//	$('#debug').html(this.variables["_nav_loc"].Value()+' '+this.variables["_nav_dir"].Value());
 			$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2 + ' Idle: ' + this.stageIdle);
 		}
 		// update the stage
@@ -4716,6 +5119,36 @@ var Stage = {
 					}
 				}
 			}
+			if (this.skipTextUpdated && Helper.supportsLocalStorage() && 
+			   ((Stage.script.sequence[0] == label) && (localStorage["_persist_skip_"+Stage.script.sequence[1]] != null))) {
+				var skip_array = JSON.parse(localStorage["_persist_skip_"+Stage.script.sequence[1]]);
+				var opt_array = [];
+				for (var i=0; i<skip_array.length; i+=2) {
+					if (opt_array.length == 0) {
+						opt_array.push(skip_array[i]);
+						opt_array.push(skip_array[i+1]);
+					}
+					else {
+						var found = false;
+						for (var j=0; j<opt_array.length; j+=2) {
+							if ((skip_array[i] >= opt_array[j]) && (skip_array[i] <= opt_array[j+1]+2)) {
+								if ((skip_array[i+1] > opt_array[j+1]))
+									opt_array[j+1] = skip_array[i+1];
+								found = true;
+								break;
+							}
+						}
+						if (!found) {
+							opt_array.push(skip_array[i]);
+							opt_array.push(skip_array[i+1]);
+						}
+					}
+				}
+				opt_array.sort(function(a,b){return a-b});
+				localStorage["_persist_skip_"+Stage.script.sequence[1]] = JSON.stringify(opt_array);
+				this.skipTextUpdated = false;
+				opt_array = null; skip_array = null;
+			}
 		}
 		// setup next timer tick
 		requestAnimFrame(function(){
@@ -4724,8 +5157,9 @@ var Stage = {
 	}
 }
 
-// ensure config is not null
+// ensure config and stats is not null
 var Config = {};
+var Stats = {};
 // finally, the script, config and plugins are loaded
 for (var j in TOC) {
 	Helper.includeJs(TOC[j]);
