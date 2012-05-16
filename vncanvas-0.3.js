@@ -44,6 +44,9 @@
 /******************************************************************************
 Revision history:
 Version 0.3 Brenda
+05.15.12 - Added 'random' generator for user variables
+		 - Added a parameter to 'macro' calls
+		 - Added multiple conditions for 'jump'
 05.04.12 - Added auto-revealing map to 'tile' navigation
 		 - Bugfix: local storage variable persist flag fix
 04.23.12 - Optimized 'skip' text storage
@@ -1458,8 +1461,17 @@ function wait(param) {
 }
 // macro - execute a user function
 function macro(param) {
-	if (Config.gameAllowMacro)
-		eval(param)();
+	if (Config.gameAllowMacro) {
+		if (typeof param == 'string')
+			eval(param)();
+		else {
+			for (prop in param) {
+				if (param.hasOwnProperty(prop)) {
+					eval(prop)(param[prop]);
+				}
+			}
+		}
+	}
 }
 // screen - do some screen actions
 function screen(param) {
@@ -1508,6 +1520,10 @@ function set(param) {
 				else if (typeof arr_param[i+1] == 'string') {
 					if (arr_param[i+1].search(/[+|\-|*|%|\/]/g) != -1)
 						stat = eval(stat + arr_param[i+1]);
+					else if (arr_param[i+1] == 'random') {
+						var delta = Stats[arr_str[1]]._value[1] - Stats[arr_str[1]]._value[0] + 1;
+						stat = Math.floor(Math.random()*delta) + Stats[arr_str[1]]._value[0];
+					}
 				}
 				stat = Math.max(Stats[arr_str[1]]._value[0], Math.min(Stats[arr_str[1]]._value[1], stat));
 			}
@@ -1570,6 +1586,14 @@ function set(param) {
 								Stage.variables[arr_param[i]].Set(eval(Stage.variables[arr_param[i]].Value() + arr_param[i+1]), persist);
 							else if (arr_param[i+1].search(/!/g) != -1)
 								Stage.variables[arr_param[i]].Set(!Stage.variables[arr_param[i]].Value());
+							// is it a random number
+							else if (arr_param[i+1].search(/random/g) != -1) {
+								var arr_random = arr_param[i+1].split(' ');
+								if (arr_random.length > 1)
+									Stage.variables[arr_param[i]].Set(Math.floor(Math.random()*(eval(arr_random[2])-eval(arr_random[1])+1)) + eval(arr_random[1]));
+								else
+									Stage.variables[arr_param[i]].Set(Math.random(), persist);
+							}								
 							// or a simple string to set
 							else
 								Stage.variables[arr_param[i]].Set(arr_param[i+1], persist);
@@ -1583,8 +1607,17 @@ function set(param) {
 			else {
 				var uv = new UserVars();
 				if (typeof arr_param[i+1] == 'string') {
-					var ref = Helper.findVar(arr_param[i+1]);
-					uv.Set((ref != null) ? ref : arr_param[i+1], persist);
+					if (arr_param[i+1].search(/random/g) != -1) {
+						var arr_random = arr_param[i+1].split(' ');
+						if (arr_random.length > 1)
+							uv.Set(Math.floor(Math.random()*(eval(arr_random[2])-eval(arr_random[1])+1)) + eval(arr_random[1]));
+						else
+							uv.Set(Math.random(), persist);
+					}
+					else {
+						var ref = Helper.findVar(arr_param[i+1]);
+						uv.Set((ref != null) ? ref : arr_param[i+1], persist);
+					}
 				}
 				else
 					uv.Set(arr_param[i+1], persist);
@@ -1629,27 +1662,36 @@ function jump(param) {
 				arr_param.push(JSON.stringify(param[prop]));
 			}
 		}
+		
+		var compare = false;
 		for (var i=0; i<arr_param.length; i+=2) {
 			//arr_param[i] = eval(arr_param[i]);
 			if (arr_param[i] == 'label') continue;
 			arr_param[i+1] = eval(arr_param[i+1]);
 
+			compare = false;
 			var val = Helper.getValue(arr_param[i]);
 			if (val != null) {
 				if (typeof val == 'number') {
 					if (val >= arr_param[i+1])
-						Stage.script.SetFrame(param.label);
+						compare = true;
+						//Stage.script.SetFrame(param.label);
 				}
 				else if (typeof val == 'string') {
 					if (val === arr_param[i+1])
-						Stage.script.SetFrame(param.label);
+						compare = true;
+						//Stage.script.SetFrame(param.label);
 				}
 				else {
 					if (val == arr_param[i+1])
-						Stage.script.SetFrame(param.label);
+						compare = true;
+						//Stage.script.SetFrame(param.label);
 				}
 			}
+			if (compare == false) break;
 		}
+		if (compare == true)
+			Stage.script.SetFrame(param.label);
 	}
 	Stage.layers[4][0].jumpTo.splice(0,Stage.layers[4][0].jumpTo.length);
 }
