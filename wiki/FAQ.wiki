@@ -22,6 +22,7 @@ Nope. Nada. Even credit or link back is totally optional. I'd like to see what y
 
 ==What are those different downloads and different versions (vncanvas-0.x.js)?==
 Those are just versions I keep for history and tracking. Sometimes, some code may get broken because of updates and it is usually useful to have some working code to revert back to.
+
 If you only need the latest, just get the highest numbered download or the highest versioned javascript. Note however that the build version at SVN may be newer than the packaged download versions.
 
 ==Why are the versions named after girl's names?==
