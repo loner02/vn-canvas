@@ -44,6 +44,7 @@
 /******************************************************************************
 Revision history:
 Version 0.3 Brenda
+10.12.12 - Bugfix: touch devices reset fix (courtesy of Turker Yasa)
 05.15.12 - Added 'random' generator for user variables
 		 - Added a parameter to 'macro' calls
 		 - Added multiple conditions for 'jump'
@@ -4905,6 +4906,8 @@ var Stage = {
 		// reset clicked, assumed processing done
 		this.mouseClick = false;
 		this.mouseMove = false;
+		this.touchStart = false;
+		this.touchEnd = false;
 	},	
 	Draw: function() {
 		// TODO: clear entire stage first; manage for improved FPS
