@@ -27,3 +27,10 @@ If you only need the latest, just get the highest numbered download or the highe
 
 ==Why are the versions named after girl's names?==
 That's just a fancy way of calling Alpha, Beta, etc. versions. Might as well stick with it. :)
+
+==It doesn't work on my device. Why?==
+HTML5 is platform and browser dependent. Some implement HTML5 features differently from the other, if they implement it at all. There is no "one size fits all". Cross platform doesn't exactly mean it'll work the same way on different platforms.
+
+Tip#1: If you want to target multiple devices that are totally different from one another, it may be better to have multiple packages.
+
+Tip#2: If you want to target a family of similar devices, try developing for the lower-end devices. Chances are, it'll work on the higher end devices.  
