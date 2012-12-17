@@ -34,3 +34,6 @@ HTML5 is platform and browser dependent. Some implement HTML5 features different
 Tip#1: If you want to target multiple devices that are totally different from one another, it may be better to have multiple packages.
 
 Tip#2: If you want to target a family of similar devices, try developing for the lower-end devices. Chances are, it'll work on the higher end devices.  
+
+==Is the engine safe to use?==
+The engine requires running javascript on the end-user's local platform. Though I guarantee that the base engine is free of any malware (and I invite anyone to inspect the source), I can not guarantee that someone with malicious intent will/can not insert harmful code on a "game" they'll distribute. Therefore I leave it up to the end-user to have sufficient malware security protection, just as they would have when visiting any javascript-enabled site.
