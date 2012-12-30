@@ -1,6 +1,15 @@
 =Revision History=
 {{{
+Version 0.4 Chelsea
+12.29.12 - 'menu' supports user variable set
+12.24.12 - Support _range attribute for actor stats
+         - Support '$' prepend on jump labels
+12.01.12 - Prep for RPG MOD Pack
 Version 0.3 Brenda
+10.12.12 - Bugfix: touch devices reset fix (courtesy of Turker Yasa)
+05.15.12 - Added 'random' generator for user variables
+	 - Added a parameter to 'macro' calls
+	 - Added multiple conditions for 'jump'
 05.04.12 - Added auto-revealing map to 'tile' navigation
 	 - Bugfix: local storage persist flag fix
 04.23.12 - Optimized 'skip' text storage
