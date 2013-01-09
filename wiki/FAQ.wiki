@@ -37,3 +37,6 @@ Tip#2: If you want to target a family of similar devices, try developing for the
 
 ==Is the engine safe to use?==
 The engine requires running javascript on the end-user's local platform. Though I guarantee that the base engine is free of any malware (and I invite anyone to inspect the source), I can not guarantee that someone with malicious intent will/can not insert harmful code on a "game" they'll distribute. Therefore I leave it up to the end-user to have sufficient malware security protection, just as they would have when visiting any javascript-enabled site.
+
+==What is that "RPG mod pack" thing?==
+It's an optional addon that transforms the engine to a lite-RPG engine. It doesn't change the base engine per se, but uses it to implement RPG-like functions. Don't worry, if you're a VN purist, just don't include the mod pack and all is well.
