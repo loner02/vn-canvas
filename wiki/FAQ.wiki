@@ -40,3 +40,8 @@ The engine requires running javascript on the end-user's local platform. Though 
 
 ==What is that "RPG mod pack" thing?==
 It's an optional addon that transforms the engine to a lite-RPG engine. It doesn't change the base engine per se, but uses it to implement RPG-like functions. Don't worry, if you're a VN purist, just don't include the mod pack and all is well.
+
+==You say it is for non-programmers, but I still see a lot of codes in there?==
+Ok, you can use the engine without doing any javascript-ing. What you get is a basic but working engine. None of the fancy stuff. If you want a bit of customization, you may have to do a little coding here and there. Now if you want your game to be really awesome, then dive in there and get your hands dirty with programming.
+
+Technically though, when you create your script, even if you're just following the basics, you're already programming. You just don't know it yet. :)  
