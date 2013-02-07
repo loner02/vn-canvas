@@ -44,6 +44,7 @@
 /******************************************************************************
 Revision history:
 Version 0.4 Chelsea
+02.07.13 - "scene" support for animated objects
 12.29.12 - "menu" supports user variable set
 12.24.12 - Support _range attribute for actor stats
 		 - Support '$' prepend on jump labels, to skip push on frame stack
@@ -686,11 +687,22 @@ var Helper = {
 		var objects = new Array();
 		if (param.objects) {
 			// assumes multiples of 3
-			for (var i=0; i<param.objects.length; i+=3) {
-				var item = {src:'', x:0, y:0};
-				item.src = param.objects[i];
-				item.x = param.objects[i+1];
-				item.y = param.objects[i+2];
+			//for (var i=0; i<param.objects.length; i+=3) {
+			var param_count = 0;
+			while (param_count < param.objects.length) {
+				var item = {src:'', x:0, y:0, frames:1, fps:0};	//fps=0 is static image
+				item.src = param.objects[param_count];
+				item.x = param.objects[param_count+1];
+				item.y = param.objects[param_count+2];
+				param_count += 3;
+				// adds entry for sprite frame animation if it exists, ignores it if it doesn't
+				if (param_count < param.objects.length) {
+					if (typeof param.objects[param_count] == 'number') {
+						item.frames = param.objects[param_count];
+						item.fps = param.objects[param_count+1];
+						param_count += 2;
+					}
+				}
 				objects.push(item);
 			}
 		}
@@ -2547,6 +2559,8 @@ function checkpoint(param) {
 				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_src"] = Stage.layers[0][i].objects[j].img.src;
 				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_x"] = Stage.layers[0][i].objects[j].x;
 				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_y"] = Stage.layers[0][i].objects[j].y;
+				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_frames"] = Stage.layers[0][i].objects[j].frames;
+				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_fps"] = Stage.layers[0][i].objects[j].fps;
 			}
 			localStorage[chkpt+"l0_"+i+"_alpha"] = Stage.layers[0][i].alpha;
 			localStorage[chkpt+"l0_"+i+"_visible"] = Stage.layers[0][i].visible;
@@ -2767,10 +2781,12 @@ function checkpoint(param) {
 			bg.type = 'scene';
 			var obj = new Array();
 			for (var j=0; j<parseInt(localStorage[chkpt+"l0_"+i+"_obj_count"]); j++) {
-				var item = {src:'', x:0, y:0};
+				var item = {src:'', x:0, y:0, frames:1, fps:0};
 				item.src = localStorage[chkpt+"l0_"+i+"_obj_"+j+"_src"];
 				item.x = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_x"]);
 				item.y = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_y"]);
+				item.frames = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_frames"]);
+				item.fps = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_fps"]);
 				obj.push(item);
 			}
 			bg.Create(localStorage[chkpt+"l0_"+i+"_id"], localStorage[chkpt+"l0_"+i+"_src"], obj);
@@ -3258,7 +3274,8 @@ Backdrop.prototype.Create = function(id, file, obj) {
 	if (obj) {
 		this.loaded += obj.length;	// total number of images to load
 		for (var i in obj) {
-			var item = {img:new Image(), x:obj[i].x, y:obj[i].y};
+			var item = {img:new Image(), x:obj[i].x, y:obj[i].y, frames:obj[i].frames, fps:obj[i].fps,
+						bdTimer:0, bdTimerOn:false, curFrame:0};	// each object needs to have its own timer
 			Helper.addEvent(item.img, 'load', function() {
 				that.IsLoaded();
 			}, false);
@@ -3308,7 +3325,22 @@ Backdrop.prototype.Reset = function(init) {
 	this.redraw = true;
 }
 Backdrop.prototype.Update = function(elapsed) {
+	var that = this;
 	if (this.isready) Helper.processEffects(this, elapsed);
+	// update object timers
+	if (this.objects.length>0) {
+		for (var i in this.objects) {
+			if ((!this.objects[i].bdTimerOn) && (this.objects[i].fps>0)) {
+				this.objects[i].bdTimer = setTimeout(function() {
+					that.objects[i].curFrame++;
+					that.objects[i].curFrame %= that.objects[i].frames;
+					that.redraw = true;
+					if (that.visible) that.objects[i].bdTimerOn = false;
+				}, 1000/this.objects[i].fps);
+				this.objects[i].bdTimerOn = true;
+			}
+		}
+	}
 	return this.update;
 }
 Backdrop.prototype.Draw = function() {
@@ -3334,10 +3366,21 @@ Backdrop.prototype.Draw = function() {
 			this.context.fillRect(0, 0, this.context.canvas.width, this.context.canvas.height);		
 		}
 		if (this.objects.length > 0) {
-			for (var i in this.objects)
-				this.context.drawImage(this.objects[i].img, 
-									(this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0,
-									(this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0);
+			for (var i in this.objects) {
+				if (this.objects[i].fps == 0) {
+					this.context.drawImage(this.objects[i].img, 
+						(this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0,
+						(this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0);
+				}
+				else {
+					this.context.drawImage(this.objects[i].img,
+						this.objects[i].curFrame * this.objects[i].img.width / this.objects[i].frames,
+						0, this.objects[i].img.width / this.objects[i].frames, this.objects[i].img.height,
+						(this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0,
+						(this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0,
+						this.objects[i].img.width / this.objects[i].frames, this.objects[i].img.height);
+				}
+			}
 		}
 	}
 	this.redraw = false;
