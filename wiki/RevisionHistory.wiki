@@ -1,6 +1,10 @@
 =Revision History=
 {{{
 Version 0.4 Chelsea
+02.19.13 - "actor" support for animated avatars
+02.17.13 - Bugfix: fix size and position of multiple sprites
+02.10.13 - "actor" support for animated sprites
+02.07.13 - "scene" support for animated objects
 12.29.12 - 'menu' supports user variable set
 12.24.12 - Support _range attribute for actor stats
          - Support '$' prepend on jump labels
