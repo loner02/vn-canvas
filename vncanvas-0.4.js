@@ -45,6 +45,7 @@
 Revision history:
 Version 0.4 Chelsea
 02.19.13 - "actor" support for animated avatars
+		 - Bugfix: fix 'true' or 'false' string in dialog
 02.17.13 - Bugfix: fix size and position of multiple sprites
 02.10.13 - "actor" support for animated sprites
 02.07.13 - "scene" support for animated objects
@@ -361,10 +362,17 @@ var Helper = {
 		if (ret != null) return ret;
 		ret = parseFloat(arg)
 		if (isNaN(ret)) {
-			if (arg.search(/(true|false)/g) != -1)
-				return (arg == 'true');
+			// bugfix: don't remember exactly what I was trying to accomplish doing here
+			/*
+			if (arg.search(/(true|false)/g) != -1) {
+				 return (arg == 'true');
+			}
 			else
 				return arg;
+			*/
+			if (arg.toLowerCase() == 'true') return true;
+			if (arg.toLowerCase() == 'false') return false;
+			return arg;
 		}
 		else
 			return ret;
