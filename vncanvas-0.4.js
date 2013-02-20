@@ -25,7 +25,7 @@
 //      can be used online/offline and, on top of that, FREE.                //
 ///////////////////////////////////////////////////////////////////////////////
 /******************************************************************************
-	Copyright © 2012 by OCLabbao a.k.a [lo'ner]
+	Copyright © 2013 by OCLabbao a.k.a [lo'ner]
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as published 
@@ -44,6 +44,9 @@
 /******************************************************************************
 Revision history:
 Version 0.4 Chelsea
+02.19.13 - "actor" support for animated avatars
+02.17.13 - Bugfix: fix size and position of multiple sprites
+02.10.13 - "actor" support for animated sprites
 02.07.13 - "scene" support for animated objects
 12.29.12 - "menu" supports user variable set
 12.24.12 - Support _range attribute for actor stats
@@ -489,6 +492,29 @@ var Helper = {
 							chr.alpha = 0;
 						}
 						chr.activeSprite = i;
+						// update sprite dimensions here
+						chr.spriteDim = new Vector2d(chr.sprites[i].src.width / chr.sprites[i].frames, 
+													 chr.sprites[i].src.height);
+						var dim = Math.ceil(chr.spriteDim.length());
+						chr.context.canvas.setAttribute('width', dim);
+						chr.context.canvas.setAttribute('height', dim);
+						chr.origin = new Vector2d(dim/2, dim/2 + chr.spriteDim.vy/2);
+						// update sprite alignment here
+						if (chr.sprites[i].align == 'roof')
+							chr.offset.vy = -Stage.canvas.height*(2*Config.actorYPosition-1) + chr.sprites[i].src.height;
+						else if (chr.sprites[i].align == 'top')
+							chr.offset.vy = -Stage.canvas.height*(Config.actorYPosition) + chr.sprites[i].src.height;
+						else if (chr.sprites[i].align == 'center')
+							chr.offset.vy = -Stage.canvas.height*(Config.actorYPosition-0.5) + chr.sprites[i].src.height*0.5;
+						else if (chr.sprites[chr.activeSprite].align == 'bottom')
+							chr.offset.vy = -Stage.canvas.height*(Config.actorYPosition-1);
+						else
+							chr.offset.vy = 0;
+						// set timer to false to trigger animation
+						if (chr.sprites[i].fps > 0) {
+							chr.sprites[i].curRep = 0;
+							chr.sprites[i].spTimerOn = false;
+						}
 						break;
 					}
 				}
@@ -498,7 +524,8 @@ var Helper = {
 					chr.prevSprite = chr.activeSprite;
 					chr.alpha = 0;
 				}
-				chr.AddSprite(param.sprite[0], param.sprite[1], param.sprite[2]);
+				//chr.AddSprite(param.sprite[0], param.sprite[1], param.sprite[2]);
+				chr.AddSprite(param.sprite);
 			}
 		}
 		//if (param.avatar) chr.AddAvatar(param.avatar);
@@ -507,12 +534,15 @@ var Helper = {
 				if (param.avatar && !Helper.checkIfImage(param.avatar)) {
 					for (var i in chr.avatars) {
 						if (chr.avatars[i].id == param.avatar) {
+							chr.avatars[i].curRep = 0;	// reset repetition to retrigger
+							chr.avatars[i].avTimerOn = false;
 							chr.AddAvatar(chr.avatars[i].src);
 							break;
 						}
 					}
 				}
 				else {
+					// for compatibility only
 					chr.AddAvatar(param.avatar);
 				}
 			}
@@ -521,12 +551,21 @@ var Helper = {
 				for (var i in chr.avatars) {
 					if (chr.avatars[i].id == param.avatar[0]) {
 						chr.avatars[i].src = param.avatar[1];
+						chr.avatars[i].frames = (param.avatar[2] != null) ? param.avatar[2] : 1;
+						chr.avatars[i].fps = (param.avatar[3] != null) ? param.avatar[3] : 0;
+						chr.avatars[i].reps = (param.avatar[4] != null) ? param.avatar[4] : -1;
+						chr.avatars[i].curRep = 0;	// reset repetition to retrigger
+						chr.avatars[i].avTimerOn = false;
 						found = true;
 						break;
 					}
 				}
 				if (!found) {
-					chr.avatars.push({id:param.avatar[0], src:param.avatar[1]});
+					chr.avatars.push({id:param.avatar[0], src:param.avatar[1],
+									  frames:(param.avatar[2] != null) ? param.avatar[2] : 1,
+									  fps:(param.avatar[3] != null) ? param.avatar[3] : 0,
+									  reps:(param.avatar[4] != null) ? param.avatar[4] : -1,
+									  avTimer:0, avTimerOn:false, curFrame:0, curRep:0});
 				}
 				chr.AddAvatar(param.avatar[1]);
 			}
@@ -597,6 +636,17 @@ var Helper = {
 			else
 				Stage.layers[4][0].text = Helper.addTagToDialog(null, null, param.balloon, false);
 			Stage.layers[4][0].avatar = (chr.avatar != null) ? chr.avatar : null;
+			if (Stage.layers[4][0].avatar != null) {
+				for (var i in chr.avatars) {
+					if (Stage.layers[4][0].avatar.src.search(chr.avatars[i].src) != -1) {
+						Stage.layers[4][0].avatarStruct = chr.avatars[i];
+						break;
+					}
+				}
+			}
+			else
+				Stage.layers[4][0].avatarStruct = null;
+			
 			Stage.layers[4][0].alpha = 1;
 			Stage.layers[4][0].effects = "none";
 			Stage.layers[4][0].scrollOffsetY = 0;
@@ -986,10 +1036,13 @@ var Helper = {
 				newImage = null;
 			}						
 			if (param.objects) {
-				for (var j=0; j<param.objects.length; j+=3) {
+				for (var j=0; j<param.objects.length; ) {
 					var newImage = new Image();
 					newImage.src = param.objects[j];
 					newImage = null;
+					j += 3;
+					if (param.objects[j] && (typeof param.objects[j] == 'number'))
+						j += 2;
 				}
 			}
 		}
@@ -2065,6 +2118,16 @@ function text(param) {
 					nick = Stage.layers[1][i].nick;
 					color = Stage.layers[1][i].color;
 					Stage.layers[4][0].avatar = (Stage.layers[1][i].avatar != null) ? Stage.layers[1][i].avatar : null;
+					if (Stage.layers[4][0].avatar != null) {
+						for (var j in Stage.layers[1][i].avatars) {
+							if (Stage.layers[4][0].avatar.src.search(Stage.layers[1][i].avatars[j].src) != -1) {
+								Stage.layers[4][0].avatarStruct = Stage.layers[1][i].avatars[j];
+								break;
+							}
+						}
+					}
+					else
+						Stage.layers[4][0].avatarStruct = null;
 					break;
 				}
 			}
@@ -2581,6 +2644,9 @@ function checkpoint(param) {
 				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"] = Stage.layers[1][i].sprites[j].id;
 				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"] = Stage.layers[1][i].sprites[j].src.src;			
 				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"] = Stage.layers[1][i].sprites[j].align;			
+				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_frames"] = Stage.layers[1][i].sprites[j].frames;			
+				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_fps"] = Stage.layers[1][i].sprites[j].fps;			
+				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_reps"] = Stage.layers[1][i].sprites[j].reps;			
 			}
 			localStorage[chkpt+"l1_"+i+"_offset_x"] = Stage.layers[1][i].offset.vx;
 			localStorage[chkpt+"l1_"+i+"_offset_y"] = Stage.layers[1][i].offset.vy;
@@ -2651,10 +2717,14 @@ function checkpoint(param) {
 					localStorage[chkpt+"l4_"+i+"_prompt"] = Stage.layers[4][i].psrc;
 				else
 					localStorage[chkpt+"l4_"+i+"_prompt"] = "undefined";
-				if (Stage.layers[4][i].avatar != null)
+				if (Stage.layers[4][i].avatar != null) {
 					localStorage[chkpt+"l4_"+i+"_avatar"] = Stage.layers[4][i].avatar.src;
-				else
+					localStorage[chkpt+"l4_"+i+"_avatarStruct"] = Stage.layers[4][i].avatarStruct;
+				}
+				else {
 					localStorage[chkpt+"l4_"+i+"_avatar"] = "undefined";
+					localStorage[chkpt+"l4_"+i+"_avatarStruct"] = "undefined";
+				}
 				if (Stage.layers[4][i].balloon != null)
 					localStorage[chkpt+"l4_"+i+"_balloon"] = Stage.layers[4][i].balloon;
 				else
@@ -2811,9 +2881,17 @@ function checkpoint(param) {
 			chr.color = localStorage[chkpt+"l1_"+i+"_color"];
 			chr.z_order = parseInt(localStorage[chkpt+"l1_"+i+"_zorder"]);
 			for (var j=0; j<parseInt(localStorage[chkpt+"l1_"+i+"_sprites_count"]); j++) {
-				chr.AddSprite(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"], 
-							  localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"],
-							  localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"]);
+				var sprite = new Array(6);
+				sprite[0] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"];
+				sprite[1] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"];
+				sprite[2] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"];
+				sprite[3] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_frames"];
+				sprite[4] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_fps"];
+				sprite[5] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_reps"];
+				chr.AddSprite(sprite);
+				//chr.AddSprite(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"], 
+				//			  localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"],
+				//			  localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"]);
 			}
 			if (localStorage[chkpt+"l1_"+i+"_avatar"] != "undefined")
 				chr.AddAvatar(localStorage[chkpt+"l1_"+i+"_avatar"]);
@@ -2900,6 +2978,12 @@ function checkpoint(param) {
 						if (Stage.layers[1][j].avatar && 
 						   (Stage.layers[1][j].avatar.src.search(localStorage[chkpt+"l4_"+i+"_avatar"])!=-1)) {
 							sb.avatar = Stage.layers[1][j].avatar;
+							for (var k in Stage.layers[1][j].avatars) {
+								if (Stage.layers[1][j].avatars[k].src == localStorage[chkpt+"l4_"+i+"_avatar"]) {
+									sb.avatarStruct = JSON.parse(chkpt+"l4_"+i+"_avatarStruct");
+									break;
+								}
+							}
 							break;
 						}
 					}
@@ -3332,8 +3416,7 @@ Backdrop.prototype.Update = function(elapsed) {
 		for (var i in this.objects) {
 			if ((!this.objects[i].bdTimerOn) && (this.objects[i].fps>0)) {
 				this.objects[i].bdTimer = setTimeout(function() {
-					that.objects[i].curFrame++;
-					that.objects[i].curFrame %= that.objects[i].frames;
+					that.objects[i].curFrame = (++that.objects[i].curFrame) % that.objects[i].frames;
 					that.redraw = true;
 					if (that.visible) that.objects[i].bdTimerOn = false;
 				}, 1000/this.objects[i].fps);
@@ -3483,8 +3566,7 @@ var CformElements = {
 		_update: function (obj, elapsed) {
 			if ((!obj.aTimerOn) && (obj.sprites.length > 1)) {
 				obj.aTimer = setTimeout(function() {
-					obj.countup++;
-					obj.countup %= obj.sprites.length;
+					obj.countup = (++obj.countup) % obj.sprites.length;
 					obj.redraw = true;
 					if (obj.visible) obj.aTimerOn = false;
 				}, 1000/obj.fps);
@@ -3762,7 +3844,8 @@ function ScriptBox() {
 
 	this.text = '';					// text display
 	this.prompt = new Image();
-	this.avatar = null;
+	this.avatar = null;				// avatar kept for compatibility
+	this.avatarStruct = null;		// for avatar parameters
 	this.psrc = '';
 	this.alpha = 1;
 	this.effects = 'none';
@@ -3923,6 +4006,20 @@ ScriptBox.prototype.Update = function(elapsed) {
 	if (this.CheckHoverOnHotspot()) {
 		this.redraw = true;
 	}
+	if ((this.avatar != null) && (this.avatarStruct != null)) {
+		if ((!this.avatarStruct.avTimerOn) && (this.avatarStruct.fps>0)) {
+			this.avatarStruct.avTimer = setTimeout(function() {
+				that.avatarStruct.curFrame = (++that.avatarStruct.curFrame) % that.avatarStruct.frames;
+				if (that.avatarStruct.curFrame == 0) that.avatarStruct.curRep++;
+				that.redraw = true;
+				if (that.visible) { 
+					if ((that.avatarStruct.reps < 0) || (that.avatarStruct.curRep < that.avatarStruct.reps))
+						that.avatarStruct.avTimerOn = false;
+				}
+			}, 1000/this.avatarStruct.fps);
+			this.avatarStruct.avTimerOn = true;
+		}
+	}
 	if (Stage.mouseClick && this.inputFocus && (this.menuHover != -1)) {
 		if (typeof this.jumpTo[this.menuHover].link == 'string')
 			Stage.script.SetFrame(this.jumpTo[this.menuHover].link);
@@ -3999,10 +4096,21 @@ ScriptBox.prototype.Draw = function() {
 			var avatarOffsetX = 0;
 			if ((Config.actorShowAvatar == true) && (!this.balloon)){
 				if (this.avatar != null) {
-					avatarOffsetX = this.avatar.width;
-					this.context.drawImage(this.avatar, 
-										   (this.textOffset.vx/2)>>0, 
-										   ((this.context.canvas.height - this.avatar.height)/2)>>0);
+					if (this.avatarStruct.fps == 0) {
+						avatarOffsetX = this.avatar.width;
+						this.context.drawImage(this.avatar, 
+											   (this.textOffset.vx/2)>>0, 
+											   ((this.context.canvas.height - this.avatar.height)/2)>>0);
+					}
+					else {
+						avatarOffsetX = this.avatar.width / this.avatarStruct.frames;
+						this.context.drawImage(this.avatar,
+									this.avatarStruct.curFrame * this.avatar.width / this.avatarStruct.frames,
+									0, avatarOffsetX, this.avatar.height,
+									(this.textOffset.vx/2)>>0,
+									((this.context.canvas.height - this.avatar.height)/2)>>0,
+									avatarOffsetX, this.avatar.height);
+					}
 				}
 			}
 			var ret = this.canvasText.drawText({
@@ -4213,9 +4321,17 @@ function Character(id, order) {
 	canvas = null;
 	//return this.context.canvas.id;
 }
-Character.prototype.AddSprite = function(tag, file, valign) {
+//Character.prototype.AddSprite = function(tag, file, valign) {
+Character.prototype.AddSprite = function(spriteArray) {
 	var that = this;
 	var idx = -1;
+	var tag = spriteArray[0];
+	var file = spriteArray[1];
+	var valign = 'floor';
+	var frames = 1;
+	var fps = 0;
+	var reps = -1;
+	
 	if (this.sprites.length > 1) {
 		for (var i in this.sprites) {
 			if (this.sprites[i].id == tag) {
@@ -4224,6 +4340,20 @@ Character.prototype.AddSprite = function(tag, file, valign) {
 					this.isready = true;
 					this.update = false;
 					this.activeSprite = i;
+					
+					if (spriteArray[2]) {
+						if (typeof spriteArray[2] == 'string') {
+							this.sprites[this.activeSprite].align = spriteArray[2];
+							if (spriteArray[3] != null) this.sprites[this.activeSprite].frames = spriteArray[3];
+							if (spriteArray[4] != null) this.sprites[this.activeSprite].fps = spriteArray[4];
+							if (spriteArray[5] != null) this.sprites[this.activeSprite].reps = spriteArray[5];
+						}
+						else {
+							this.sprites[this.activeSprite].frames = spriteArray[2];
+							if (spriteArray[3] != null) this.sprites[this.activeSprite].fps = spriteArray[3];
+							if (spriteArray[4] != null) this.sprites[this.activeSprite].reps = spriteArray[4];
+						}
+					}
 					if (this.sprites[this.activeSprite].align == 'roof')
 						this.offset.vy = -Stage.canvas.height*(2*Config.actorYPosition-1) + this.sprites[this.activeSprite].src.height;
 					else if (this.sprites[this.activeSprite].align == 'top')
@@ -4234,6 +4364,18 @@ Character.prototype.AddSprite = function(tag, file, valign) {
 						this.offset.vy = -Stage.canvas.height*(Config.actorYPosition-1);
 					else
 						this.offset.vy = 0;
+					// update sprite dimensions here
+					this.spriteDim = new Vector2d(this.sprites[this.activeSprite].src.width / this.sprites[this.activeSprite].frames, 
+												 this.sprites[this.activeSprite].src.height);
+					var dim = Math.ceil(this.spriteDim.length());
+					this.context.canvas.setAttribute('width', dim);
+					this.context.canvas.setAttribute('height', dim);
+					this.origin = new Vector2d(dim/2, dim/2 + this.spriteDim.vy/2);
+					// set timer to false to trigger animation
+					if (this.sprites[this.activeSprite].fps > 0) { 
+						this.sprites[this.activeSprite].curRep = 0;
+						this.sprites[this.activeSprite].spTimerOn = false;
+					}
 					return;
 				}
 				else {
@@ -4245,9 +4387,25 @@ Character.prototype.AddSprite = function(tag, file, valign) {
 		}
 	}
 	this.isready = false;
+	if (spriteArray[2]) {
+		if (typeof spriteArray[2] == 'string') {
+			valign = spriteArray[2];
+			frames = (spriteArray[3] != null) ? spriteArray[3] : 1;
+			fps = (spriteArray[4] != null) ? spriteArray[4] : 0;
+			reps = (spriteArray[5] != null) ? spriteArray[5] : -1;
+		}
+		else {	// it's a number, set is as frames
+			frames = (spriteArray[2] != null) ? spriteArray[2] : 1;
+			fps = (spriteArray[3] != null) ? spriteArray[3] : 0;
+			reps = (spriteArray[4] != null) ? spriteArray[4] : -1;
+		}
+	}
+
 	if (idx == -1) {
 		var image = new Image();
-		var newSprite = {id:tag, src:image, align:(valign)?valign:'floor'};
+		var newSprite = {id:tag, src:image, align:valign,
+						 frames:frames, fps:fps, reps:reps, 
+						 spTimer:0, spTimerOn:false, curFrame:0, curRep:0};
 		this.sprites.push(newSprite);
 		image = null;
 	} 
@@ -4255,13 +4413,16 @@ Character.prototype.AddSprite = function(tag, file, valign) {
 		var tmpSprite = this.sprites[i];
 		this.sprites.splice(i, 1)
 		tmpSprite.src = new Image();
-		tmpSprite.align = (valign)?valign:'floor';
+		tmpSprite.align = valign;
+		tmpSprite.frames = frames; 
+		tmpSprite.fps = fps; 
+		tmpSprite.reps = reps;
 		this.sprites.push(tmpSprite);
 		tmpSprite.src = null; tmpSprite = null;
 	}
 	Helper.addEvent(this.sprites[this.sprites.length-1].src, 'load', function() {
 		// use larger canvas to support sprite rotation
-		that.spriteDim = new Vector2d(that.sprites[that.sprites.length-1].src.width, 
+		that.spriteDim = new Vector2d(that.sprites[that.sprites.length-1].src.width / that.sprites[that.sprites.length-1].frames, 
 							 that.sprites[that.sprites.length-1].src.height);
 		var dim = Math.ceil(that.spriteDim.length());
 		that.context.canvas.setAttribute('width', dim);
@@ -4333,7 +4494,22 @@ Character.prototype.Reset = function (init) {
 	this.redraw = true;
 }
 Character.prototype.Update = function(elapsed) {
-	if (this.isready) Helper.processEffects(this, elapsed);
+	var that = this;
+	if (this.isready) {
+		Helper.processEffects(this, elapsed);
+		if ((!this.sprites[this.activeSprite].spTimerOn) && (this.sprites[this.activeSprite].fps>0)) {
+			this.sprites[this.activeSprite].spTimer = setTimeout(function() {
+				that.sprites[that.activeSprite].curFrame = (++that.sprites[that.activeSprite].curFrame) % that.sprites[that.activeSprite].frames;
+				if (that.sprites[that.activeSprite].curFrame == 0) that.sprites[that.activeSprite].curRep++;
+				that.redraw = true;
+				if (that.visible) {
+					if ((that.sprites[that.activeSprite].reps < 0) || (that.sprites[that.activeSprite].curRep < that.sprites[that.activeSprite].reps))
+						that.sprites[that.activeSprite].spTimerOn = false;
+				}
+			}, 1000/this.sprites[this.activeSprite].fps);
+			this.sprites[this.activeSprite].spTimerOn = true;
+		}
+	}	
 	return this.update;
 }
 Character.prototype.Draw = function() {
@@ -4357,9 +4533,19 @@ Character.prototype.Draw = function() {
 			this.context.translate(-this.context.canvas.width/2, -this.context.canvas.height/2);
 			this.rotation = 0.0;
 		}
-		this.context.drawImage(this.sprites[this.activeSprite].src,
-							   ((this.context.canvas.width - this.spriteDim.vx)/2)>>0,
-							   ((this.context.canvas.height - this.spriteDim.vy)/2)>>0);
+		if (this.sprites[this.activeSprite].fps == 0) {
+			this.context.drawImage(this.sprites[this.activeSprite].src,
+					   ((this.context.canvas.width - this.spriteDim.vx)/2)>>0,
+					   ((this.context.canvas.height - this.spriteDim.vy)/2)>>0);
+		}
+		else {
+			this.context.drawImage(this.sprites[this.activeSprite].src,
+						this.sprites[this.activeSprite].curFrame * this.sprites[this.activeSprite].src.width / this.sprites[this.activeSprite].frames,
+						0, this.sprites[this.activeSprite].src.width / this.sprites[this.activeSprite].frames, this.sprites[this.activeSprite].src.height,
+					    ((this.context.canvas.width - this.spriteDim.vx)/2)>>0,
+					    ((this.context.canvas.height - this.spriteDim.vy)/2)>>0,
+					    this.sprites[this.activeSprite].src.width / this.sprites[this.activeSprite].frames, this.sprites[this.activeSprite].src.height);
+		}
 		if (this.activeSpriteRemoval && (this.alpha <= 0)) {
 			this.sprites[this.activeSprite].src = null;
 			this.sprites.splice(this.activeSprite, 1);
