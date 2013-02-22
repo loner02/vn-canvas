@@ -44,6 +44,7 @@
 /******************************************************************************
 Revision history:
 Version 0.4 Chelsea
+02.22.13 - support for "actor" shortcut
 02.19.13 - "actor" support for animated avatars
 		 - Bugfix: fix 'true' or 'false' string in dialog
 02.17.13 - Bugfix: fix size and position of multiple sprites
@@ -358,24 +359,18 @@ var Helper = {
 	},
 	// Helper function to parse string arguments
 	parseArg: function (arg) {
+		// check if arg is a user variable
 		var ret = Helper.findVar(arg);
 		if (ret != null) return ret;
+		// check if arg is a number
 		ret = parseFloat(arg)
-		if (isNaN(ret)) {
-			// bugfix: don't remember exactly what I was trying to accomplish doing here
-			/*
-			if (arg.search(/(true|false)/g) != -1) {
-				 return (arg == 'true');
-			}
-			else
-				return arg;
-			*/
-			if (arg.toLowerCase() == 'true') return true;
-			if (arg.toLowerCase() == 'false') return false;
-			return arg;
-		}
-		else
-			return ret;
+		if (!isNaN(ret)) return ret;
+		// check if boolean
+		ret = arg.replace(/^\s+|\s+$/g, "").toLowerCase();
+		if (ret === 'true') return true;
+		if (ret === 'false') return false;
+		// just return as is
+		return arg;
 	},
 	// Helper function to parse font string
 	parseFontString: function (s) {
@@ -1166,6 +1161,14 @@ var Helper = {
 		}
 		return null;
 	},
+	// Helper function to check if valid actor from id
+	checkIfActor: function (id) {
+		for (var i in Stage.layers[1]) {
+			if (Stage.layers[1][i].id == id)
+				return true;
+		}
+		return false;
+	}
 }
 // Function to determine optimal animation frame
 window.requestAnimFrame = (function(callback){
@@ -4226,6 +4229,22 @@ Script.prototype.Update = function() {
 	if (this.sequence.length > this.frame) {
 		if (typeof(this.sequence[this.frame]) == "function") {
 			this.sequence[this.frame](this.sequence[this.frame+1]);
+		}
+		else if (typeof(this.sequence[this.frame]) == "string") {
+			// assumes an actor shortcut
+			if (Helper.checkIfActor(this.sequence[this.frame])) {
+				if (typeof this.sequence[this.frame+1] == "string") {
+					var param = {id:this.sequence[this.frame],
+							     say:this.sequence[this.frame+1]};
+				}
+				else {
+					var param = this.sequence[this.frame+1];
+					param.id = this.sequence[this.frame];
+				}
+				actor(param);
+				param = null;
+			}
+			
 		}
 		this.frame += 2;
 	}
