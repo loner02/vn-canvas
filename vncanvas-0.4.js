@@ -44,6 +44,7 @@
 /******************************************************************************
 Revision history:
 Version 0.4 Chelsea
+03.03.13 - "overlay" support for animated images
 02.22.13 - support for "actor" shortcut
 02.19.13 - "actor" support for animated avatars
 		 - Bugfix: fix 'true' or 'false' string in dialog
@@ -2701,6 +2702,8 @@ function checkpoint(param) {
 			localStorage[chkpt+"l2_"+i+"_offset_y"] = Stage.layers[2][i].offset.vy;
 			localStorage[chkpt+"l2_"+i+"_orientation"] = Stage.layers[2][i].orientation;
 			localStorage[chkpt+"l2_"+i+"_size"] = Stage.layers[2][i].size;
+			localStorage[chkpt+"l2_"+i+"_frames"] = Stage.layers[2][i].ovFrames;
+			localStorage[chkpt+"l2_"+i+"_fps"] = Stage.layers[2][i].ovFps;
 		}
 		// Store layer 3
 		localStorage[chkpt+"l3_count"] = Stage.layers[3].length;
@@ -2896,9 +2899,9 @@ function checkpoint(param) {
 				sprite[0] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"];
 				sprite[1] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"];
 				sprite[2] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"];
-				sprite[3] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_frames"];
-				sprite[4] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_fps"];
-				sprite[5] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_reps"];
+				sprite[3] = parseInt(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_frames"]);
+				sprite[4] = parseInt(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_fps"]);
+				sprite[5] = parseInt(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_reps"]);
 				chr.AddSprite(sprite);
 				//chr.AddSprite(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"], 
 				//			  localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"],
@@ -2949,6 +2952,9 @@ function checkpoint(param) {
 			ovl.rotation = parseFloat(localStorage[chkpt+"l2_"+i+"_orientation"]);
 			ovl.size = parseFloat(localStorage[chkpt+"l2_"+i+"_size"]);
 			ovl.scale = parseFloat(localStorage[chkpt+"l2_"+i+"_size"]);
+			ovl.ovFrames = parseInt(localStorage[chkpt+"l2_"+i+"_frames"]);
+			ovl.ovFps = parseInt(localStorage[chkpt+"l2_"+i+"_fps"]);
+			localStorage[chkpt+"l2_"+i+"_fps"] = Stage.layers[2][i].ovFps;
 			Stage.layers[2].push(ovl);
 			ovl = null;
 		}
@@ -3359,6 +3365,12 @@ function Backdrop() {
 	this.target_pos = new Vector2d(0,0);
 	this.offset = new Vector2d(0,0);
 	this.backdropDim = new Vector2d(0,0);
+	
+	this.ovFrames = 1;						// overlay support for multiple frames
+	this.ovFps = 0;
+	this.ovTimer = 0;						// overlay timer
+	this.ovTimerOn = false;
+	this.ovCurFrame = 0;
 }
 Backdrop.prototype.Create = function(id, file, obj) {
 	var that = this;
@@ -3379,26 +3391,45 @@ Backdrop.prototype.Create = function(id, file, obj) {
 			item = null;
 		}
 	}
-	if (Helper.checkIfImage(file)) {
-		this.image = new Image();
-		Helper.addEvent(this.image, 'load', function() {
-			// use larger canvas to support sprite rotation
-			that.backdropDim = new Vector2d(that.image.width, that.image.height);
-			var dim = Math.ceil(that.backdropDim.length());
-			that.context.canvas.setAttribute('width', dim);
-			that.context.canvas.setAttribute('height', dim);
-			that.origin = new Vector2d(dim/2, dim/2);
-			that.IsLoaded();
-		}, false);
-		this.image.src = Helper.parseArg(file);
+	if (typeof file == 'string') {
+		if (Helper.checkIfImage(file)) {
+			this.image = new Image();
+			Helper.addEvent(this.image, 'load', function() {
+				// use larger canvas to support sprite rotation
+				that.backdropDim = new Vector2d(that.image.width, that.image.height);
+				var dim = Math.ceil(that.backdropDim.length());
+				that.context.canvas.setAttribute('width', dim);
+				that.context.canvas.setAttribute('height', dim);
+				that.origin = new Vector2d(dim/2, dim/2);
+				that.IsLoaded();
+			}, false);
+			this.image.src = Helper.parseArg(file);
+		}
+		else {
+			// assume valid HTML color
+			this.image = file;
+			this.context.canvas.setAttribute('width', 1.1*Stage.canvas.width);
+			this.context.canvas.setAttribute('height', 1.1*Stage.canvas.height);
+			this.origin = new Vector2d(this.context.canvas.width>>1, this.context.canvas.height>>1);
+			this.isready = true;
+		}
 	}
 	else {
-		// assume valid HTML color
-		this.image = file;
-		this.context.canvas.setAttribute('width', 1.1*Stage.canvas.width);
-		this.context.canvas.setAttribute('height', 1.1*Stage.canvas.height);
-		this.origin = new Vector2d(this.context.canvas.width>>1, this.context.canvas.height>>1);
-		this.isready = true;
+		// assumed array [filename, frames, fps]
+		if (Helper.checkIfImage(file[0])) {
+			this.image = new Image();
+			this.ovFrames = file[1] != null ? file[1] : 1;
+			this.ovFps = file[2] != null ? file[2] : 0;
+			Helper.addEvent(this.image, 'load', function() {
+				that.backdropDim = new Vector2d(that.image.width / that.ovFrames, that.image.height);
+				var dim = Math.ceil(that.backdropDim.length());
+				that.context.canvas.setAttribute('width', dim);
+				that.context.canvas.setAttribute('height', dim);
+				that.origin = new Vector2d(dim/2, dim/2);
+				that.IsLoaded();
+			}, false);
+			this.image.src = Helper.parseArg(file[0]);
+		}
 	}
 	// configure transition
 	this.transTime = (Config.transTime > 0) ? Config.transTime : 0.1;
@@ -3421,17 +3452,28 @@ Backdrop.prototype.Reset = function(init) {
 }
 Backdrop.prototype.Update = function(elapsed) {
 	var that = this;
-	if (this.isready) Helper.processEffects(this, elapsed);
-	// update object timers
-	if (this.objects.length>0) {
-		for (var i in this.objects) {
-			if ((!this.objects[i].bdTimerOn) && (this.objects[i].fps>0)) {
-				this.objects[i].bdTimer = setTimeout(function() {
-					that.objects[i].curFrame = (++that.objects[i].curFrame) % that.objects[i].frames;
-					that.redraw = true;
-					if (that.visible) that.objects[i].bdTimerOn = false;
-				}, 1000/this.objects[i].fps);
-				this.objects[i].bdTimerOn = true;
+	if (this.isready) { 
+		Helper.processEffects(this, elapsed);
+		// update overlay timers
+		if (!this.ovTimerOn && (this.ovFps>0)) {
+			this.ovTimer = setTimeout(function() {
+				that.ovCurFrame = (++that.ovCurFrame) % that.ovFrames;
+				that.redraw = true;
+				if (that.visible) that.ovTimerOn = false;
+			}, 1000/this.ovFps);
+			this.ovTimerOn = true;
+		}
+		// update object timers
+		if (this.objects.length>0) {
+			for (var i in this.objects) {
+				if ((!this.objects[i].bdTimerOn) && (this.objects[i].fps>0)) {
+					this.objects[i].bdTimer = setTimeout(function() {
+						that.objects[i].curFrame = (++that.objects[i].curFrame) % that.objects[i].frames;
+						that.redraw = true;
+						if (that.visible) that.objects[i].bdTimerOn = false;
+					}, 1000/this.objects[i].fps);
+					this.objects[i].bdTimerOn = true;
+				}
 			}
 		}
 	}
@@ -3451,9 +3493,19 @@ Backdrop.prototype.Draw = function() {
 			this.rotation = 0.0;
 		}
 		if ((this.image.constructor == HTMLImageElement) || (this.image.constructor == Image)) {
-			this.context.drawImage(this.image, 
-								((this.context.canvas.width - this.backdropDim.vx)/2)>>0,
-								((this.context.canvas.height - this.backdropDim.vy)/2)>>0);
+			if (this.ovFps == 0) {
+				this.context.drawImage(this.image, 
+					((this.context.canvas.width - this.backdropDim.vx)/2)>>0,
+					((this.context.canvas.height - this.backdropDim.vy)/2)>>0);
+			}
+			else {
+				this.context.drawImage(this.image,
+					this.ovCurFrame * this.image.width / this.ovFrames,
+					0, this.image.width / this.ovFrames, this.image.height,
+					((this.context.canvas.width - this.backdropDim.vx)/2)>>0,
+					((this.context.canvas.height - this.backdropDim.vy)/2)>>0,
+					this.image.width / this.ovFrames, this.image.height);
+			}
 		}
 		else {
 			this.context.fillStyle = this.image;

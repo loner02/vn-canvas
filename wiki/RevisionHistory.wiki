@@ -1,6 +1,7 @@
 =Revision History=
 {{{
 Version 0.4 Chelsea
+03.03.13 - "overlay" support for animated images
 02.22.13 - support for "actor" shortcut
 02.19.13 - "actor" support for animated avatars
 02.17.13 - Bugfix: fix size and position of multiple sprites
