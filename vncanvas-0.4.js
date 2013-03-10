@@ -44,6 +44,7 @@
 /******************************************************************************
 Revision history:
 Version 0.4 Chelsea
+03.10.13 - support for clickable "scene" objects
 03.03.13 - "overlay" support for animated images
 02.22.13 - support for "actor" shortcut
 02.19.13 - "actor" support for animated avatars
@@ -744,7 +745,7 @@ var Helper = {
 			//for (var i=0; i<param.objects.length; i+=3) {
 			var param_count = 0;
 			while (param_count < param.objects.length) {
-				var item = {src:'', x:0, y:0, frames:1, fps:0};	//fps=0 is static image
+				var item = {src:'', x:0, y:0, frames:1, fps:0, link:''};	//fps=0 is static image
 				item.src = param.objects[param_count];
 				item.x = param.objects[param_count+1];
 				item.y = param.objects[param_count+2];
@@ -755,6 +756,14 @@ var Helper = {
 						item.frames = param.objects[param_count];
 						item.fps = param.objects[param_count+1];
 						param_count += 2;
+					}
+				}
+				// adds entry for link
+				if (param_count < param.objects.length) {
+					if ((typeof param.objects[param_count] == 'string') &&
+						(!Helper.checkIfImage(param.objects[param_count]))) {
+						item.link = param.objects[param_count];
+						param_count += 1;
 					}
 				}
 				objects.push(item);
@@ -1047,6 +1056,8 @@ var Helper = {
 					j += 3;
 					if (param.objects[j] && (typeof param.objects[j] == 'number'))
 						j += 2;
+					if (param.objects[j] && (typeof param.objects[j] == 'string') && (!Helper.checkIfImage(param.objects[j])))
+						j += 1;
 				}
 			}
 		}
@@ -1206,14 +1217,21 @@ function Rect(x, y, w, h) {
 	this.y = y;
 	this.w = w;
 	this.h = h;
-}
+};
+Rect.prototype.isPointInRect = function (x, y) {
+	if (x < this.x) return false;
+	if (x > this.x + this.w) return false;
+	if (y < this.y) return false;
+	if (y > this.y + this.h) return false;
+	return true;
+};
 ///////////////////////////////////////////////////////////////////////////////
 // 2D vector class
 ///////////////////////////////////////////////////////////////////////////////
 function Vector2d(x, y) {
 	this.vx = x;
 	this.vy = y;
-}
+};
 Vector2d.prototype.copy = function (vec2) {
 	this.vx = vec2.vx;
 	this.vy = vec2.vy;
@@ -2636,6 +2654,7 @@ function checkpoint(param) {
 				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_y"] = Stage.layers[0][i].objects[j].y;
 				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_frames"] = Stage.layers[0][i].objects[j].frames;
 				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_fps"] = Stage.layers[0][i].objects[j].fps;
+				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_link"] = Stage.layers[0][i].objects[j].link;
 			}
 			localStorage[chkpt+"l0_"+i+"_alpha"] = Stage.layers[0][i].alpha;
 			localStorage[chkpt+"l0_"+i+"_visible"] = Stage.layers[0][i].visible;
@@ -2871,6 +2890,7 @@ function checkpoint(param) {
 				item.y = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_y"]);
 				item.frames = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_frames"]);
 				item.fps = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_fps"]);
+				item.link = localStorage[chkpt+"l0_"+i+"_obj_"+j+"_link"];
 				obj.push(item);
 			}
 			bg.Create(localStorage[chkpt+"l0_"+i+"_id"], localStorage[chkpt+"l0_"+i+"_src"], obj);
@@ -2954,7 +2974,7 @@ function checkpoint(param) {
 			ovl.scale = parseFloat(localStorage[chkpt+"l2_"+i+"_size"]);
 			ovl.ovFrames = parseInt(localStorage[chkpt+"l2_"+i+"_frames"]);
 			ovl.ovFps = parseInt(localStorage[chkpt+"l2_"+i+"_fps"]);
-			localStorage[chkpt+"l2_"+i+"_fps"] = Stage.layers[2][i].ovFps;
+			//localStorage[chkpt+"l2_"+i+"_fps"] = Stage.layers[2][i].ovFps;
 			Stage.layers[2].push(ovl);
 			ovl = null;
 		}
@@ -3382,7 +3402,8 @@ Backdrop.prototype.Create = function(id, file, obj) {
 		this.loaded += obj.length;	// total number of images to load
 		for (var i in obj) {
 			var item = {img:new Image(), x:obj[i].x, y:obj[i].y, frames:obj[i].frames, fps:obj[i].fps,
-						bdTimer:0, bdTimerOn:false, curFrame:0};	// each object needs to have its own timer
+						bdTimer:0, bdTimerOn:false, curFrame:0, link:obj[i].link, rect:new Rect()};	
+						// each object needs to have its own timer
 			Helper.addEvent(item.img, 'load', function() {
 				that.IsLoaded();
 			}, false);
@@ -3439,8 +3460,15 @@ Backdrop.prototype.Create = function(id, file, obj) {
 	return this.context.canvas.id;
 }		
 Backdrop.prototype.IsLoaded = function() {
-	if (--this.loaded <= 0)
+	if (--this.loaded <= 0) {
+		for (var i in this.objects) {
+			this.objects[i].rect.x = (this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0;
+			this.objects[i].rect.y = (this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0;
+			this.objects[i].rect.w = this.objects[i].img.width / this.objects[i].frames;
+			this.objects[i].rect.h = this.objects[i].img.height;
+		}
 		this.isready = true;
+	}
 }
 Backdrop.prototype.Reset = function(init) {
 	if ((init) || (!this.visible)) {
@@ -3526,6 +3554,17 @@ Backdrop.prototype.Draw = function() {
 						(this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0,
 						this.objects[i].img.width / this.objects[i].frames, this.objects[i].img.height);
 				}
+				// create detectable path
+				/*if (this.objects[i].link != "") {
+					this.context.beginPath();
+					var rect = new Rect((this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0,
+									 (this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0,
+									 this.objects[i].img.width / this.objects[i].frames,
+									 this.objects[i].img.height);
+					this.context.rect(rect.x, rect.y, rect.w, rect.h);
+					this.context.closePath();
+					this.context.stroke();
+				}*/				
 			}
 		}
 	}
@@ -5404,6 +5443,20 @@ var Stage = {
 			this.touchStart = false;
 		}
 		else if (this.mouseDown || this.touchStart) {
+			// TODO: check for clickable objects, only for top/last scene
+			if (Stage.layers[0].length>0) {
+				for (var i=0; i<Stage.layers[0][Stage.layers[0].length-1].objects.length; i++) {
+					if (Stage.layers[0][Stage.layers[0].length-1].objects[i].link != '') {
+						// translate clicked position relative to backdrop absolute coordinates
+						var position = new Vector2d(
+							this.targetPos.vx + ((Stage.layers[0][Stage.layers[0].length-1].context.canvas.width - Stage.canvas.width)/2) - Stage.AddDepth(0, Stage.canvas.width/2 - Stage.coord.vx),
+							this.targetPos.vy + ((Stage.layers[0][Stage.layers[0].length-1].context.canvas.height - Stage.canvas.height)/2) - Stage.AddDepth(0, Stage.canvas.height/2 - Stage.coord.vy)/2);
+						if (Stage.layers[0][Stage.layers[0].length-1].objects[i].rect.isPointInRect(position.vx, position.vy)) {
+							jump(Stage.layers[0][Stage.layers[0].length-1].objects[i].link);
+						}
+					}
+				}
+			}
 			for (var i in Stage.layers[4]) {
 				//if (Stage.layers[4][i].type == "button") {
 				if ((Stage.layers[4][i].link != undefined) && (Stage.layers[4][i].link != null)) {
@@ -5500,7 +5553,8 @@ var Stage = {
 		if (window.jQuery) {
 			// DEBUG:
 			//$('#debug').html(Stage.coord.vx +', '+ Stage.coord.vy);
-			//$('#debug').html(Stage.targetPos.vx +', '+ Stage.targetPos.vy);
+			//$('#debug').html(Stage.targetPos.vx +','+ Stage.targetPos.vy +' : '+Stage.click.vx +','+ Stage.click.vy+' : '+
+			//Stage.AddDepth(0, Stage.canvas.width/2 - Stage.coord.vx)+','+Stage.AddDepth(0, Stage.canvas.height/2 - Stage.coord.vy)/2);
 			//$('#debug').html(eval(Stage.coord.vx - Stage.targetPos.vx) +', '+ eval(Stage.coord.vy-Stage.targetPos.vy));
 			//$('#debug').html(Stage.click.vx +', '+ Stage.click.vy);
 			//$('#debug').html(this.script.frame/2 + ' ' + this.update);
