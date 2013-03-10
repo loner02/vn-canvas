@@ -2,6 +2,8 @@
 {{{
 Version 0.4 Chelsea
 03.10.13 - support for clickable "scene" objects
+	 - support for change of actor "nick"
+	 - Bugfix: actor reset changes position for non-auto actors
 03.03.13 - "overlay" support for animated images
 02.22.13 - support for "actor" shortcut
 02.19.13 - "actor" support for animated avatars

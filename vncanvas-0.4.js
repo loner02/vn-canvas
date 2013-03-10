@@ -45,6 +45,8 @@
 Revision history:
 Version 0.4 Chelsea
 03.10.13 - support for clickable "scene" objects
+		 - support for change of actor "nick"
+		 - Bugfix: actor reset changes position for non-auto actors
 03.03.13 - "overlay" support for animated images
 02.22.13 - support for "actor" shortcut
 02.19.13 - "actor" support for animated avatars
@@ -634,6 +636,8 @@ var Helper = {
 		}
 		if (param.time != null) 
 			chr.transTime = (param.time>0) ? param.time : 0.1;
+		if (param.nick)
+			chr.nick = param.nick;
 		if ((param.say) || (param.balloon)) {
 			var cont = Helper.checkCurrentSpeaker(chr.nick, param.append);
 			if (!param.balloon)
@@ -4604,8 +4608,11 @@ Character.prototype.AddAvatar = function(file) {
 }
 Character.prototype.Reset = function (init) {
 	if (init || !this.visible) {
-		this.target_pos = new Vector2d(Stage.canvas.width/2, 
-							Stage.canvas.height*Config.actorYPosition);
+		// start auto at center, else no change current pos
+		if (this.posMode == 'auto') {
+			this.target_pos = new Vector2d(Stage.canvas.width/2, 
+								Stage.canvas.height*Config.actorYPosition);
+		}
 		this.pos.copy(this.target_pos);
 	}
 	this.visible = true;
