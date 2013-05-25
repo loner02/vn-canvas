@@ -73,7 +73,7 @@ Config = {
 	//		<1.0 is above bottom level of viewport
 	//		1.0 is at bottom level of viewport
 	//		>1.0 may be needed if actorPerspective is true
-	actorYPosition:		1.0
+	actorYPosition:		1.0,
 	
 	// Audio
 	//  specify the audio formats supported

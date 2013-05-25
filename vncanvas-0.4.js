@@ -44,6 +44,9 @@
 /******************************************************************************
 Revision history:
 Version 0.4 Chelsea
+05.18.13 - updated vntemplate
+		 - added config file checks to catch errors
+04.12.13 - various bugfixes
 03.10.13 - support for clickable "scene" objects
 		 - support for change of actor "nick"
 		 - Bugfix: actor reset changes position for non-auto actors
@@ -144,7 +147,7 @@ Version 0.1 Preview
 		 - Updated demo and docs
 12.21.11 - Added canvas forms (buttons only... so far)
 12.20.11 - Added basic saves using checkpoint
-		- Completed initial demo
+		 - Completed initial demo
 12.08.11 - Added overlay and atmosphere basics
 12.06.11 - Added actor basics
 12.05.11 - Added script box, flow control using jump
@@ -263,6 +266,7 @@ var Helper = {
 	configUpdate: function (id) {
 		switch(id) {
 			case "activeTheme": 
+				if (Config.activeTheme == null) break;
 				// formstyle
 				if (Config.activeTheme.formFontStyle) {
 					Stage.formStyle.splice(0, Stage.formStyle.length);
@@ -335,6 +339,7 @@ var Helper = {
 				});
 				break;
 			case "volumeAudio":
+				if (Config.volumeAudio == null) break;
 				if (typeof Config.volumeAudio == 'string') {
 					var volume = parseFloat(Config.volumeAudio);
 					if (isNaN(volume)) volume = 1.0;
@@ -348,6 +353,7 @@ var Helper = {
 				}
 				break;
 			case "volumeVideo":
+				if (Config.volumeVideo == null) break;
 				if (typeof Config.volumeVideo == 'string') {
 					var volume = parseFloat(Config.volumeVideo);
 					if (isNaN(volume)) volume = 1.0;
@@ -2257,7 +2263,9 @@ function cform(param) {
 						count++;
 						for (var j in Stage.layers[4][i].sprites) {
 							if ((Stage.layers[4][i].sprites[j].constructor == HTMLImageElement) || 
-								(Stage.layers[4][i].sprites[j].constructor == Image))
+								(Stage.layers[4][i].sprites[j].constructor == Image) ||
+								(Stage.layers[4][i].sprites[j] instanceof HTMLImageElement) || 
+								(Stage.layers[4][i].sprites[j] instanceof Image))
 								Stage.layers[4][i].sprites[j] = null;
 						}
 					}
@@ -3524,7 +3532,8 @@ Backdrop.prototype.Draw = function() {
 			this.context.translate(-this.context.canvas.width/2, -this.context.canvas.height/2);
 			this.rotation = 0.0;
 		}
-		if ((this.image.constructor == HTMLImageElement) || (this.image.constructor == Image)) {
+		if ((this.image.constructor == HTMLImageElement) || (this.image.constructor == Image) ||
+			(this.image instanceof HTMLImageElement) || (this.image instanceof Image)) {
 			if (this.ovFps == 0) {
 				this.context.drawImage(this.image, 
 					((this.context.canvas.width - this.backdropDim.vx)/2)>>0,
@@ -3846,7 +3855,8 @@ ActiveImage.prototype.IsLoaded = function() {
 		// all sprites are assumed same size, set canvas size here
 		var idx = 0;
 		for (var i in this.sprites) {
-			if ((this.sprites[i].constructor == HTMLImageElement) || (this.sprites[i].constructor == Image)) {
+			if ((this.sprites[i].constructor == HTMLImageElement) || (this.sprites[i].constructor == Image) ||
+				(this.sprites[i] instanceof HTMLImageElement) || (this.sprites[i] instanceof Image)) {
 				idx = i;
 				break;
 			}
@@ -3908,7 +3918,8 @@ ActiveImage.prototype.Draw = function() {
 	return true;
 }
 ActiveImage.prototype.DrawImageOrFill = function(obj) {
-	if ((obj.constructor == HTMLImageElement) || (obj.constructor == Image))
+	if ((obj.constructor == HTMLImageElement) || (obj.constructor == Image) ||
+		(obj instanceof HTMLImageElement) || (obj instanceof Image))
 		this.context.drawImage(obj,0,0);
 	else {
 		this.context.fillStyle = obj;
@@ -4302,9 +4313,10 @@ Script.prototype.Update = function() {
 	if (Helper.supportsLocalStorage()) {
 		if (Stage.script.sequence[0] == label) {
 			var tmp = new Array();
-			if (localStorage["_persist_skip_"+Stage.script.sequence[1]] != null)
+			if  (localStorage["_persist_skip_"+Stage.script.sequence[1]] != null)
 				tmp = JSON.parse(localStorage["_persist_skip_"+Stage.script.sequence[1]]);
-			if ((tmp.length == 0) || (tmp.length%2 == 1)) tmp.push(Stage.script.frame);
+			if ((tmp.length == 0) || (tmp.length%2 == 1)) 
+				tmp.push(Stage.script.frame);
 			else {
 				var found = false;
 				for (var i=0; i<tmp.length; i+=2) {
@@ -5233,7 +5245,7 @@ var Stage = {
 		// create the script
 		this.script = new Script();
 		// setup default forms theme
-		if (Config.activeTheme.formFontStyle) {
+		if (Config.activeTheme && Config.activeTheme.formFontStyle) {
 			var subs = Helper.parseFontString(Config.activeTheme.formFontStyle);
 			this.formStyle.splice(0, this.formStyle.length);
 			if (subs.length >= 4) {

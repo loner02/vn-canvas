@@ -85,16 +85,27 @@ var Stats = null;						// prevent conflict with Stats here, optional
 RPG.Actors = [
 	//note: the order of attributes correspond to the order of RPG.Stats below
 	//note: actor name must match actorID to inherit the stats
-	//name, gender, level, class, level, exp, battle, active
-	["Hero", 0, 1, 0, 0, 0, 1],
-	["Heroine", 1, 1, 1, 0, 0, 1],
+	//name, 	gender,	level, eqp, class, exp, battle, active
+	["Hero", 	0, 		1, 	   1,	0,     0,   0,      1],
+	["Heroine",	1, 		1, 	   2,   1,     0,   0,      1],
+];
+RPG.Inventory = [
+	// inventory list, tied with equipment and items
+	// initial equipment and items owned should be listed here
+	// this array will be updated in game as more items are gained
+	// type: equipment=0, items=1
+	// type, id, quantity
+	[0, 	1, 		1],
+	[0, 	2, 		1],
+	[0, 	5, 		1],
+	[0, 	6, 		1],
 ];
 RPG.Class = [
 	// base stats per class, can be affected by equipment and level/experience
 	// type, hp_growth, sp_growth, atk_growth, def_growth, exp_growth, +other stats
 	// use #level# to refer to actor level
-	{id:0, name:"Warrior", cls_hp:"#level#*30+70", cls_sp:"#level#*5+20", cls_atk:"#level#*12+20", cls_def:"#level#*10+18", cls_exp:"#level#*20+#level#*(#level#-1)*21"} ,
-	{id:1, name:"Mage", cls_hp:"#level#*20+30", cls_sp:"#level#*10+30", cls_atk:"#level#*15+10", cls_def:"#level#*5+15", cls_exp:"#level#*20+#level#*(#level#-1)*21"},
+	{id:0, name:"Warrior", cls_hp:"#level#*30+70", cls_sp:"#level#*5+20", cls_atk:"#level#*12+20", 	cls_def:"#level#*10+18", cls_agi:"#level#*2+5", cls_exp:"#level#*20+#level#*(#level#-1)*21"} ,
+	{id:1, name:"Mage", cls_hp:"#level#*20+30", cls_sp:"#level#*10+30", cls_atk:"#level#*15+10", cls_def:"#level#*5+15", cls_agi:"#level#*4+5", cls_exp:"#level#*20+#level#*(#level#-1)*21"},
 ];
 RPG.Resistance = [
 	// base class resistances to attacks; higher value indicates higher resistance
@@ -103,11 +114,25 @@ RPG.Resistance = [
 	// must be arranged in same order as RPG.Class
 	// weak:0-25, normal:26-50, resist:51-75, strong:76-100
 	// physical, magical, elemental (or expand like fire magic, water element, earth physical, whatever)
-	{res_phy:60, res_magic:25, res_elem:50},	// for Warrior class
-	{res_phy:20, res_magic:60, res_elem:30},	// for Mage class
+	{res_phy:60, res_magic:20, res_elem:50},	// for Warrior class
+	{res_phy:20, res_magic:50, res_elem:30},	// for Mage class
+];
+RPG.Equipment = [
+	// a list of equipment and how it affects actor stats
+	// name: equipment id
+	// type: all, weapon, shield, head, body, accessory
+	// class: actor class that can use equipment
+	// cls_*, res_*: added to base class stat, must be index 3 and up
+	// note: no two-handed weapon yet, maybe later
+	{name:"None", type:0, class:[0,1]},								// 0: bare hand/no equipment
+	{name:"Sword", type:1, class:[0], cls_atk:2},					// 1: weapon
+	{name:"Staff", type:1, class:[1], cls_atk:2, res_magic:20},		// 2: weapon
+	{name:"Buckler", type:2, class:[0], cls_def:5, cls_agi:-1},		// 3: shield
+	{name:"Cap", type:3, class:[0,1], cls_def:1},					// 4: head
+	{name:"Plate", type:4, class:[0], cls_def:2, cls_agi:-2},		// 5: body
+	{name:"Ring of Defense", type:5, class:[1], cls_def:4},			// 6: accessory
 ];
 RPG.Items = [];
-RPG.Equipment = [];
 RPG.Skill = [];
 RPG.Party = [];
 RPG.Enemies = [];
@@ -132,9 +157,19 @@ RPG.Stats = {
 			RPG.methods.updateAttr(obj.id, "battle", obj.stats.class.id);
 		},
 	},
+	eqp: {
+		// _value is a default set of equipment at actor creation
+		// arranged as weapon, shield, head, body, accessory
+		_value: [[0,0,0,0,0], [1,0,0,5,0], [2,0,0,0,6]],
+		// reference array for equipment, stats.eqp is linked to RPG.Equipment
+		_reference: RPG.Equipment,		
+		_update: function(obj, eqp) {
+		},
+	},
 	class: {
 		_range: [0, 10],					// define up to n class types
-		_inherit: [RPG.Class, RPG.Resistance, RPG.Equipment],
+		_inherit: [RPG.Class, RPG.Resistance, "#eqp#"],
+											// #eqp# - special string to inherit equipped items
 		_update: function(obj, stat) {
 			// if class is updateable
 		}
@@ -235,6 +270,53 @@ RPG.methods = {
 		}
 		return stat;
 	},
+	getInheritedClass: function(cls, stats, id) {
+		var inherited_class = {};
+		if (typeof cls == 'string') {
+			var match = cls.match(/#([^#|\s]+)#/g);
+			if (match.length>0) {
+				var attr = match[0].replace(/#/g,'');
+				if (RPG.Stats[attr]._reference) {
+					// re-build/resolve the class from reference
+					for (i in stats[attr]) {
+						var j = 0;	// get only index > 2
+						for (ref in RPG.Stats[attr]._reference[stats[attr][i]]) {
+							if (j>2) {
+								if (inherited_class[ref])
+									inherited_class[ref] += RPG.Stats[attr]._reference[stats[attr][i]][ref];
+								else
+									inherited_class[ref] = RPG.Stats[attr]._reference[stats[attr][i]][ref];
+							}
+							j++;
+						}
+					}
+				}
+				else {
+					inherited_class = stats[attr];
+				}
+			}
+		}
+		else {
+			inherited_class = cls[id];
+		}
+		return inherited_class;
+	},
+	getClassEquipment: function(cls, type) {
+		var equip = new Array();
+		for (var i in RPG.Inventory) {
+			if ((RPG.Inventory[i][0] == 0) && (RPG.Inventory[i][2] > 0)) {
+				if (RPG.Equipment[RPG.Inventory[i][1]].type == type) {
+					for (var j in RPG.Equipment[RPG.Inventory[i][1]].class) {
+						if (RPG.Equipment[RPG.Inventory[i][1]].class[j] == cls) {
+							equip.push(RPG.Equipment[RPG.Inventory[i][1]]);
+							break;
+						}
+					}
+				}
+			}
+		}
+		return equip;
+	},
 	updateAttr: function(id, attr, value) {
 		var obj = RPG.methods.getActorFromId(id);
 		if ((typeof obj.stats[attr] == 'number') ||
@@ -245,27 +327,20 @@ RPG.methods = {
 			// this is an object that needs updating
 			if (RPG.Stats[attr]._inherit) {
 				var inherit = {};		// inheritable values are assumed objects
-				var inherited_class = {};
 				for (var i in RPG.Stats[attr]._inherit) {
-					
-						if (typeof RPG.Stats[attr]._inherit[i] == 'string') {
-							var match = RPG.Stats[attr]._inherit[i].match(/#([^#|\s]+)#/g);
-							if (match.length>0)
-								inherited_class = obj.stats[match[0].replace(/#/g,'')];
-						}
-						else {
-							inherited_class = RPG.Stats[attr]._inherit[i][value];
-						}
-						for (j in inherited_class) {
-							if (inherited_class.hasOwnProperty(j))
-								if (inherit[j])
-									inherit[j] += RPG.methods.parseStats(inherited_class[j], obj.stats);
-								else
-									inherit[j] = RPG.methods.parseStats(inherited_class[j], obj.stats);
-						}
+					var inherited_class = this.getInheritedClass(
+										RPG.Stats[attr]._inherit[i],obj.stats,value);
+					for (j in inherited_class) {
+						if (inherited_class.hasOwnProperty(j))
+							if (inherit[j])
+								inherit[j] += RPG.methods.parseStats(inherited_class[j], obj.stats);
+							else
+								inherit[j] = RPG.methods.parseStats(inherited_class[j], obj.stats);
+					}
 				}
 				Helper.setValue(id+'_'+attr, inherit);				
 				inherit = null;
+				inherited_class = null;
 			}
 		}
 	},
@@ -289,23 +364,16 @@ RPG.methods = {
 						if (RPG.Stats[prop]._inherit) {
 							var select = newStats[prop];
 							var inherit = {};		// inheritable values are assumed objects
-							var inherited_class = {};
-							
 							for (var k in RPG.Stats[prop]._inherit) {
-								if (typeof RPG.Stats[prop]._inherit[k] == 'string') {
-									var match = RPG.Stats[prop]._inherit[k].match(/#([^#|\s]+)#/g);
-									if (match.length>0)
-										inherited_class = newStats[match[0].replace(/#/g,'')];
-								}
-								else {
-									inherited_class = RPG.Stats[prop]._inherit[k][select];
-								}
+								var inherited_class = this.getInheritedClass(
+													RPG.Stats[prop]._inherit[k], newStats, select);
 								for (attr in inherited_class) {
-									if (inherited_class.hasOwnProperty(attr))
+									if (inherited_class.hasOwnProperty(attr)) {
 										if (inherit[attr])
 											inherit[attr] += RPG.methods.parseStats(inherited_class[attr], newStats);
 										else
 											inherit[attr] = RPG.methods.parseStats(inherited_class[attr], newStats);
+									}
 								}
 							}
 							newStats[prop] = inherit;
