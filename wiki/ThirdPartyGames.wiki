@@ -1,6 +1,6 @@
-= Third Party Games =
+= Third Party Visual Novel =
 
-Here you'll find games using vn-canvas engine.
+Here you'll find games using vn-canvas engine. There may be others, but currently, these are just games easily found by google.
 
 Note to authors/developers: If you're using vn-canvas and would want to showcase your work, please send me a link. On the other hand, if you do not wish your work listed here, please drop me a line. 
 
