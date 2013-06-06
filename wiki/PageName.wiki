@@ -1,0 +1,11 @@
+#summary third party games
+
+= Third Party Games =
+
+Here you'll find games using vn-canvas engine.
+
+Note to authors/developers: If you're using vn-canvas and would want to showcase your work, please send me a link. On the other hand, if you do not wish your work listed here, please drop me a line. 
+
+[http://blog.bryanbibat.net/2012/02/18/project-%D1%8F-a-rubyhtml5-visual-novel/ Project Я: A Ruby/HTML5 Visual Novel]
+
+[http://people.ucsc.edu/~agnguyen/HawkshawMysteries.html Hawkshaw Mysteries - A Common Heroes Production]
