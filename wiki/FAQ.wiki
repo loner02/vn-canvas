@@ -1,8 +1,11 @@
 #labels Phase-Support
+#sidebar TableOfContents
 = FREQUENTLY ASKED QUESTIONS REGARDING VN-CANVAS =
 
 ==What's a Visual Novel?==
- It's a less-popular game genre (compared to MMORPGs, RTS, FPS, etc.), mostly used in dating sims. But it's more than that. Think Choose-Your-Own-Adventure meets graphic novels.
+ It's a less-popular game genre (compared to MMORPGs, RTS, FPS, etc.), mostly used in dating sims. But it's more than that. Think _"digital Choose-Your-Own-Adventure meets graphic novels."_
+
+See this [http://en.wikipedia.org/wiki/Visual_novels Wikipedia entry] if you wish to understand what visual novels are all about.
 
 ==Why make another engine?==
  Actually, this just started as a study in HTML5 that has gone a little too way out of hand. :) Admittedly, there's a lot of better engines out there.
@@ -13,7 +16,7 @@
  For vn-canvas, however, I borrowed some features from VN's distant cousin RPG, such as map and tile navigation. This is a less direct way of asking the question "Where do you want to go?", and gives the player some "exploration" capabilities for non-linear play.
 
 ==Can I sell something I make with it?==
- I'm no expert in licenses but I think so. What I'm providing you is a free pen and paper to write your novel, but the novel is entirely yours to do whatever you want with it.
+ Since this engine is licensed using [http://www.gnu.org/licenses/lgpl.html GNU Lesser GPL], it is possible to use this engine for commercial use. What I'm providing you is a free pen and paper to write your novel, but the novel is entirely yours to do whatever you want with it.
 
 ==Can I help?==
  Sure why not. I appreciate feature requests, bug reports, patches, etc. Also, I do not have access to other platforms, particularly IE9/Win7, Safari/MAC, iOs, Android, iPhone, etc. So any help on the above is very much welcome.
@@ -39,10 +42,14 @@
 ==Is the engine safe to use?==
  The engine requires running javascript on the end-user's local platform. Though I guarantee that the base engine is free of any malware (and I invite anyone to inspect the source), I can not guarantee that someone with malicious intent will/can not insert harmful code on a "game" they'll distribute. Therefore I leave it up to the end-user to have sufficient malware security protection, just as they would have when visiting any javascript-enabled site.
 
-==What is that *"RPG mod pack"* thing?==
- It's an optional addon that transforms the engine to a lite-RPG engine. It doesn't change the base engine per se, but uses it to implement RPG-like functions. Don't worry, if you're a VN purist, just don't include the mod pack and all is well.
+==What is that _"RPG mod pack"_ thing?==
+ It's an optional add-on that transforms the engine to a lite-RPG engine. It doesn't change the base engine per se, but uses it to implement RPG-like functions. Don't worry, if you're a VN purist, just don't include the mod pack and all is well.
+
+ This add-on though is still under development.
 
 ==You say it is for non-programmers, but I still see a lot of codes in there?==
+ _To start making visual novels using vn-canvas, see Getting Started._
+
  Ok, you can use the engine without doing any javascript-ing. What you get is a basic but working engine. None of the fancy stuff. If you want a bit of customization, you may have to do a little coding here and there. Now if you want your game to be really awesome, then dive in there and get your hands dirty with programming.
 
  Technically though, when you create your script, even if you're just following the basics, you're already programming. You just don't know it yet. :)  
