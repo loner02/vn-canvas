@@ -1,7 +1,7 @@
 #labels Phase-Support
 #sidebar TableOfContents
-= Third Party Visual Novel =
-
+= Third Party Games Using vn-canvas =
+----
 Here you'll find games using vn-canvas engine (or a modified version of it). There may be others, but currently, these are just games easily found by google.
 
 Note to authors/developers: If you're using vn-canvas and would want to showcase your work, please send me a link. On the other hand, if you do not wish your work listed here, please drop me a line. 
