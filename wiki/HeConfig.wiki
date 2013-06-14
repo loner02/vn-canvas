@@ -1,0 +1,50 @@
+#sidebar TableOfContents
+=Configuration File=
+----
+ Contains configuration options and any number of theme sets.
+
+ For a sample, see configuration file template.
+ More options to follow in future versions.
+
+|| *Themes Parameter* 	|| *Description* ||
+|| formStyle ||	The default styling for the canvas forms. ||
+|| formTipStyle || The default styling for tool tips. ||
+|| formTipColor || The default background color for tool tips. ||
+|| formElementBack     || The default background color for non-image elements. ||
+|| boxFontStyle || The default font styling for the dialog box. ||
+|| boxDimStyle || The default solid or gradient fill for the dim-style dialog box. ||
+||boxImageStyle || The default image file for the image-back dialog box. ||
+||boxTagStyle || The default font styling for the actor name tag shown on the dialog box. ||
+||boxMenuHilite || The default highlight color for the menu (options) on the dialog box. ||
+||balloonFillStyle || The default fill style for the speech balloon. ||
+||balloonStrokeStyle || The default outline style for the speech balloon. ||
+||automapMask ||The default fill color for hidden automap positions. ||
+||automapPointer || The default fill and stroke color for the automap pointer.||
+
+
+|| *Config Parameter* ||	*Description* ||
+||themeList 	|| The listing for all supported themes. This configuration variable can <br>be used by dropdown elements in a form to display available themes. <br>Declare as name-theme pair. ||
+|| activeTheme 	|| The currently active theme. ||
+|| volumeAudio 	|| The maximum volume for all audio sounds. ||
+|| volumeVideo 	|| The maximum volume for all videos. ||
+|| boxWidth 	|| The width of the default dialog box relative to viewport width. ||
+|| boxHeight 	|| The height of the default dialog box relative to viewport height. ||
+|| boxFullHeight || The height of the full dialog box relative to viewport height. ||
+|| boxScrollSpeed || The speed of the scrolling text relative to a preset speed. The higher the<br> value, the faster the scrolling. ||
+|| balloonWidth 	|| The width of the speech balloon relative to viewport width. ||
+|| balloonHeight || The height of the speech balloon relative to viewport height. ||
+|| actorShowAvatar ||	Show the actor avatar on the dialog box. ||
+|| actorPerspective ||	Emulate depth perspective on mouse move. ||
+|| actorYPosition ||	The vertical position of the actor sprite relative to viewport height. A value<br> of 1 pins the actor at viewport bottom. <br>If actorPerspective is on, a value > 1 is recommended. ||
+|| audioFormat 	|| The audio formats supported. ||
+|| movieSize 	|| The video size relative to the viewport.||
+|| movieOnCanvas 	|| Plays video on canvas. ||
+|| movieFormat 	|| The video formats supported. ||
+|| transTime 	|| The approximate number of seconds for transitions. ||
+|| gameAllowMacro 	|| Allows custom game-specific javascript to execute. ||
+|| gameAllowPreload 	|| Allows game-specific resource preloading. ||
+|| gameAllowLookAhead 	|| As an alternative to specified or automatic preloading, this allows "look <br>ahead" to look for the next or most immediately needed resources for<br> preloading while the game is idle. ||
+|| gameNamedCheckpts 	|| Allows use of named checkpoints ||
+|| gameMatureFilter 	|| Filtering for mature content. ||
+|| gameBadWords 	|| In addition to manual filtering using "jump", this list the words that are<br> automatically filtered if gameMatureFilter is on. The word is replaced by<br> gameAltWord. ||
+|| gameAltWord 	|| The text to replace automatically filtered words. ||
