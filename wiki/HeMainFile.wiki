@@ -1,5 +1,5 @@
 #sidebar TableOfContents
-The Main HTML file
+=The Main HTML file=
 
 Although the template already has an HTML file, you can make your own HTML file that can be customized to your liking.
 
