@@ -1,5 +1,5 @@
-  * [Introduction _Introducing vn-canvas_]
+  * _[Introduction Introducing vn-canvas]_
     * [Features vn-canvas features]
     * [ThirdPartyGames Third Party Games Using vn-canvas]
     * [FAQ Frequently Asked Questions]
-  * [RevisionHistory _Revision History_]
+  * _[RevisionHistory Revision History]_
