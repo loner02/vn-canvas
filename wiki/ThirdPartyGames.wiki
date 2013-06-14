@@ -1,3 +1,5 @@
+#labels Phase-Support
+#sidebar TOC
 = Third Party Visual Novel =
 
 Here you'll find games using vn-canvas engine (or a modified version of it). There may be others, but currently, these are just games easily found by google.
