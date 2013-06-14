@@ -8,4 +8,10 @@
       * [HeMainFile The Main HTML file]
       * [HeTOC Table-of-contents file]
       * [HeChapter Chapter files]
+      * [HeConfig Configuration file]
+  * _[ReferenceIntro vn-canvas Reference]_
+  * _[RPGIntro vn-canvas RPG add-on]_
+  * _Other vn-canvas Features_
+      * _[Plugins Plug-ins Explained]_
+      * _[Macros Macros Explains]_
   * _[RevisionHistory Revision History]_
