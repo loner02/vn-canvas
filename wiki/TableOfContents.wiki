@@ -4,4 +4,8 @@
     * [FAQ Frequently Asked Questions]
   * _[DocumentationIntro vn-canvas Documentation]_
     * [GettingStarted Getting Started with vn-canvas!]
+    * vn-canvas Heirarchy
+      * [HeMainFile The Main HTML file]
+      * [HeTOC Table-of-contents file]
+      * [HeChapter Chapter files]
   * _[RevisionHistory Revision History]_
