@@ -7,7 +7,7 @@
 ==What's a Visual Novel?==
  It's a less-popular game genre (compared to MMORPGs, RTS, FPS, etc.), mostly used in dating sims. But it's more than that. Think _"digital Choose-Your-Own-Adventure meets graphic novels."_
 
-See this [http://en.wikipedia.org/wiki/Visual_novels Wikipedia entry] if you wish to understand what visual novels are all about.
+ See this [http://en.wikipedia.org/wiki/Visual_novels Wikipedia entry] if you wish to understand what visual novels are all about.
 
 ==Why make another engine?==
  Actually, this just started as a study in HTML5 that has gone a little too way out of hand. :) Admittedly, there's a lot of better engines out there.
@@ -55,3 +55,5 @@ See this [http://en.wikipedia.org/wiki/Visual_novels Wikipedia entry] if you wis
  Ok, you can use the engine without doing any javascript-ing. What you get is a basic but working engine. None of the fancy stuff. If you want a bit of customization, you may have to do a little coding here and there. Now if you want your game to be really awesome, then dive in there and get your hands dirty with programming.
 
  Technically though, when you create your script, even if you're just following the basics, you're already programming. You just don't know it yet. :)  
+
+ On the plus note, [http://www.renpy.org/ Ren'Py], the famous VN engine, is even code based. It might have a slight learning curve (having to type code and all) but still you can make your own visual novel without any Python experience, right?...
