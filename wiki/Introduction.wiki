@@ -1,8 +1,8 @@
 #labels Featured
-
 = Features =
 
-*Takes advantage of new HTML5 features*, e.g. canvas and audio tags (with more on the way including video, local file access and forms), as compared to other engines such as JS-ViNE: A JavaScript Visual Novel Engine by J. David Eisenberg which uses mostly standard HTML4 elements.
+*Takes advantage of new HTML5 features*, e.g. canvas and audio tags (with more on the way including video, local file access and forms),
+ as compared to other engines such as _JS-ViNE: A JavaScript Visual Novel Engine_ by J. David Eisenberg which uses mostly standard HTML4 elements.
 
 *Targeted specifically for visual novels*
  The engine contains none of the overhead caused by extra features (which visual novels aren't going to use anyway) in generic game engines, such as _Construct2 - HTML5 game creator_ by Scirra Ltd. and _Enchant Javascript Game engine_ by Ubiquitous Entertainment Inc.
