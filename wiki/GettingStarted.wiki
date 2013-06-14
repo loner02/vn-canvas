@@ -9,4 +9,83 @@ Wanna make your own visual novel with vn-canvas? This guide will show you the wo
 =Requirements=
   * Of course, you need to download the [http://code.google.com/p/vn-canvas/downloads/list latest build] of vn-canvas!
   * An HTML editor (Notepad or other substitute)
-  * 
+  * Some resources^†^ (given in here, or make your own)
+  * Your imagination^††^ and a little patience!
+
+^†^ Resources of course are the images, sounds and videos for the game
+^††^ Since this is a tutorial, you could just copy these
+
+=Let's Get Started!=
+Now that we have the things needed, we can now extract the vn-canvas package (the ZIP file) to your folder of choice.
+==Making the Project folder==
+
+ You can get started by copying the 'templates' folder and name it something else like 'Novel' or similar.
+
+ The folder would contain the following...
+
+|| *FILE* || *What it is?* ||
+||canvastext-0.4.1.mod.js||the modified {{{canvastext}}} javascript library||
+||gpl-3.0.txt<br>lgpl-3.0.txt||The licenses for this engine (GNU GPL & GNU Lesser GPL)||
+||vncanvas-0.x.js<br>...||The vn-canvas engine! (We use the newest, greatest one, of course)||
+||vnchapter.js||The default chapter file (which will be explained in a moment...)||
+||vnconfig.js||A config file (also explained in a moment)||
+||vnmod-rpg-0.x.js||The RPG add-on||
+||vnplugins.js||Custom plugins! (see [Plugins Plug-ins explained] for details)||
+||vntemplate.html||The main HTML file! (our VN)||
+||vntoc.js||The table of contents file (also explained...)||
+
+ Inside the HTML file (by opening it on Notepad, or any other editor), we see bunch of HTML codes. Very complicated isn't it? Well, we can reduce that to chunks in order for you to understand (although this very complicated, this is actually straightforward HTML with the exception of {{{canvas}}} of course.):
+
+===Head===
+{{{
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Game Title</title>
+    <meta name="description" content="Description of the game." />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+}}}
+
+ You can edit the description and game title for your liking, for now, we can start with {{{"Sample VN"}}} as title. You can even remove the {{{description}}} meta if you want.
+
+ You can also use a CSS style sheet to customize the windows and stuff.
+
+===The canvas===
+{{{
+  <body>
+    <div style="text-align: center;">
+      <canvas id="stage" width="720" height="480" style="border:1px solid black" oncontextmenu="return false;" onselectstart="return false;">
+        Your browser does not appear to support HTML5.  Try upgrading your browser to the latest version.<br/>
+        <a href="http://www.microsoft.com/windows/internet-explorer/default.aspx">Microsoft Internet Explorer</a><br/>
+        <a href="http://www.mozilla.com/firefox/">Mozilla Firefox</a><br/>
+        <a href="http://www.google.com/chrome/">Google Chrome</a><br/>
+        <a href="http://www.apple.com/safari/download/">Apple Safari</a><br/>
+        <a href="http://www.google.com/chromeframe">Google Chrome Frame for Internet Explorer</a><br/>
+      </canvas>
+    </div>
+}}}
+
+ This part is the {{{canvas}}} or the stage of our game - specifically this code:
+{{{
+<canvas id="stage" width="720" height="480" style="border:1px solid black" oncontextmenu="return false;" onselectstart="return false;">
+}}}
+ It will create a rectangular box on your browser with the name of {{{"stage"}}} with the resolution of 720x480. If the browser that we use doesn't support HTML 5, it will show a disclaimer instead, telling the user to upgrade or change to another browser (most modern browsers though are now compatible with HTML 5.)
+
+===The scripts===
+{{{
+    <script src="vntoc.js"></script>
+    <script src="canvastext-0.4.1.mod.js"></script>
+    <script src="vncanvas-0.3.js"></script>
+    <script>
+      window.onload = function() {
+        Stage.Init("stage", 720, 480);
+        Stage.script.Init(chapter1);
+      }
+    </script>
+  </body>
+</html>
+}}}
+
+ This is where everything gets cooking. This is the heart of our game. The javascript files are loaded here along with the code that indicates where is the {{{canvas}}} stage and what story script that we start the game with. The {{{vntoc.js}}} is the "table of contents" file where it will load the config file and the chapter files.
