@@ -17,6 +17,9 @@
 
  For vn-canvas, however, I borrowed some features from VN's distant cousin RPG, such as map and tile navigation. This is a less direct way of asking the question "Where do you want to go?", and gives the player some "exploration" capabilities for non-linear play.
 
+==How do I get started making a VN?==
+ To start making visual novels using vn-canvas, see _Getting Started_.
+
 ==Can I sell something I make with it?==
  Since this engine is licensed using [http://www.gnu.org/licenses/lgpl.html GNU Lesser GPL], it is possible to use this engine for commercial use. What I'm providing you is a free pen and paper to write your novel, but the novel is entirely yours to do whatever you want with it.
 
@@ -50,7 +53,6 @@
  This add-on though is still under development.
 
 ==You say it is for non-programmers, but I still see a lot of codes in there?==
- _To start making visual novels using vn-canvas, see Getting Started._
 
  Ok, you can use the engine without doing any javascript-ing. What you get is a basic but working engine. None of the fancy stuff. If you want a bit of customization, you may have to do a little coding here and there. Now if you want your game to be really awesome, then dive in there and get your hands dirty with programming.
 
