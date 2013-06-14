@@ -1,3 +1,5 @@
+#labels Phase-Design
+#sidebar TableOfContents
 = Features =
 
 *Takes advantage of new HTML5 features*, e.g. canvas and audio tags (with more on the way including video, local file access and forms),
