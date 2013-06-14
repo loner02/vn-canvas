@@ -1,3 +1,4 @@
+#labels Phase-Implementation
 #sidebar TableOfContents
 =Table-of-Contents File=
     If you have a long story to tell, you'd normally want to split it into chapters or acts or even books. The TOC file you specified earlier tells the engine where to look for these chapters. (Note: the TOC keyword is required by the engine and should not be modified.)
@@ -20,7 +21,7 @@
     ];								
 }}}
 
-    Update: As of version 0.1.2, a global [ConfigFile configuration file] is supported. This basically sets game options, styling, and themes. By putting most configurable options and styling here, the script files are much cleaner. In order to load this configuration file, for lack of a better option, this has to be included in the TOC. See demo files for a sample configuration file.
+    Update: As of version 0.1.2, a global [HeConfig configuration file] is supported. This basically sets game options, styling, and themes. By putting most configurable options and styling here, the script files are much cleaner. In order to load this configuration file, for lack of a better option, this has to be included in the TOC. See demo files for a sample configuration file.
 
 {{{
     TOC = [
