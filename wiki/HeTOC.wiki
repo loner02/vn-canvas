@@ -1,6 +1,7 @@
 #labels Phase-Implementation
 #sidebar TableOfContents
 =Table-of-Contents File=
+----
     If you have a long story to tell, you'd normally want to split it into chapters or acts or even books. The TOC file you specified earlier tells the engine where to look for these chapters. (Note: the TOC keyword is required by the engine and should not be modified.)
 
 {{{
