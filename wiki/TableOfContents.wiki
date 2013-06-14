@@ -2,4 +2,6 @@
     * [Features vn-canvas features]
     * [ThirdPartyGames Third Party Games Using vn-canvas]
     * [FAQ Frequently Asked Questions]
+  * _[DocumentationIntro vn-canvas Documentation]_
+    * [GettingStarted Getting Started with vn-canvas!]
   * _[RevisionHistory Revision History]_
