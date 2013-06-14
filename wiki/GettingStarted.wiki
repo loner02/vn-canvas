@@ -1,0 +1,12 @@
+#labels Phase-Implementation
+#sidebar TableOfContents
+<font size="5">GETTING STARTED WITH vn-canvas!</font>
+----
+<wiki:toc max-depth="2" />
+----
+Wanna make your own visual novel with vn-canvas? This guide will show you the workings of a simple visual novel story that can be used as basis for your own working story!
+
+=Requirements=
+  * Of course, you need to download the [http://code.google.com/p/vn-canvas/downloads/list latest build] of vn-canvas!
+  * An HTML editor (Notepad or other substitute)
+  * 
