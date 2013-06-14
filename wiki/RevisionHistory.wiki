@@ -1,6 +1,9 @@
+#labels Phase-Implementation
+#sidebar TableOfContents
 =Revision History=
+----
 {{{
-Version 0.4 Chelsea
+Version 0.4 "Chelsea"
 05.18.13 - updated vntemplate
 	 - added config file checks to catch errors
 04.12.13 - various bugfixes
@@ -17,7 +20,7 @@ Version 0.4 Chelsea
 12.24.12 - Support _range attribute for actor stats
 	 - Support '$' prepend on jump labels
 12.01.12 - Prep for RPG MOD Pack
-Version 0.3 Brenda
+Version 0.3 "Brenda"
 10.12.12 - Bugfix: touch devices reset fix (courtesy of Turker Yasa)
 05.15.12 - Added 'random' generator for user variables
 	 - Added a parameter to 'macro' calls
@@ -41,7 +44,7 @@ Version 0.3 Brenda
 04.06.12 - Added custom 'animation' set
 	 - Added tryit editor for developers (in demo section)
 	 - Bugfix on movement effects (broken due to 'nowait')
-Version 0.2 Althea
+Version 0.2 "Althea"
 03.06.12 - Added 'z_order' for actor
 	 - Setting a variable to null deletes it
 	 - Support persistent user variable
@@ -71,7 +74,7 @@ Version 0.2 Althea
 	 - Bug fix for iOS user inputs
 02.05.12 - Recode for "cleaner" encapsulation thru functional inheritance
 	 - Recode 'atmosphere'
-Version 0.1 Preview
+Version 0.1 "Preview"
 02.02.12 - Added atmosphere 'snow', 'rain' direction
 01.31.12 - Updated cutscene/movie to play in canvas
 	 - Optimized method encapsulation
