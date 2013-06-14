@@ -1,9 +1,9 @@
 #labels Phase-Support
 #sidebar TableOfContents
-= FREQUENTLY ASKED QUESTIONS REGARDING VN-CANVAS =
-
-<wiki:toc max_depth="1" />
-
+<font size="5">*FREQUENTLY ASKED QUESTIONS REGARDING VN-CANVAS*</font>
+----
+<wiki:toc max_depth="2" />
+----
 ==What's a Visual Novel?==
  It's a less-popular game genre (compared to MMORPGs, RTS, FPS, etc.), mostly used in dating sims. But it's more than that. Think _"digital Choose-Your-Own-Adventure meets graphic novels."_
 
