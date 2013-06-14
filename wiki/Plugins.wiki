@@ -1,0 +1,430 @@
+#sidebar TableOfContents
+<font size="5"> *Plug-ins Explained* </font>
+----
+<wiki:toc max_depth="2" />
+----
+ Plugins allow game-specific customization without modifying the engine.
+
+ _*Note:* For advanced users. Javascript and canvas drawing knowledge required._<br>
+ _Currently supports Transitions and Atmospheric effects, and Canvas Form elements._<br><br>
+ _*Update:* Now supports character stats._
+
+==Atmospheric Effects==
+
+    Want to define a custom atmospheric effect? Then add an atmospheric effect plug-in. First, start with a template code snippet.
+
+{{{
+    AtmoEffects.my_custom_atmo = {
+      _init: function(obj, param) {
+        // Place initialization here
+      },
+      _update: function(obj, elapsed) {
+        // Place update code here
+      },
+      _draw: function(obj) {
+        // Place draw code here
+      },
+    };
+}}}								
+
+
+    * {{{my_custom_atmo}}} is the name of your custom atmospheric effect.
+    * {{{_init}}} method is called once to perform specific initialization.
+    * {{{_update}}} method is called every frame.
+    * {{{_draw}}} method is called if a redraw is necessary.
+    * {{{obj}}} is a reference to the atmosphere object.
+    * {{{elapsed}}} is the amount of time in milliseconds since last update.
+    * {{{param}}} refers to the parameters as entered in the script line.
+
+    Before continuing, it is necessary to know the following variables common to all atmospheric effects. Your custom effect may use any of these variables. To access these variables, don't forget to use {{{'this'}}}.
+
+{{{
+    action:     usually 'start' or 'stop'
+    alpha:      the opacity of the drawn elements (from 0.0 or transparent to 1.0 or opaque).
+    context:    the canvas context to draw on to.
+    isready:    true means the effect has completed initialization. If loading images, for
+    		example, set this initially to false, then set it to true once the image has loaded.
+    redraw:     true means that a redraw is necessary. 
+    saveparam:  custom object used for game saves. This will be used as the parameters when the
+    		effect is loaded during game load. By default, this is the same as the parameter when
+    		the effect is invoked in the scriptline.
+    type:       the type of effect (usually the effect name).
+    update:     false pauses update of the stage while the effect is drawing. Default is always true.
+    visible:    if false, effect is not drawn.
+ }}}   								
+
+
+    As an example, let's define a custom effect named 'sample_atmo_fx' that just displays an image. (The sample shown is a simplified code. For the default effects, see engine code.)
+
+{{{
+    AtmoEffects.sample_atmo_fx = {
+      _init: function(obj, param) {
+        obj.isready = false;
+        // define a new image element
+        obj.image = new Image();	
+        obj.src = param.sample_atmo_fx;
+        obj.image.onload = function() {
+          obj.isready = true;
+        };
+        obj.image.src = this.src;
+    	
+        // the effect is invoked with another parameter sample_arg
+        obj.sample_arg = param.sample_arg;
+      },
+      _update: function(obj, elapsed) {
+        if (obj.action == 'stop') {
+          // do some updates here to stop the effect
+          // if stopping made the effect invisible
+          obj.visible = false;
+        }
+        else {
+          // do some updates here to update the effect
+          obj.redraw = true;		// a redraw is needed
+        }
+      },
+      _draw: function(obj) {
+        // effect is drawn if isready and redraw are true
+        obj.context.drawImage(this.image, 0, 0);
+      },
+    };							
+}}}
+
+    Finally to invoke the custom atmosphere, see 'atmosphere' keyword.
+
+{{{
+    chapter = [
+
+    	...
+    	/* the first parameter must be the atmosphere effect */
+    	atmosphere, {sample_atmo_fx:"image.png", sample_arg:dummy},
+    	...
+    ];
+}}}							
+
+
+==Transition Effects==
+
+    Transition effects are used by actors, overlay and scene images. Unlike atmospheric effects, these are methods called within the Update() method of an object.
+    First, start with a template code snippet.
+
+{{{ 
+    TransEffects.my_custom_fx = {
+      _init: function(obj, param) {
+        // Place initialization here
+      },
+      _in: function(obj, elapsed) {
+        // Place show transition code here
+      },
+      _out: function(obj, elapsed) {
+        // Place hide transition code here
+      },
+    };
+}}}								
+
+
+    * {{{my_custom_fx}}} is the name of your custom transition effect.
+    * {{{_init}}} method is called once to perform specific initialization. This is optional.
+    * {{{_in}}} method is called every frame for showing transitions (such as fade-in).
+    * {{{_out}}} method is called every frame for hiding transitions (such as fade-out).
+    * {{{obj}}} is the object calling the transtion.
+    * {{{elapsed}}} is the time in milliseconds since last update.
+    * {{{param}}} is an array of parameters depending on the effect.
+
+    Before continuing, it is necessary to know the following variables common to applicable objects. Your custom effect may use any of these variables. These variables are passed thru the {{{'obj'}}}parameter.
+
+{{{
+    alpha:      the object's opacity (from 0.0 to 1.0)
+    drawn:      this indicates that the effect has finished drawing. Use this to control script updates.
+    		If set to true while the effect is ongoing, the next line of script is executed even when the
+    		transition is ongoing. If set to true at the end of transition, the next line of script is
+    		executed only at end of transition.
+    effects:    the active transition effect. Set this to 'done' once the effect is finished.
+    pos:        the object's vector position (x and y coordinates are pos.vx and pos.vy, respectively)
+    target_pos: the object's target vector position
+    redraw:     true means that a redraw is necessary.
+    rotation:   the object is rotated using this (default is 0).
+    scale:      the object is scaled using this (default is 1.0).
+    visible:    if false, the object is not drawn.
+    wait:       if true, wait for effect to complete before proceeding. See also 'drawn'.
+}}}						
+
+    As an example, let's define a custom effect named 'translate' that moves the object from its current position. (The sample below is a simplified version of actual translate effect. For more of the default effects, see engine code.)
+
+{{{
+    TransEffects.translate = {
+      _init: function(obj, param) {
+        //offset the target position based on parameter given
+        obj.target_pos.vx += parseFloat(param[0]);
+        obj.target_pos.vy += parseFloat(param[1]);
+      },
+      _in: function(obj, elapsed) {
+        //start the effect
+        obj.visible = true;
+        obj.redraw = true;
+        if (!obj.wait) obj.drawn = true;
+        obj.alpha = 1.0;
+        if (/* place end condition here */) {
+          obj.effects = 'done';
+          obj.drawn = true;
+        }
+        else {
+          // perform translation here
+        }
+      },
+      _out: function(obj, elapsed) {
+        //translate_out doesn't actually make sense
+        //just hide the object
+        obj.alpha = 0.0;
+        obj.visible = false;
+        obj.effects = 'done';
+        obj.drawn = true;
+        obj.redraw = true;
+      },
+    };
+}}}							
+
+    Finally to invoke the custom transition effect, see corresponding object keyword.
+
+{{{  
+    chapter = [
+
+    	...
+    	/* this creates an overlay and moves it 100px to the right
+    	and down relative to current position (which is center
+    	by default */
+    	overlay, {src:"image.png", effect:"translate 100 100"},
+    	...
+    ];
+}}}						
+
+
+==Canvas Forms Elements==
+
+    Canvas forms provide a way to implement graphical interface to the player. The engine supports 'button' (which can also be used as a simple label or a clickable image map), 'picture' and 'timer'. But not all games are the same. What if you need to add a custom element?
+    First, start with a template code snippet. Note the similarity with !AtmoEffects.
+
+{{{
+    CformElements.my_custom_element = {
+      _init: function(obj, param) {
+        // Place initialization here
+      },
+      _update: function(obj, elapsed) {
+        // Place update code here
+      },
+      _draw: function(obj) {
+        // Place draw code here
+      },
+    };
+}}}					
+
+
+    * {{{my_custom_fx}}} is the name of your custom cform element.
+    * {{{_init}}} method is called once to perform specific initialization.
+    * {{{_update}}} method is called every frame.
+    * {{{_draw}}} method is called if a redraw is necessary.
+    * {{{obj}}} is a reference to the cform element.
+    * {{{elapsed}}} is the time in milliseconds since last update.
+    * {{{param}}} refers to the parameters as entered in the script line.
+
+    Before continuing, it is necessary to know the following variables common to cform elements. Your custom effect may use any of these variables. These variables are passed thru the {{{'obj'}}} parameter. Of course, you can also use custom variables if any.
+    Note also that all cform elements belong to the !ActiveImage class. The !ActiveImage class handles the creation of the drawable elements, so you don't need to worry about it when making the custom element.
+
+{{{
+    type:       the type of element
+    link:       the link to follow or execute, if present
+    sprites:    array containing the image objects of the element
+    showText:   determines if the text of the element is displayed
+    timeout:    if element is timed, this sets the duration
+    redraw:     true means that a redraw is necessary.
+    saveparam:  custom object used for game saves. This will be used as the parameters when the
+    		cform element is loaded during game load. By default, this is the same as the 
+    		parameter when the element is invoked in the scriptline.
+}}}							
+
+
+    In addition, you may need to know two methods of the ActiveImage class.
+{{{
+    Create(id, rect, obj)     : handles creation of the cform element
+    			      : id is the identifier of the cform element
+    			      : rect is the dimensions of the cform element (see Rect class). 
+                                If image based, w and h are ignored.
+    			      : obj is the array of image sprites or fillstyle for the cform 
+                                element. 
+    DrawImageOrFill(object)   : handles drawing or filling the cform element
+    			      : object is usually an element of the 'obj' array
+    								
+}}}
+
+    As an example, let's define a custom element named {{{'progressBar'}}} that reflects the value of a user variable. (see Timed Test for live demo)
+
+{{{      
+    CformElements.progressBar = {
+      _init: function(obj, param) {
+        //create the progressBar appearance
+        var rect = {x:param.x, y:param.y, w:param.w, h:param.h};
+        var sprites = ['gray', 'orange'];
+        obj.Create(param.name, rect, sprites);
+        // note: param.name can now be accessed as obj.id
+        
+        // set user variable for the progress bar value
+        // user variable with id=param.name must be created beforehand
+        obj.timeout = param.timeout;
+        Helper.setValue(param.name, obj.timeout);
+        
+      },
+      _update: function(obj, elapsed) {
+        //create a 1 second timer
+        if (!obj.aTimerOn) {
+          this.aTimer = setTimeout(function() {
+            // decrement timeout counter
+            Helper.setValue(obj.id, Helper.getValue(obj.id)-1);
+            obj.redraw = true;
+            if (Helper.getValue(obj.id) > 0)
+              obj.aTimerOn = false;
+          }, 1000 );
+          obj.aTimerOn = true;
+        }
+      },
+      _draw: function(obj) {
+        //draw progressBar back
+        obj.DrawImageOrFill(obj.sprites[0]);
+        // manually draw the progress bar since this is scaled
+        var scale = (obj.timeout - Helper.getValue(obj.id))/obj.timeout;
+        obj.context.fillStyle = obj.sprites[1];
+        obj.context.fillRect(0,0, scale*obj.context.canvas.width, obj.context.canvas.height);
+      },
+    };
+    								
+}}}
+
+    Finally to invoke the custom canvas form element (inside a 'cform' call), use the 'cfelement' keyword. The only required parameters are 'type' which identifies the type of cform element and 'name' which is the id of the cform element. The rest depends on how we choose to implement the custom element.
+
+{{{
+    chapter = [
+    	...
+    	set, {Waiting:0},
+    	...
+    	cfelement, {type:"progressBar", 
+    		    name:"Waiting", 
+    		    x:260, y:300, w:200, h:20, 
+    		    timeout:10},
+    	...
+    ];
+}}}						
+
+
+==Character Stats==
+
+    Character stats add another dimension to your characters. If you're going for RPG-like characters, you may want to add stats like level, strength, agility, etc. If you want character inter-personal development, you may want to add stats like personality, relationship, etc.
+    Since the options are limitless, this plug-in merely lets you define a base set of stats applicable to all actors you define in the game. How you'd use the stat in the game or how you let it grow or how you'd define a custom stat for a specific actor depends entirely up to you. You may need use of 'macro' or custom scripting.
+    First, start with the stats attribute objects.
+
+{{{
+    Stats.attribute = {
+      _value: [],
+      _update: function(obj, stat) {
+      },
+    };							
+}}}
+
+    * The {{{'_value'}}} array specifies the list of allowable values.
+    * If the attribute is numerical, specify a min-max range.
+    * If the attribute is boolean, specify true or false.
+    * If the attribute is string, enumerate the string values.
+    * The first entry is the default value of the attribute.
+{{{
+    Stats.attrNumber = {
+      _value: [0, 100],
+      _update: function(obj, stat) {
+      },
+    };
+    Stats.attrBoolean = {
+      _value: [true, false],
+      _update: function(obj, stat) {
+      },
+    };
+    Stats.attrString = {
+      _value: ["string1", "string2", "string3"],
+      _update: function(obj, stat) {
+      },
+    };
+    								
+}}}
+
+    Of course, you might want to use more descriptive attribute names.
+
+    Oftentimes, stats are not unrelated, i.e. one stat affects the others. For example, increasing character's strength may mean loss of agility, or increase in affection to one actor may mean a decrease to other actors. To support this, use the optional {{{'_update'}}} method to add these custom functionality.
+
+{{{
+    Stats.attrNumber1 = {
+      _value: [0, 100],
+      _update: function(obj, stat) {
+        /* obj is the actor object */
+        /* stat is the actor's attributes */
+        if (stat.attrNumber1 > 50)
+          stat.attrNumber2 -= 10;
+        /* make sure though that attrNumber2 value is still valid */
+      },
+    };
+    								
+}}}
+
+    When you create your actors, these stats will be automatically created for the character using the default values. There's no need to explicitly create/set the attributes, unless it is different from the default.
+
+{{{
+    chapter = [
+    	...
+    	actor, {id:"actor1", sprite:["normal", "images/actor1-normal.png"], ... },
+    	/* the stats are automatically added at this point */
+    	...
+    ];
+}}}								
+
+
+    To set or update a character stat, use {{{'set'}}} as you would use for a user variable. The name of the variable, in this case, is {{{'actorId_attrName'}}}. Unlike user variables though, character stats are checked with the {{{Stats}}} object if valid (e.g. within range, string value is an element of the enumeration, etc.). Also, except for numerical attributes, the element index may be specified instead of the value (e.g. to set {{{attrString}}} to {{{'string3'}}}, you can specify {{{'attrString:2'}}} to set to element at index 2).
+
+{{{
+    chapter = [
+    	...
+    	actor, {id:"actor1", sprite:["normal", "images/actor1-normal.png"], ... },
+    	/* the stats are automatically added at this point */
+    	...
+    	/* this adds 1 to attrNumber for actor1
+    	set, {actor1_attrNumber:"+1"},
+    	...
+    ];
+    								
+}}}
+
+    _*Update:* You may use {{{"random"}}} for numerical attributes, but there's no need to specify a min-max range. The value is automatically computed using the {{{'_value'}}} range specified for the attribute._
+
+    To use actor stats for flow control, you can use conditional {{{'jump'}}} just as you would a user variable.
+
+{{{
+    chapter = [
+    	...
+    	jump, {actor1_attrNumber:10, label:"go_to_level10"},
+    	/* attrNumber is less than 10 here */
+    	...
+    	label, "go_to_level10",
+    	/* attrNumber is greater than or equal to 10 here */
+    	...
+    ];
+}}}
+
+== Final Note ==
+
+    As with macros, it is recommended that all plug-ins be placed in one file, then added in TOC.
+
+{{{
+    TOC = [
+    	"include/config.js",
+    	"include/plugins.js",
+    	
+    	"include/story-prelude.js",
+    	"include/story-chapter1.js",
+    	"include/story-chapter2.js",
+    	"include/story-chapter3.js",
+    	"include/story-chapter4.js"
+    ];
+}}}				
