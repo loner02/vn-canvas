@@ -44,6 +44,7 @@
 /******************************************************************************
 Revision history:
 Version 0.4 Chelsea
+06.21.13 - Bugfix: parseFontString doesn't handle quoted single words
 05.18.13 - updated vntemplate
 		 - added config file checks to catch errors
 04.12.13 - various bugfixes
@@ -390,7 +391,11 @@ var Helper = {
 		var combine = false;
 		var tempText = '';
 		for (var i in splitText) {
-			if (splitText[i].search(/['|"]/g)!=-1) {
+			if (splitText[i].search(/^['|"].*['|"]$/g)!=-1) {
+				combine = false;
+				subs.push(splitText[i].replace(/^['|"]|['|"]$/g, ""));
+			}
+			else if (splitText[i].search(/['|"]/g)!=-1) {
 				if (combine == false) {
 					combine = true;
 					tempText = splitText[i];
