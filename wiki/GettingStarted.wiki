@@ -1,3 +1,4 @@
+#summary This is just a little guide to make a small demo game on vn-canvas.
 #labels Phase-Implementation
 #sidebar TableOfContents
 <font size="5">GETTING STARTED WITH vn-canvas!</font>
@@ -104,8 +105,6 @@ We need a table of content file to organize our little game. We make the javascr
     ];            
 }}}
 
-
-_TO BE CONTINUED_
 We place our individual chapter javascript files in this TOC set (along with plugin and macros). This will be recognized by the engine as the content of our game which we can control. Arrangement of the chapters is not considered here as long as these are available for the engine to be utilized.
 
 Since we only have one table of contents file, we indicate it here like so:
