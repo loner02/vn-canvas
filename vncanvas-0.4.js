@@ -209,7 +209,7 @@ var Helper = {
 	// Function to check support for localStorage
 	supportsLocalStorage: function () {
 		try {
-			return 'localStorage' in window && window['localStorage'] !== null;
+			return 'localStorage' in window && window['localStorage'] !== null && window['localStorage'] !== undefined;
 		} catch(e){
 			return false; 
 		}
