@@ -1,4 +1,4 @@
-#labels Phase-Support
+#labels Phase-Support,Featured
 #sidebar TableOfContents
 = Third Party Games Using vn-canvas =
 ----
