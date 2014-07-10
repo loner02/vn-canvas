@@ -8,6 +8,6 @@ Note to authors/developers: If you're using vn-canvas and would want to showcase
 
   * [http://blog.bryanbibat.net/2012/02/18/project-%D1%8F-a-rubyhtml5-visual-novel/ Project Я: A Ruby/HTML5 Visual Novel]
 
-  * [http://people.ucsc.edu/~agnguyen/HawkshawMysteries.html Hawkshaw Mysteries - A Common Heroes Production]
+  * [http://people.ucsc.edu/~agnguyen/HawkshawMysteries.html Hawkshaw Mysteries - A Common Heroes Production] (link dead)
 
   * [http://watamotedatingsim.org/ WataMote: dating sim [beta-version]]
