@@ -22,6 +22,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
  /* Modified by lo'ner for VN-Canvas
+ 11.11.14 - added support for autotype
  01.07.12 - added support for scrolling
  01.06.12 - added support for text alignment
  12.03.11 - added support for \n in string
@@ -208,13 +209,14 @@ function CanvasText() {
 		// MOD vars
 		var endX, endY;
 		var classText = false;
-		var ret = {endpt:0, linecount:0, hotspot:[]};
+		var ret = {endpt:0, linecount:0, hotspot:[], length:0};
 
         // The main regex. Looks for <style>, <class> or <br /> tags.
         var match = text.match(/<\s*br\s*\/>|<\s*class=["|']([^"|']+)["|']\s*\>([^>]+)<\s*\/class\s*\>|<\s*style=["|']([^"|']+)["|']\s*\>([^>]+)<\s*\/style\s*\>|[^<]+/g);
         var innerMatch = null;
 
         // Let's draw something for each match found.
+		var charcount = 0;
 		var linecount = 0;
         for (i = 0; i < match.length; i++) {
             // Save the current context.
@@ -428,6 +430,7 @@ function CanvasText() {
                 textLines.push({text: this.trim(proText) + " ", linebreak: false});
             }
 
+			// MOD: add support for autotype
             // Let's draw the text
 			//linecount += textLines.length;
             for (n = 0; n < textLines.length; n++) {
@@ -437,21 +440,30 @@ function CanvasText() {
                     x = textInfo.x;
 					linecount++;
                 }
-				// MOD
+				// MOD: do not autotype when scrolling
 				if (classText)
 					ret.hotspot.push([x, y]);
 				this.bufferContext.globalAlpha = textInfo.alpha;
 				if (textInfo.align == 'center') {
 					this.bufferContext.textAlign = 'center';
-					this.bufferContext.fillText(textLines[n].text, x+textInfo.boxWidth/2, y);
+					if ((!textInfo.scroll[0]) && (textInfo.autotype[0]))
+						this.bufferContext.fillText(textLines[n].text.substr(0,textInfo.autotype[1]-charcount), x+textInfo.boxWidth/2, y);
+					else
+						this.bufferContext.fillText(textLines[n].text, x+textInfo.boxWidth/2, y);
 				}
 				else if ((textInfo.align == 'right') || (textInfo.align == 'end')) {
 					this.bufferContext.textAlign = 'end';
-					this.bufferContext.fillText(textLines[n].text, x+textInfo.boxWidth, y);
+					if ((!textInfo.scroll[0]) && (textInfo.autotype[0]))
+						this.bufferContext.fillText(textLines[n].text.substr(0,textInfo.autotype[1]-charcount), x+textInfo.boxWidth, y);
+					else
+						this.bufferContext.fillText(textLines[n].text, x+textInfo.boxWidth, y);
 				}
 				else {
 					this.bufferContext.textAlign = 'start';
-					this.bufferContext.fillText(textLines[n].text, x, y);
+					if ((!textInfo.scroll[0]) && (textInfo.autotype[0]))
+						this.bufferContext.fillText(textLines[n].text.substr(0,textInfo.autotype[1]-charcount), x, y);
+					else
+						this.bufferContext.fillText(textLines[n].text, x, y);
 				}
                 // Increment X position based on current text measure.
                 x += this.bufferContext.measureText(textLines[n].text).width;
@@ -463,12 +475,15 @@ function CanvasText() {
 				else
 					endX = x;
 				endY = y;
+
+				charcount += textLines[n].text.length;
             }
 
             this.bufferContext.restore();
         }
 		ret.endpt = [endX, endY];
 		ret.linecount = linecount;
+		ret.length = charcount;
 		return ret;
     };
 

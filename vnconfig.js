@@ -63,6 +63,10 @@ Config = {
 	//	speech balloon size
 	balloonWidth:		0.5,
 	balloonHeight:		0.2,
+	//  autotype settings
+	boxAutotype:		true,
+	boxAutotypeSpeed:	1.0,
+	menuAutotype:		false,
 
 	// Actors
 	// 	show actor avatar in script box	

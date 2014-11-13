@@ -44,6 +44,8 @@
 /******************************************************************************
 Revision history:
 Version 0.4 Chelsea
+11.11.14 - add autotype for text
+06.02.14 - Bugfix: localStorage fix for IE, c/o CatNip
 06.21.13 - Bugfix: parseFontString doesn't handle quoted single words
 05.18.13 - updated vntemplate
 		 - added config file checks to catch errors
@@ -674,6 +676,10 @@ var Helper = {
 			Stage.layers[4][0].changed = true;
 			Stage.layers[4][0].balloon = (param.balloon) ? param.id : null;
 			
+			if (Config.menuAutotype) {
+				Stage.layers[4][0].autotype = true;
+				Stage.layers[4][0].effects = "autotype";
+			}
 			if (param.voice)
 				Helper.processAudio (Stage.sounds[3], param.voice, {voice:param.voice});
 		}
@@ -899,21 +905,25 @@ var Helper = {
 	// Helper function to add name tag, if any, to dialog
 	addTagToDialog: function(tag, tagcolor, text, append) {
 		var dialog = '';
+		Stage.layers[4][0].autotypeCount = 0;
 		if (tag != null) {
 			dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
 						";color:" + tagcolor + 
 						";font-size:" + Stage.layers[4][0].tagSize +
 						";font-family:" + Stage.layers[4][0].tagFamily +
 						";\'>" + tag + "</style><br/>";
+			Stage.layers[4][0].autotypeCount = tag.length;
 		}
 		if (append) {
 			// strip speaker name here if present
 			var index = Stage.layers[4][0].text.indexOf("</style><br/>");
+			var buf = "";
 			if (index!=-1)
-				dialog += Stage.layers[4][0].text.slice(index+13);
+				buf = Stage.layers[4][0].text.slice(index+13);
 			else 
-				dialog += Stage.layers[4][0].text;
-			dialog += '\n';
+				buf = Stage.layers[4][0].text;
+			dialog += buf + '\n';
+			Stage.layers[4][0].autotypeCount += buf.length+2;
 		}
 		if (text != null) {
 			var match = text.match(/#([^#|\s]+)#/g);
@@ -2128,8 +2138,13 @@ function text(param) {
 	Stage.layers[4][0].effects = "none";
 	Stage.layers[4][0].scrollOffsetY = 0;
 	Stage.layers[4][0].balloon = null;
+	Stage.layers[4][0].autotype = false;	/* TODO: add to storage? */
 	if (typeof param == "string") {
 		Stage.layers[4][0].text = Helper.addTagToDialog(null, null, param, Stage.layers[4][0].cont);		
+		if (Config.boxAutotype) {
+			Stage.layers[4][0].autotype = true;
+			Stage.layers[4][0].effects = "autotype";
+		}
 	}
 	else {
 		if (param.font) { 
@@ -2150,7 +2165,17 @@ function text(param) {
 				Stage.layers[4][0].alpha = 0;
 			if (param.effect == "scroll")
 				Stage.layers[4][0].scrollOffsetY = Stage.layers[4][0].context.canvas.height;
+			if (param.effect == "autotype")
+				Stage.layers[4][0].autotype = true;
+			else if (param.effect == "noautotype")
+				Stage.layers[4][0].autotype = false;
 			Stage.layers[4][0].effects = param.effect;
+		}
+		else {
+			if (Config.boxAutotype) {
+				Stage.layers[4][0].autotype = true;
+				Stage.layers[4][0].effects = "autotype";
+			}
 		}
 
 		var nick = null;
@@ -2208,6 +2233,10 @@ function menu(param) {
 	Stage.layers[4][0].changed = true;
 	Stage.layers[4][0].inputFocus = true;
 	Stage.layers[4][0].balloon = null;
+	if (Config.boxAutotype) {
+		Stage.layers[4][0].autotype = true;
+		Stage.layers[4][0].effects = "autotype";
+	}
 }
 // button - create a canvas button (layer 4), independent of cform
 function button(param) {
@@ -3972,6 +4001,8 @@ function ScriptBox() {
 	this.alpha = 1;
 	this.effects = 'none';
 	this.scrollOffsetY = 0;
+	this.autotypeCount = 0;
+	this.autotypeLength = -1;
 
 	this.fontFamily = 'Verdana';		// font properties
 	this.fontColor = 'white';
@@ -4117,6 +4148,22 @@ ScriptBox.prototype.Update = function(elapsed) {
 				}
 				this.update = false;
 				break;
+			case 'autotype':
+				//if (this.autotypeCount >= ((this.autotypeLength>=0)?this.autotypeLength:this.text.length)) {
+				if (this.autotypeCount >= Math.max(this.autotypeLength,this.text.length)) {
+					this.autotypeCount = 0;
+					//this.autotypeLength = -1;
+					this.autotype = false;
+					this.effects = 'none';
+				}
+				else {
+					this.autotypeCount += Config.boxAutotypeSpeed*elapsed/16;
+					this.fxupdate = true;
+				}
+				this.update = false;
+				break;
+			case 'noautotype':
+				this.autotype = false;
 			case 'none':
 			default:
 				this.fxupdate = false;
@@ -4236,14 +4283,16 @@ ScriptBox.prototype.Draw = function() {
 				}
 			}
 			var ret = this.canvasText.drawText({
-				text:this.text,
+				text: this.text,
 				x: this.textOffset.vx + avatarOffsetX,
 				y: this.textOffset.vy + ((this.balloon) ? this.lineHeight : 0), // + this.scrollOffsetY,
 				align: this.textAlign,
 				alpha: this.alpha,
 				boxWidth:this.context.canvas.width-2*this.textOffset.vx - avatarOffsetX,
 				scroll: [(this.effects == 'scroll'), this.scrollOffsetY],
+				autotype: [(this.effects == 'autotype'), this.autotypeCount],
 			});
+			this.autotypeLength = (this.autotype)?ret.length:-1;
 			// draw the prompt icon
 			if (typeof ret == "object") {
 				//vncanvas doesn't use cache or return this.image
