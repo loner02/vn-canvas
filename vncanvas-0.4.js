@@ -25,7 +25,7 @@
 //      can be used online/offline and, on top of that, FREE.                //
 ///////////////////////////////////////////////////////////////////////////////
 /******************************************************************************
-	Copyright © 2013 by OCLabbao a.k.a [lo'ner]
+	Copyright © 2014 by OCLabbao a.k.a [lo'ner]
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as published 
@@ -44,6 +44,7 @@
 /******************************************************************************
 Revision history:
 Version 0.4 Chelsea
+11.18.14 - add keyboard support (return, arrow keys)
 11.11.14 - add autotype for text
 06.02.14 - Bugfix: localStorage fix for IE, c/o CatNip
 06.21.13 - Bugfix: parseFontString doesn't handle quoted single words
@@ -676,7 +677,7 @@ var Helper = {
 			Stage.layers[4][0].changed = true;
 			Stage.layers[4][0].balloon = (param.balloon) ? param.id : null;
 			
-			if (Config.menuAutotype) {
+			if (Config.boxAutotype) {
 				Stage.layers[4][0].autotype = true;
 				Stage.layers[4][0].effects = "autotype";
 			}
@@ -2233,7 +2234,7 @@ function menu(param) {
 	Stage.layers[4][0].changed = true;
 	Stage.layers[4][0].inputFocus = true;
 	Stage.layers[4][0].balloon = null;
-	if (Config.boxAutotype) {
+	if (Config.menuAutotype) {
 		Stage.layers[4][0].autotype = true;
 		Stage.layers[4][0].effects = "autotype";
 	}
@@ -4001,8 +4002,9 @@ function ScriptBox() {
 	this.alpha = 1;
 	this.effects = 'none';
 	this.scrollOffsetY = 0;
+	this.autotypeMax = 65536;
 	this.autotypeCount = 0;
-	this.autotypeLength = -1;
+	this.autotypeLength = this.autotypeMax;
 
 	this.fontFamily = 'Verdana';		// font properties
 	this.fontColor = 'white';
@@ -4149,10 +4151,11 @@ ScriptBox.prototype.Update = function(elapsed) {
 				this.update = false;
 				break;
 			case 'autotype':
-				//if (this.autotypeCount >= ((this.autotypeLength>=0)?this.autotypeLength:this.text.length)) {
-				if (this.autotypeCount >= Math.max(this.autotypeLength,this.text.length)) {
+				if ((Stage.mouseClick && this.fxupdate) || 
+					//(this.autotypeCount >= Math.max(this.autotypeLength,this.text.length))) {
+					(this.autotypeCount >= this.autotypeLength)) {
 					this.autotypeCount = 0;
-					//this.autotypeLength = -1;
+					this.autotypeLength = this.autotypeMax;
 					this.autotype = false;
 					this.effects = 'none';
 				}
@@ -4292,7 +4295,7 @@ ScriptBox.prototype.Draw = function() {
 				scroll: [(this.effects == 'scroll'), this.scrollOffsetY],
 				autotype: [(this.effects == 'autotype'), this.autotypeCount],
 			});
-			this.autotypeLength = (this.autotype)?ret.length:-1;
+			this.autotypeLength = (this.autotype)?ret.length:this.autotypeMax;
 			// draw the prompt icon
 			if (typeof ret == "object") {
 				//vncanvas doesn't use cache or return this.image
@@ -5142,6 +5145,9 @@ var Stage = {
 	mouseOut: false,
 	touchStart: false,
 	touchEnd: false,
+	keyDown: false,
+	keyUp: false,
+	keyChar: 0,
 	/*	FPS count */
 	fps: 0,
 	curtime: 0,
@@ -5266,6 +5272,34 @@ var Stage = {
 			Stage.touchStart = false;
 			Stage.touchEnd = false;
 		}, false);
+		// add keyboard events: Return/Enter, arrow keys
+		Helper.addEvent(this.canvas, 'keyup', function(e) {
+			Stage.keyUp = true;
+			Stage.keyDown = false;
+			if (Stage.keyChar == 13) {
+				// process Enter/Return
+				Stage.HandleEvents(e);
+				Stage.keyChar = 0;
+			}
+		}, false);
+		Helper.addEvent(this.canvas, 'keydown', function (e) {
+			if (!Stage.mouseOut) {
+				Stage.keyUp = false;
+				Stage.keyDown = true;
+				Stage.keyChar = e.keyCode;
+				switch (e.keyCode) {
+					case 37:	//left
+					case 38:	//up
+					case 39:	//right
+					case 40:	//down
+						Stage.HandleEvents(e);
+						break;
+					default:
+						break;
+				}
+			}
+		}, false);
+		
 		// create the stage layers
 		this.layers[0] = new Array(); 	//background
 		this.layers[1] = new Array();	//foreground
@@ -5503,17 +5537,22 @@ var Stage = {
 		this.redraw = running_draw;
 	},
 	HandleEvents: function(evt) {
-		if (this.mouseOut) return;
+		if (this.mouseOut) { Stage.canvas.blur(); return; }
+		// give focus to canvas element
+		Stage.canvas.setAttribute('tabindex','0');
+		Stage.canvas.focus();
 		// all mouse and touch moves
-		this.targetPos = (this.touchStart) ? this.GetTouchPosition(this.canvas, evt) :
-											 this.GetMousePosition(this.canvas, evt);
+		if (!this.keyDown && !this.keyUp)
+			this.targetPos = (this.touchStart) ? this.GetTouchPosition(this.canvas, evt) :
+												 this.GetMousePosition(this.canvas, evt);
 		// mouse click / touch end
-		if (this.mouseUp || this.touchEnd) {
+		if (this.mouseUp || this.touchEnd || this.keyUp) {
 			this.click.copy(this.coord);	// used only for debug
 			this.mouseClick = true;
 			this.mouseUp = false;
 			this.touchEnd = false;
 			this.touchStart = false;
+			this.keyUp = false;
 		}
 		else if (this.mouseDown || this.touchStart) {
 			// TODO: check for clickable objects, only for top/last scene
@@ -5550,6 +5589,17 @@ var Stage = {
 						Stage.layers[4][i].state = '';
 				}
 			}
+		}
+		else if (this.keyChar != 0) {
+			//alert('keycode: '+evt.keyCode);
+			if (Stage.layers[4][0].jumpTo.length > 0) {	// we're on a menu choice
+				if (this.keyChar == 38) 
+					Stage.layers[4][0].menuHover = Math.max(0, Stage.layers[4][0].menuHover-1);
+				if (this.keyChar == 40)
+					Stage.layers[4][0].menuHover = Math.min(Stage.layers[4][0].jumpTo.length-1, Stage.layers[4][0].menuHover+1);
+				Stage.layers[4][0].redraw = true;
+			}
+			this.keyChar = 0;
 		}
 	},
 	AddDepth: function(order, dist) {
@@ -5633,7 +5683,7 @@ var Stage = {
 			//$('#debug').html(this.script.frame/2 + ' ' + this.update);
 			//if (Helper.findVar("_nav_loc") != null)
 			//	$('#debug').html(this.variables["_nav_loc"].Value()+' '+this.variables["_nav_dir"].Value());
-			$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2 + ' Idle: ' + this.stageIdle);
+			$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2 + ' Idle: ' + this.stageIdle + ' Autotype: ' + Stage.layers[4][0].autotypeCount);
 		}
 		// update the stage
 		this.Update(elapsed);	
