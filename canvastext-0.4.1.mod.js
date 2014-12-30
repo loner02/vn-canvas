@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Copyright (c) 2011 Pere Monfort Pàmies (http://www.pmphp.net)
  * Official site: http://www.canvastext.com
  *
@@ -22,6 +22,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
  /* Modified by lo'ner for VN-Canvas
+ 12.22.14 - added "use strict" directive
  11.11.14 - added support for autotype
  01.07.12 - added support for scrolling
  01.06.12 - added support for text alignment
@@ -29,6 +30,8 @@
  12.04.11 - added classText to distinguish menu item
 		  - added text coordinate return value to parent
  */
+ "use strict";
+ 
 function CanvasText() {
     // The property that will contain the ID attribute value.
     this.canvasId = null;

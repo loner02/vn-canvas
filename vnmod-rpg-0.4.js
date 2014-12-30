@@ -1,4 +1,4 @@
-///////////////////////////////////////////////////////////////////////////////
+﻿///////////////////////////////////////////////////////////////////////////////
 //  Visual Novel JAVASCRIPT Engine for HTML5 CANVAS by [lo'ner]              //
 //  RPG Mod Pack for VN-CANVAS                                               //
 //  Author: oclabbao@yahoo.com, oclabbao@gmail.com                           //
@@ -29,7 +29,7 @@
 //         based on the defined growth formulas.                             //
 ///////////////////////////////////////////////////////////////////////////////
 /******************************************************************************
-	Copyright � 2012 by OCLabbao a.k.a [lo'ner]
+	Copyright © 2012 by OCLabbao a.k.a [lo'ner]
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Lesser General Public License as published 
