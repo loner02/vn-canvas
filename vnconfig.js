@@ -12,7 +12,7 @@ Theme1 = {
 
 	// Script/Dialog Box
 	// 	default font style
-	boxFontStyle:		"normal 14px Verdana white",		
+	boxFontStyle:		"normal 14px Verdana white",
 	//	dim box background
 	// 		if only one color, solid fill
 	// 		if two colors, gradient fill
@@ -34,7 +34,7 @@ Theme1 = {
 	//	automap pointer fill and stroke
 	automapPointer:		"#FF0000 #800000"
 	
-}
+};
 
 // Globals for configuration
 Config = {
@@ -84,7 +84,7 @@ Config = {
 	//		sounds must have all of the formats
 	//		given below, or the browser migh return
 	//		a file non-existent error
-	audioFormat:		["mp3", "ogg"],
+	audioFormat:		["ogg", "mp3"],
 	
 	// Movie
 	// 	relative to viewport, from 0 to 1
@@ -116,5 +116,5 @@ Config = {
 	gameNamedCheckpts:	false,
 	//	allow look ahead so the most immediate resources after the
 	//	current script line may be preloaded
-	gameAllowLookAhead: true,
-}
+	gameAllowLookAhead: true
+};

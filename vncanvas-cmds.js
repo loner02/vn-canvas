@@ -2,6 +2,7 @@
 // Directives
 ///////////////////////////////////////////////////////////////////////////////
 "use strict";
+require(["app/vncanvas-vars"]);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Local Helpers
@@ -9,7 +10,7 @@
 // Helper function to check for audio file
 Helper.checkIfAudio = (function(src) {
 	src = Helper.parseArg(src);
-	return (/mp3|m4a|ogg|oga|wav|webma/i.test(src));
+	return (/mp3|m4a|ogg|oga|wav|webma|aac/i.test(src));
 });
 // Helper function to check for video file
 Helper.checkIfVideo = (function(src) {

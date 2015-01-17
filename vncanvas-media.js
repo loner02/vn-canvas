@@ -2,7 +2,6 @@
 // Directives
 ///////////////////////////////////////////////////////////////////////////////
 "use strict";
-
 ///////////////////////////////////////////////////////////////////////////////
 // Audio/Video elements
 ///////////////////////////////////////////////////////////////////////////////
@@ -63,6 +62,9 @@ Sounds.prototype.Play = function(init) {
 		(this.src != null)) {
 		if (init) {
 			this.audio.src = this.src;
+			//var mediaSource = Stage.audioContext.createMediaElementSource(this.audio);
+			//mediaSource.connect(Stage.audioContext.destination);
+			
 			Helper.addEvent(this.audio, 'ended', function(e) {
 				if (that.repeat > 0) {
 					that.Play(false);

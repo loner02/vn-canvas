@@ -5633,25 +5633,28 @@ var Stage = {
 	},
 	GetMousePosition: function(obj, event) {
 		var pos = new Vector2d(event.pageX, event.pageY);
-		pos.vx -= obj.offsetLeft;
-		pos.vy -= obj.offsetTop;
-		pos.vx = Math.max(0, Math.min(obj.width, pos.vx));
-		pos.vy = Math.max(0, Math.min(obj.height, pos.vy));
+		pos.vx -= obj.offsetLeft + obj.offsetParent.offsetLeft;
+		pos.vy -= obj.offsetTop + obj.offsetParent.offsetTop;
+		// scale accdg to automatic responsive resizing
+		var scale = obj.width/obj.clientWidth;
+		pos.vx = Math.max(0, Math.min(obj.width, pos.vx*scale));
+		pos.vy = Math.max(0, Math.min(obj.height, pos.vy*scale));
 		try { return pos; }
 		finally { pos = null; }
 	},
 	GetTouchPosition: function(obj, event) {
 		var pos = new Vector2d(0,0);
 		if (event.targetTouches != null) {
-			pos.vx = event.targetTouches[0].pageX - obj.offsetLeft;
-			pos.vy = event.targetTouches[0].pageY - obj.offsetTop;
+			pos.vx = event.targetTouches[0].pageX - obj.offsetLeft - obj.offsetParent.offsetLeft;
+			pos.vy = event.targetTouches[0].pageY - obj.offsetTop - obj.offsetParent.offsetTop;
 		}
 		else {
-			pos.vx = event.touches[0].pageX - obj.offsetLeft;
-			pos.vy = event.touches[0].pageY - obj.offsetTop;
+			pos.vx = event.touches[0].pageX - obj.offsetLeft - obj.offsetParent.offsetLeft;
+			pos.vy = event.touches[0].pageY - obj.offsetTop - obj.offsetParent.offsetTop;
 		}
-		pos.vx = Math.max(0, Math.min(obj.width, pos.vx));
-		pos.vy = Math.max(0, Math.min(obj.height, pos.vy));
+		var scale = obj.width/obj.clientWidth;
+		pos.vx = Math.max(0, Math.min(obj.width, pos.vx*scale));
+		pos.vy = Math.max(0, Math.min(obj.height, pos.vy*scale));
 		try { return pos; }
 		finally { pos = null; }
 	},
@@ -5706,7 +5709,7 @@ var Stage = {
 			//$('#debug').html(this.script.frame/2 + ' ' + this.update);
 			//if (Helper.findVar("_nav_loc") != null)
 			//	$('#debug').html(this.variables["_nav_loc"].Value()+' '+this.variables["_nav_dir"].Value());
-			$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2 + ' Idle: ' + this.stageIdle + ' Autotype: ' + Stage.layers[4][0].autotypeCount);
+			//$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2 + ' Idle: ' + this.stageIdle + ' Autotype: ' + Stage.layers[4][0].autotypeCount);
 		}
 		// update the stage
 		this.Update(elapsed);	

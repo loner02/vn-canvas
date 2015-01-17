@@ -45,6 +45,8 @@
 /******************************************************************************
 Revision history:
 Version 0.5 Diana
+01.14.15 - support responsive template
+		 - TODO: Firefox issues - requireJS fails on some version
 12.30.14 - improved documentation
 		 - organized folder structure
 		 - speed up module loading:
@@ -52,7 +54,6 @@ Version 0.5 Diana
 		   - story script load on demand
 		   - support for requireJS
 		 - support on-the-fly audio mute
-		 - TODO: development editor
 Version 0.4 Chelsea
 11.18.14 - add keyboard support (return, arrow keys)
 11.11.14 - add autotype for text
@@ -172,6 +173,7 @@ Version 0.1 Preview
 // Directives
 ///////////////////////////////////////////////////////////////////////////////
 "use strict";
+//require(["app/vncanvas-vars"]);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Generic/helper methods
@@ -453,6 +455,7 @@ var Helper = {
 						"oga": 'audio/ogg;codecs="vorbis"',
 						"mp3": 'audio/mpeg',
 						"m4a": 'audio/mp4;codecs="mp4a.40.2"',
+						"aac": "audio/aac",
 						"webma": 'audio/webm; codecs="vorbis"'};			
 		var index = -1;
 		src = Helper.parseArg(src);
@@ -487,32 +490,39 @@ var Helper = {
 			}
 		}
 		else {
-			var s = new Sounds();
-			s.src = null;
-			var soundformat = (param.format) ? param.format : Config.audioFormat;
-			for (var i in soundformat) {
-				if (s.audio.canPlayType(mimeType[soundformat[i]]) != '') {
-					s.src = src + '.' + soundformat[i];
-					break;
-				}
-			}
-			if (s.src != null) {
-				if ((param.bgm) || (param.voice)){
-					while (obj.length > 0) {
-						var old = obj.shift();
-						old.Stop(true);
-						old.audio = null;
+			try {
+				var s = new Sounds();
+				s.src = null;
+				var soundformat = (param.format) ? param.format : Config.audioFormat;
+				for (var i in soundformat) {
+					//if (s.audio.canPlayType(mimeType[soundformat[i]]) != '') {
+					//if (!!s.audio.canPlayType(mimeType[soundformat[i]])) {
+					// workaround, only allow 'probably'; 'maybe' oftentimes fail
+					if (s.audio.canPlayType(mimeType[soundformat[i]]).toLowerCase() == 'probably') {			
+						s.src = src + '.' + soundformat[i];
+						break;
 					}
 				}
-				if ((param.se) || (param.voice))
-					s.repeat = (param.repeat > 0) ? param.repeat : 0;
-				else
-					s.repeat = -1;
-				s.delay = (param.delay > 0) ? param.delay : 0;
-				s.Mute(Helper.findVar("_mute_audio"));	// initialize muted property
-				obj.push(s);
+				if (s.src != null) {
+					if ((param.bgm) || (param.voice)){
+						while (obj.length > 0) {
+							var old = obj.shift();
+							old.Stop(true);
+							old.audio = null;
+						}
+					}
+					if ((param.se) || (param.voice))
+						s.repeat = (param.repeat > 0) ? param.repeat : 0;
+					else
+						s.repeat = -1;
+					s.delay = (param.delay > 0) ? param.delay : 0;
+					s.Mute(Helper.findVar("_mute_audio"));	// initialize muted property
+					obj.push(s);
+				}
+				s = null;
 			}
-			s = null;
+			catch (e) {
+			}
 		}
 	},
 	// Helper function to process effects
@@ -971,7 +981,8 @@ var Stage = {
 			- se  = 2: sound effects
 			- voice = 3: dialog vocals
 	*/
-	sounds: new Array(4),	
+	sounds: new Array(4),
+	//audioContext : new (window.AudioContext || window.webkitAudioContext)(),
 	/*	Custom defined animations
 			- reusable for actor, scenes and overlays
 	*/
@@ -1107,6 +1118,7 @@ var Stage = {
 			table = null;
 		}
 		// auto create script box as first element in layers[4]
+		// FF/requireJS workaround: FF fails in asynchronous load
 		var sb = new ScriptBox();
 		sb.Create(width, height);
 		this.layers[4].push(sb);
@@ -1399,25 +1411,28 @@ var Stage = {
 	},
 	GetMousePosition: function(obj, event) {
 		var pos = new Vector2d(event.pageX, event.pageY);
-		pos.vx -= obj.offsetLeft;
-		pos.vy -= obj.offsetTop;
-		pos.vx = Math.max(0, Math.min(obj.width, pos.vx));
-		pos.vy = Math.max(0, Math.min(obj.height, pos.vy));
+		pos.vx -= obj.offsetLeft + obj.offsetParent.offsetLeft;
+		pos.vy -= obj.offsetTop + obj.offsetParent.offsetTop;
+		// scale accdg to automatic responsive resizing
+		var scale = obj.width/obj.clientWidth;
+		pos.vx = Math.max(0, Math.min(obj.width, pos.vx*scale));
+		pos.vy = Math.max(0, Math.min(obj.height, pos.vy*scale));
 		try { return pos; }
 		finally { pos = null; }
 	},
 	GetTouchPosition: function(obj, event) {
 		var pos = new Vector2d(0,0);
 		if (event.targetTouches != null) {
-			pos.vx = event.targetTouches[0].pageX - obj.offsetLeft;
-			pos.vy = event.targetTouches[0].pageY - obj.offsetTop;
+			pos.vx = event.targetTouches[0].pageX - obj.offsetLeft - obj.offsetParent.offsetLeft;
+			pos.vy = event.targetTouches[0].pageY - obj.offsetTop - obj.offsetParent.offsetTop;
 		}
 		else {
-			pos.vx = event.touches[0].pageX - obj.offsetLeft;
-			pos.vy = event.touches[0].pageY - obj.offsetTop;
+			pos.vx = event.touches[0].pageX - obj.offsetLeft - obj.offsetParent.offsetLeft;
+			pos.vy = event.touches[0].pageY - obj.offsetTop - obj.offsetParent.offsetTop;
 		}
-		pos.vx = Math.max(0, Math.min(obj.width, pos.vx));
-		pos.vy = Math.max(0, Math.min(obj.height, pos.vy));
+		var scale = obj.width/obj.clientWidth;
+		pos.vx = Math.max(0, Math.min(obj.width, pos.vx*scale));
+		pos.vy = Math.max(0, Math.min(obj.height, pos.vy*scale));
 		try { return pos; }
 		finally { pos = null; }
 	},
@@ -1464,7 +1479,7 @@ var Stage = {
 		
 		if (window.jQuery) {
 			// DEBUG:
-			//$('#debug').html(Stage.coord.vx +', '+ Stage.coord.vy);
+			//$('#debug').html(Stage.coord.vx +', '+ Stage.coord.vy +' : '+Stage.targetPos.vx +', '+ Stage.targetPos.vy);
 			//$('#debug').html(Stage.targetPos.vx +','+ Stage.targetPos.vy +' : '+Stage.click.vx +','+ Stage.click.vy+' : '+
 			//Stage.AddDepth(0, Stage.canvas.width/2 - Stage.coord.vx)+','+Stage.AddDepth(0, Stage.canvas.height/2 - Stage.coord.vy)/2);
 			//$('#debug').html(eval(Stage.coord.vx - Stage.targetPos.vx) +', '+ eval(Stage.coord.vy-Stage.targetPos.vy));
@@ -1472,7 +1487,7 @@ var Stage = {
 			//$('#debug').html(this.script.frame/2 + ' ' + this.update);
 			//if (Helper.findVar("_nav_loc") != null)
 			//	$('#debug').html(this.variables["_nav_loc"].Value()+' '+this.variables["_nav_dir"].Value());
-			$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2 + ' Idle: ' + this.stageIdle + ' Autotype: ' + Stage.layers[4][0].autotypeCount);
+			//$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2 + ' Idle: ' + this.stageIdle + ' Autotype: ' + Stage.layers[4][0].autotypeCount);
 		}
 		// update the stage
 		this.Update(elapsed);	
