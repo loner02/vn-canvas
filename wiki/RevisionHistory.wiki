@@ -3,6 +3,16 @@
 =Revision History=
 ----
 {{{
+Version 0.5 "Diana"
+01.14.15 - support responsive template
+	 - TODO: Firefox issues - requireJS fails on some version
+12.30.14 - improved documentation
+	 - organized folder structure
+	 - speed up module loading:
+	   - engine divided to modules
+	   - story script load on demand
+	   - support for requireJS
+	 - support on-the-fly audio mute
 Version 0.4 "Chelsea"
 05.18.13 - updated vntemplate
 	 - added config file checks to catch errors
