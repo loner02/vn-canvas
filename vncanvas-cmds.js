@@ -7,15 +7,22 @@ require(["app/vncanvas-vars"]);
 ///////////////////////////////////////////////////////////////////////////////
 // Local Helpers
 ///////////////////////////////////////////////////////////////////////////////
-// Helper function to check for audio file
-Helper.checkIfAudio = (function(src) {
-	src = Helper.parseArg(src);
-	return (/mp3|m4a|ogg|oga|wav|webma|aac/i.test(src));
-});
-// Helper function to check for video file
-Helper.checkIfVideo = (function(src) {
-	src = Helper.parseArg(src);
-	return (/mp4|m4v|ogg|ogv|webm|webmv/i.test(src));
+require(["app/vncanvas-base"], function() {
+	// Helper function to check for audio file
+	Helper.checkIfAudio = ((src) => {
+		src = Helper.parseArg(src);
+		return (/mp3|m4a|ogg|oga|wav|weba|webm|aac/i.test(src));
+	});
+	// Helper function to check for video file
+	Helper.checkIfVideo = ((src) => {
+		src = Helper.parseArg(src);
+		return (/mp4|m4v|ogg|ogv|webm|webmv/i.test(src));
+	});
+	// Helper function to check for script file
+    Helper.checkIfScript = ((src) => {
+        src = Helper.parseArg(src);
+        return (/js/i.test(src));
+    });
 });
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -25,12 +32,28 @@ Helper.checkIfVideo = (function(src) {
 // label - marks a position in the script
 function label(param) { }
 // message - display a message box
-function message(param) { alert(param); }
+function message(param) {
+	let match = param.match(/#([^#|\s]+)#/g);
+	for (let i in match)
+		param = param.replace(match[i],Helper.parseArg(match[i].replace(/#/g,'')));
+	if (Stage.isCordova)
+		try {
+            navigator.notification.alert(param, 
+                function(){}, "vnCanvas Alert");
+		}
+		catch(e) {
+			alert(param);
+		}
+	else
+		//alert(param); 
+        console.log(`[VNC]: Message: ${param}`);
+    return true;
+}
 // wait - pauses execution
 function wait(param) {
 	Stage.pause = true;
 	if (param > 0) {
-		Stage.utimer = setTimeout(function() { 
+		Stage.utimer = setTimeout(() => { 
 			Stage.pause = false; 
 			Stage.utimerOn = false;
 		}, param * 1000);
@@ -40,49 +63,34 @@ function wait(param) {
 // macro - execute a user function
 function macro(param) {
 	if (Config.gameAllowMacro) {
+		let ret = false;
 		if (typeof param == 'string')
-			eval(param)();
+			ret = eval(param)();
 		else {
-			for (var prop in param) {
+			for (let prop in param) {
 				if (param.hasOwnProperty(prop)) {
-					eval(prop)(param[prop]);
+					ret = eval(prop)(param[prop]);
 				}
 			}
 		}
+		if (ret == true) return true;
+        else return false;  // including undefined
 	}
-}
-// screen - do some screen actions
-function screen(param) {
-	for (var prop in param) {
-		if (param.hasOwnProperty(prop)) {
-			if (prop == 'shake') {
-				Stage.shake = param.shake;
-				Stage.Transition(param.duration ? param.duration: Config.transTime);
-			}
-			if (prop == 'fall') {
-				Stage.fall = param.fall;
-				Stage.Transition(param.duration ? param.duration: Config.transTime);
-			}
-			if (prop == 'snap') {
-				var img = Stage.canvas.toDataURL("image/"+param.snap);
-				window.open(img,'_blank','width='+Stage.canvas.width+',height='+Stage.canvas.height);
-			}
-		}
-	}
-	Stage.redraw = true;
 }
 // animation - define an animation set
 function animation(param) {
 	Stage.animations[param[0]] = param.slice(1);
 }
 // jump - continues execution at given label
-function jump(param) {
+function jump(param, hack=false) {
 	if (typeof param == 'string') {
 		if (param == 'return') {
-			Stage.script.PopFrame();
-			Stage.pause = true;
+			Stage.script.popFrame();
+			//Stage.pause = false;
+			Stage.pause = Stage.fromForm ? true: false;    // was true
+            Stage.fromForm = false;
 		}
-		else if (param.indexOf("http") != -1) {
+		else if (param.includes("http")) {
 			var newwin = window.open(param, '_blank');
 			window.setTimeout('newwin.focus();', 250);
 		}
@@ -92,30 +100,30 @@ function jump(param) {
 			return;
 		}
 		else {
-			if (param.indexOf('$') != 0)
-				Stage.script.PushFrame();
-			Stage.script.SetFrame(param.replace('$',''));
+			if (!param.includes('$'))
+				Stage.script.pushFrame(hack);
+			Stage.script.setFrame(param.replace('$',''));
 		}
 	}
 	else {
-		if (param.label.indexOf('$') != 0)
-			Stage.script.PushFrame();
-		var arr_param = new Array();
-		for (var prop in param) {
+		if (!param.label.includes('$'))
+			Stage.script.pushFrame(hack);
+		let arr_param = new Array();
+		for (let prop in param) {
 			if (param.hasOwnProperty(prop)) {
 				arr_param.push(prop);
 				arr_param.push(JSON.stringify(param[prop]));
 			}
 		}
 		
-		var compare = false;
-		for (var i=0; i<arr_param.length; i+=2) {
+		let compare = false;
+		for (let i=0; i<arr_param.length; i+=2) {
 			//arr_param[i] = eval(arr_param[i]);
 			if (arr_param[i] == 'label') continue;
 			arr_param[i+1] = eval(arr_param[i+1]);
 
 			compare = false;
-			var val = Helper.getValue(arr_param[i]);
+			let val = Helper.getValue(arr_param[i]);
 			if (val != null) {
 				if (typeof val == 'number') {
 					if (val >= arr_param[i+1])
@@ -133,127 +141,44 @@ function jump(param) {
 			if (compare == false) break;
 		}
 		if (compare == true)
-			Stage.script.SetFrame(param.label.replace('$',''));
+			Stage.script.setFrame(param.label.replace('$',''));
 	}
-	Stage.layers[4][0].jumpTo.splice(0,Stage.layers[4][0].jumpTo.length);
+    return false;
 }
-// tile - navigate scenes using tiles
-function tile(param) {
-	// create navigation user variables if non-existent
-	if (Helper.findVar("_nav_loc") == null) {
-		var uv = new UserVars();
-		uv.Set("", false);
-		Stage.variables["_nav_loc"] = uv;
-	}
-	if (Helper.findVar("_nav_dir") == null) {
-		var uv = new UserVars();
-		uv.Set(0, false);	//0:N, 1:E, 2:S, 3:W
-		Stage.variables["_nav_dir"] = uv;
-	}
-	if (Helper.findVar("_nav_move") == null) {
-		var uv = new UserVars();
-		uv.Set("", false);	//stay or "", forward, left, back, right
-		Stage.variables["_nav_move"] = uv;
-	}
-	
-	Stage.variables["_nav_loc"].Set(param.id, false);
-	if (Stage.variables["_nav_move"].Value() == "forward") {
-		jump(param.link[Stage.variables["_nav_dir"].Value()]);
-	}
-	else if (Stage.variables["_nav_move"].Value() == "back") {
-		jump(param.link[(Stage.variables["_nav_dir"].Value()+2)%4]);
-	}
-	else if (Stage.variables["_nav_move"].Value() == "left") {
-		if (Stage.variables["_nav_dir"].Value() == 0)
-			Stage.variables["_nav_dir"].Set(3, false);
-		else
-			Stage.variables["_nav_dir"].Set(Stage.variables["_nav_dir"].Value()-1, false);
-		var sparam = {};
-		sparam.src = param.wall[Stage.variables["_nav_dir"].Value()];
-		sparam.effect = "dissolve";
-		scene(sparam);
-	}
-	else if (Stage.variables["_nav_move"].Value() == "right") {
-		Stage.variables["_nav_dir"].Set((Stage.variables["_nav_dir"].Value()+1)%4, false);
-		var sparam = {};
-		sparam.src = param.wall[Stage.variables["_nav_dir"].Value()];
-		sparam.effect = "dissolve";
-		scene(sparam);
-	}
-	else {
-		var sparam = {};
-		sparam.src = param.wall[Stage.variables["_nav_dir"].Value()];
-		sparam.effect = "dissolve";
-		scene(sparam);
-	}
-	Stage.variables["_nav_move"].Set("",false);
-	
-	if (param.map && (Helper.findVar("_nav_automap") != null)) {
-		var val = Stage.variables["_nav_automap"].Value();
-		val[param.map[0]][param.map[1]] = 1;
-		Stage.variables["_nav_automap"].Set(val, false);
-		
-		if (Helper.findVar("_nav_pos") == null) {
-			var uv = new UserVars();
-			uv.Set(0, false);
-			Stage.variables["_nav_pos"] = uv;
-		}
-		Stage.variables["_nav_pos"].Set(param.map, false);
-		
-		// force an automap redraw
-		for (var i in Stage.layers[3]) {
-			if (Stage.layers[3][i].type == 'minimap') {
-				Stage.layers[3][i].redraw = true;
-				break;
+// screen - do some screen actions
+function screen(param) {
+	for (let prop in param) {
+		if (param.hasOwnProperty(prop)) {
+			if (prop == 'shake') {
+				Stage.shake = param.shake;
+				Stage.Transition(param.duration ? param.duration: Config.transTime);
+			}
+			if (prop == 'fall') {
+				Stage.fall = param.fall;
+				Stage.Transition(param.duration ? param.duration: Config.transTime);
+			}
+			if (prop == 'snap') {
+                // TODO: PixiJS capture/extract
+				var img = Stage.canvas.toDataURL("image/"+param.snap);
+				window.open(img,'_blank','width='+Stage.canvas.width+',height='+Stage.canvas.height);
 			}
 		}
 	}
-}
-// automap - display an auto-revealing map, to be used with tiles
-function automap(param) {
-	// automap uses atmo, tile uses scene
-	if (typeof param == 'string') {
-		var sparam = {};
-		if (param == 'hide') sparam.minimap = 'stop';
-		if (param == 'show') sparam.minimap = 'start';
-		atmosphere(sparam);		
-	}
-	else {
-		if (param.src) {
-			if (Helper.findVar("_nav_automap") == null) {
-				var uv = new UserVars();
-				uv.Set(0, false);
-				Stage.variables["_nav_automap"] = uv;
-			}
-
-			var val = new Array(param.size[0]);
-			for (var i=0; i<val.length; i++) {
-				val[i] = new Array(param.size[1]);
-				for (var j=0; j<val[i].length; j++)
-					val[i][j] = 0;
-			}
-			Stage.variables["_nav_automap"].Set(val, false);
-			var sparam = {};
-			sparam.minimap = param.src;
-			sparam.offset = (param.offset) ? param.offset : new Array(0,0);
-			sparam.size = param.size;
-			atmosphere(sparam);
-		}
-	}
+	Stage.redraw = true;
 }
 // map - define map adjacency
 function map(param) {
 	if (Helper.findVar("_nav_loc") == null) {
-		var uv = new UserVars();
+		let uv = new UserVars();
 		uv.Set("", false);
-		Stage.variables["_nav_loc"] = uv;
+		Stage.variables.set("_nav_loc", uv);
 	}
-	for (var prop in param) {
+	for (let prop in param) {
 		if (param.hasOwnProperty(prop) && (prop != 'id')) {
-			var uv = new UserVars();
+			let uv = new UserVars();
 			param[prop].push(prop);
 			uv.Set(param[prop], false);
-			Stage.variables[param.id+'#'+prop] = uv;
+			Stage.variables.set(param.id+'#'+prop, uv);
 		}
 	}
 }
@@ -261,17 +186,16 @@ function map(param) {
 function preload(param) {
 	// TODO: here's a crude preload support
 	if (Config.gameAllowPreload) {
-		setTimeout(function() {
+		setTimeout(() => {
 			if ((typeof param == 'string') && (param == 'auto')){
-				var seq = Stage.script.sequence;
-				for (var i=Stage.script.frame; i<seq.length; i+=2) {
+				let seq = Stage.script.sequence;
+				for (let i=Stage.script.frame; i<seq.length; i+=2) {
 					Helper.preloadResources(seq[i], seq[i+1]);
 				}
-				seq = null;
 				return;
 			}
-			var preloadObj = new Array(param.length);
-			for (var i=0; i<param.length; i++) {
+			let preloadObj = new Array(param.length);
+			for (let i=0; i<param.length; i++) {
 				if (Helper.checkIfImage(param[i])) {
 					preloadObj[i] = new Image();
 					preloadObj[i].src = param[i];
@@ -288,9 +212,13 @@ function preload(param) {
 					preloadObj[i].autoplay = false;
 					preloadObj[i].src = param[i];
 				}
+                if (Helper.checkIfScript(param[i])) {
+                    Helper.scriptLoad(param[i].replace('.js',''), function() {
+                        // just load in memory, do nothing
+                    });
+                }
 				preloadObj[i] = null;
 			}
-			preloadObj = null;
 		}, 250);
 	}
 }

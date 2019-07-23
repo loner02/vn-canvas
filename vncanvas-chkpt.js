@@ -2,579 +2,864 @@
 // Directives
 ///////////////////////////////////////////////////////////////////////////////
 "use strict";
-require(["app/vncanvas-img", "app/vncanvas-vars"]);
+require(["app/vncanvas-vars"]);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Checkpoint - loads/saves at a given checkpoint
 ///////////////////////////////////////////////////////////////////////////////
-function checkpoint(param) {
-	if (!Helper.supportsLocalStorage()) return;
-	
-	var cmd = param;
-	var chkpt = ''; 
-	if (Config.gameNamedCheckpts) {
-		if (typeof param == 'string') {
-			cmd = param;
-			chkpt = '_auto_';
-		}
-		else {
-			for (var prop in param) {
-				if (param.hasOwnProperty(prop)) {
-					cmd = prop;
-					chkpt = param[prop];
-				}
-			}
-		}
-	}
-	if (cmd == "save") {
-		if (!Config.gameNamedCheckpts) {
-			//localStorage.clear(); 
-			var pattern = "/_persist_/g";
-			for (var prop in localStorage) {
-				if (!prop.match(eval(pattern))) {
-					localStorage.removeItem(prop);
-				}
-			}
-		}
-		else {
-			if (chkpt != '') {
-				var pattern = "/^"+chkpt+"/g";
-				for (var prop in localStorage) {
-					if (prop.match(eval(pattern))) {
-						localStorage.removeItem(prop);
-					}
-				}
-			}
-		}
-		// Store script entry point
-		if (Stage.script.sequence[0] == label) {
-			localStorage[chkpt+"sequence"] = Stage.script.sequence[1];
-			localStorage[chkpt+"frame"] = Stage.script.frame;
-		}
-		else {
-			localStorage[chkpt+"sequence"] = '';
-			localStorage[chkpt+"frame"] = 0;
-		}
-		// Store jump stack
-		localStorage[chkpt+"frameStack"] = JSON.stringify(Stage.script.frameStack);
-		// Store layer 0
-		localStorage[chkpt+"l0_count"] = Stage.layers[0].length;
-		for (var i=0; i<Stage.layers[0].length; i++) {
-			localStorage[chkpt+"l0_"+i+"_id"] = Stage.layers[0][i].context.canvas.id;
-			if (typeof Stage.layers[0][i].image == 'string')
-				localStorage[chkpt+"l0_"+i+"_src"] = Stage.layers[0][i].image;
-			else
-				localStorage[chkpt+"l0_"+i+"_src"] = Stage.layers[0][i].image.src;
-			localStorage[chkpt+"l0_"+i+"_obj_count"] = Stage.layers[0][i].objects.length;
-			for (var j=0; j<Stage.layers[0][i].objects.length; j++) {
-				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_src"] = Stage.layers[0][i].objects[j].img.src;
-				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_x"] = Stage.layers[0][i].objects[j].x;
-				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_y"] = Stage.layers[0][i].objects[j].y;
-				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_frames"] = Stage.layers[0][i].objects[j].frames;
-				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_fps"] = Stage.layers[0][i].objects[j].fps;
-				localStorage[chkpt+"l0_"+i+"_obj_"+j+"_link"] = Stage.layers[0][i].objects[j].link;
-			}
-			localStorage[chkpt+"l0_"+i+"_alpha"] = Stage.layers[0][i].alpha;
-			localStorage[chkpt+"l0_"+i+"_visible"] = Stage.layers[0][i].visible;
-			localStorage[chkpt+"l0_"+i+"_effects"] = Stage.layers[0][i].effects;
-			localStorage[chkpt+"l0_"+i+"_time"] = Stage.layers[0][i].transTime;
-			localStorage[chkpt+"l0_"+i+"_orientation"] = Stage.layers[0][i].orientation;
-			localStorage[chkpt+"l0_"+i+"_size"] = Stage.layers[0][i].size;
-		}
-		// Store layer 1
-		localStorage[chkpt+"l1_count"] = Stage.layers[1].length;
-		for (var i=0; i<Stage.layers[1].length; i++) {
-			localStorage[chkpt+"l1_"+i+"_id"] = Stage.layers[1][i].id;
-			localStorage[chkpt+"l1_"+i+"_nick"] = Stage.layers[1][i].nick;
-			localStorage[chkpt+"l1_"+i+"_color"] = Stage.layers[1][i].color;
-			localStorage[chkpt+"l1_"+i+"_zorder"] = Stage.layers[1][i].z_order;
-			localStorage[chkpt+"l1_"+i+"_sprites_count"] = Stage.layers[1][i].sprites.length;
-			for (var j=0; j<Stage.layers[1][i].sprites.length; j++) {
-				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"] = Stage.layers[1][i].sprites[j].id;
-				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"] = Stage.layers[1][i].sprites[j].src.src;			
-				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"] = Stage.layers[1][i].sprites[j].align;			
-				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_frames"] = Stage.layers[1][i].sprites[j].frames;			
-				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_fps"] = Stage.layers[1][i].sprites[j].fps;			
-				localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_reps"] = Stage.layers[1][i].sprites[j].reps;			
-			}
-			localStorage[chkpt+"l1_"+i+"_offset_x"] = Stage.layers[1][i].offset.vx;
-			localStorage[chkpt+"l1_"+i+"_offset_y"] = Stage.layers[1][i].offset.vy;
-			if (Stage.layers[1][i].avatar != null)
-				localStorage[chkpt+"l1_"+i+"_avatar"] = Stage.layers[1][i].avatar.src;
-			else
-				localStorage[chkpt+"l1_"+i+"_avatar"] = "undefined";
-			if (Stage.layers[1][i].avatars != null)
-				localStorage[chkpt+"l1_"+i+"_avatars"] = JSON.stringify(Stage.layers[1][i].avatars);
-			else
-				localStorage[chkpt+"l1_"+i+"_avatars"] = "undefined";
-			localStorage[chkpt+"l1_"+i+"_active"] = Stage.layers[1][i].activeSprite;
-			localStorage[chkpt+"l1_"+i+"_alpha"] = Stage.layers[1][i].alpha;
-			if (Stage.layers[1][i].prevFx != '')
-				localStorage[chkpt+"l1_"+i+"_effects"] = Stage.layers[1][i].prevFx;
-			else
-				localStorage[chkpt+"l1_"+i+"_effects"] = "undefined";
-			localStorage[chkpt+"l1_"+i+"_time"] = Stage.layers[1][i].transTime;
-			localStorage[chkpt+"l1_"+i+"_visible"] = Stage.layers[1][i].visible;
-			localStorage[chkpt+"l1_"+i+"_pending"] = Stage.layers[1][i].pendingRemoval;
-			localStorage[chkpt+"l1_"+i+"_posMode"] = Stage.layers[1][i].posMode;
-			//localStorage[chkpt+"l1_"+i+"_fxparam"] = Stage.layers[1][i].fxparam;
-			localStorage[chkpt+"l1_"+i+"_orientation"] = Stage.layers[1][i].orientation;
-			localStorage[chkpt+"l1_"+i+"_size"] = Stage.layers[1][i].size;
-			localStorage[chkpt+"l1_"+i+"_stats"] = JSON.stringify(Stage.layers[1][i].stats);
-		}
-		// Store layer 2
-		localStorage[chkpt+"l2_count"] = Stage.layers[2].length;
-		for (var i=0; i<Stage.layers[2].length; i++) {
-			localStorage[chkpt+"l2_"+i+"_id"] = Stage.layers[2][i].context.canvas.id;
-			if (typeof Stage.layers[2][i].image == 'string')
-				localStorage[chkpt+"l2_"+i+"_src"] = Stage.layers[2][i].image;
-			else
-				localStorage[chkpt+"l2_"+i+"_src"] = Stage.layers[2][i].image.src;
-			localStorage[chkpt+"l2_"+i+"_alpha"] = Stage.layers[2][i].alpha;
-			localStorage[chkpt+"l2_"+i+"_visible"] = Stage.layers[2][i].visible;
-			localStorage[chkpt+"l2_"+i+"_effects"] = Stage.layers[2][i].effects;
-			localStorage[chkpt+"l2_"+i+"_time"] = Stage.layers[2][i].transTime;
-			localStorage[chkpt+"l2_"+i+"_scroll"] = Stage.layers[2][i].scroll;
-			localStorage[chkpt+"l2_"+i+"_offset_x"] = Stage.layers[2][i].offset.vx;
-			localStorage[chkpt+"l2_"+i+"_offset_y"] = Stage.layers[2][i].offset.vy;
-			localStorage[chkpt+"l2_"+i+"_orientation"] = Stage.layers[2][i].orientation;
-			localStorage[chkpt+"l2_"+i+"_size"] = Stage.layers[2][i].size;
-			localStorage[chkpt+"l2_"+i+"_frames"] = Stage.layers[2][i].ovFrames;
-			localStorage[chkpt+"l2_"+i+"_fps"] = Stage.layers[2][i].ovFps;
-		}
-		// Store layer 3
-		localStorage[chkpt+"l3_count"] = Stage.layers[3].length;
-		for (var i=0; i<Stage.layers[3].length; i++) {
-			localStorage[chkpt+"l3_"+i+"_id"] = Stage.layers[3][i].context.canvas.id;
-			localStorage[chkpt+"l3_"+i+"_type"] = Stage.layers[3][i].type;
-			localStorage[chkpt+"l3_"+i+"_action"] = Stage.layers[3][i].action;
-			localStorage[chkpt+"l3_"+i+"_visible"] = Stage.layers[3][i].visible;
-			localStorage[chkpt+"l3_"+i+"_param"] = JSON.stringify(Stage.layers[3][i].saveparam);
-		}
-		// Store layer 4
-		localStorage[chkpt+"l4_count"] = Stage.layers[4].length;
-		for (var i=0; i<Stage.layers[4].length; i++) {
-			localStorage[chkpt+"l4_"+i+"_type"] = Stage.layers[4][i].type;
-			if (Stage.layers[4][i].type == "box") {
-				localStorage[chkpt+"l4_"+i+"_visible"] = Stage.layers[4][i].visible;
-				localStorage[chkpt+"l4_"+i+"_text"] = Stage.layers[4][i].text;
-				localStorage[chkpt+"l4_"+i+"_pos"] = Stage.layers[4][i].pos;
-				localStorage[chkpt+"l4_"+i+"_back"] = Stage.layers[4][i].back;
-				if (Stage.layers[4][i].src != null)
-					localStorage[chkpt+"l4_"+i+"_src"] = Stage.layers[4][i].src;
-				else
-					localStorage[chkpt+"l4_"+i+"_src"] = "undefined";
-				if (Stage.layers[4][i].psrc != '')
-					localStorage[chkpt+"l4_"+i+"_prompt"] = Stage.layers[4][i].psrc;
-				else
-					localStorage[chkpt+"l4_"+i+"_prompt"] = "undefined";
-				if (Stage.layers[4][i].avatar != null) {
-					localStorage[chkpt+"l4_"+i+"_avatar"] = Stage.layers[4][i].avatar.src;
-					localStorage[chkpt+"l4_"+i+"_avatarStruct"] = Stage.layers[4][i].avatarStruct;
-				}
-				else {
-					localStorage[chkpt+"l4_"+i+"_avatar"] = "undefined";
-					localStorage[chkpt+"l4_"+i+"_avatarStruct"] = "undefined";
-				}
-				if (Stage.layers[4][i].balloon != null)
-					localStorage[chkpt+"l4_"+i+"_balloon"] = Stage.layers[4][i].balloon;
-				else
-					localStorage[chkpt+"l4_"+i+"_balloon"] = "undefined";
-				localStorage[chkpt+"l4_"+i+"_cont"] = Stage.layers[4][i].cont;
-				localStorage[chkpt+"l4_"+i+"_fontFamily"] = Stage.layers[4][i].fontFamily;
-				localStorage[chkpt+"l4_"+i+"_fontSize"] = Stage.layers[4][i].fontSize;
-				localStorage[chkpt+"l4_"+i+"_lineHeight"] = Stage.layers[4][i].lineHeight;
-				localStorage[chkpt+"l4_"+i+"_fontWeight"] = Stage.layers[4][i].fontWeight;
-				localStorage[chkpt+"l4_"+i+"_fontColor"] = Stage.layers[4][i].fontColor;
-				localStorage[chkpt+"l4_"+i+"_tagFamily"] = Stage.layers[4][i].tagFamily;
-				localStorage[chkpt+"l4_"+i+"_tagSize"] = Stage.layers[4][i].tagSize;
-				localStorage[chkpt+"l4_"+i+"_tagWeight"] = Stage.layers[4][i].tagWeight;
-				localStorage[chkpt+"l4_"+i+"_tagColor"] = Stage.layers[4][i].tagColor;
-				localStorage[chkpt+"l4_"+i+"_timeout"] = Stage.layers[4][i].timeout;
-				localStorage[chkpt+"l4_"+i+"_textAlign"] = Stage.layers[4][i].textAlign;
-				localStorage[chkpt+"l4_"+i+"_offset_x"] = Stage.layers[4][i].textOffset.vx;
-				localStorage[chkpt+"l4_"+i+"_offset_y"] = Stage.layers[4][i].textOffset.vy;
-				localStorage[chkpt+"l4_"+i+"_inputFocus"] = Stage.layers[4][i].inputFocus;
-				localStorage[chkpt+"l4_"+i+"_alpha"] = Stage.layers[4][i].alpha;
-				localStorage[chkpt+"l4_"+i+"_effects"] = Stage.layers[4][i].effects;
-				localStorage[chkpt+"l4_"+i+"_jumpTo_count"] = Stage.layers[4][i].jumpTo.length;
-				for (var j=0; j<Stage.layers[4][i].jumpTo.length; j++) {
-					localStorage[chkpt+"l4_"+i+"jumpTo"+j+"hotspot_x"] = Stage.layers[4][i].jumpTo[j].hotspot[0];
-					localStorage[chkpt+"l4_"+i+"jumpTo"+j+"hotspot_y"] = Stage.layers[4][i].jumpTo[j].hotspot[1];
-					localStorage[chkpt+"l4_"+i+"jumpTo"+j+"link"] = Stage.layers[4][i].jumpTo[j].link;
-				}
-			}
-			else {
-				localStorage[chkpt+"l4_"+i+"_type"] = Stage.layers[4][i].type;
-				localStorage[chkpt+"l4_"+i+"_id"] = Stage.layers[4][i].id;
-				if (Stage.layers[4][i].group != '')
-					localStorage[chkpt+"l4_"+i+"_group"] = Stage.layers[4][i].group;
-				else
-					localStorage[chkpt+"l4_"+i+"_group"] = "undefined";
-				localStorage[chkpt+"l4_"+i+"_param"] = JSON.stringify(Stage.layers[4][i].saveparam);			
-				localStorage[chkpt+"l4_"+i+"_text"] = Stage.layers[4][i].text;
-				localStorage[chkpt+"l4_"+i+"_visible"] = Stage.layers[4][i].visible;
-				if ((Stage.layers[4][i].link != null) && (Stage.layers[4][i].link.length > 0)) {
-					localStorage[chkpt+"l4_"+i+"_link_count"] = Stage.layers[4][i].link.length;
-					for (var j=0; j<Stage.layers[4][i].link.length; j+=2) {
-						localStorage[chkpt+"l4_"+i+"_link_"+j] = Stage.layers[4][i].link[j].toString().split(/[\s|(|)|{|}]/g, 2)[1];
-						localStorage[chkpt+"l4_"+i+"_link_"+(j+1)] = JSON.stringify(Stage.layers[4][i].link[j+1]);
-					}
-				}
-				else {
-					localStorage[chkpt+"l4_"+i+"_link_count"] = 0;				
-					//localStorage[chkpt+"l4_"+i+"_link_0"] = "undefined";
-					//localStorage[chkpt+"l4_"+i+"_link_1"] = "undefined";
-				}
-			}
-		}
-		// Store sounds
-		for (var i=0; i<4; i++) {
-			localStorage[chkpt+"s"+i+"_count"] = Stage.sounds[i].length;
-			for (var j=0; j<Stage.sounds[i].length; j++) {
-				localStorage[chkpt+"s"+i+"_"+j+"_src"] = Stage.sounds[i][j].src;
-				localStorage[chkpt+"s"+i+"_"+j+"_repeat"] = Stage.sounds[i][j].repeat;
-				localStorage[chkpt+"s"+i+"_"+j+"_delay"] = Stage.sounds[i][j].delay;
-				localStorage[chkpt+"s"+i+"_"+j+"_isStopping"] = Stage.sounds[i][j].isStopping;
-				localStorage[chkpt+"s"+i+"_"+j+"_isPaused"] = Stage.sounds[i][j].isPaused;
-			}
-		}
-		// Store video?? No need. Videos are non-persistent data anyway
-		// Store user variables
-		var uv_count = 0;
-		for (var prop in Stage.variables) {
-			if (Stage.variables.hasOwnProperty(prop)) {
-				localStorage[chkpt+"uv"+uv_count+"_name"] = prop;
-				localStorage[chkpt+"uv"+uv_count+"_value"] = JSON.stringify(Stage.variables[prop].Value());
-				localStorage[chkpt+"uv"+uv_count+"_type"] = Stage.variables[prop].Type();
-				if (Stage.variables[prop].persist) {
-					localStorage[chkpt+"uv"+uv_count+"_persist"] =  true;
-					localStorage["_persist_uv_"+prop] = JSON.stringify(Stage.variables[prop].Value());
-				}
-				else
-					localStorage[chkpt+"uv"+uv_count+"_persist"] =  false;
-				uv_count++;
-			}
-		}
-		localStorage[chkpt+"uv_count"] = uv_count;
-		// Store forms
-		localStorage[chkpt+"forms_count"] = Stage.formStack.length;
-		for (var i=0; i<Stage.formStack.length; i++) {
-			localStorage[chkpt+"formStack_"+i] = Stage.formStack[i];
-		}
-		localStorage[chkpt+"forms_style_count"] = Stage.formStyle.length;
-		for (var i=0; i<Stage.formStyle.length; i++) {
-			localStorage[chkpt+"formStyle_"+i] = Stage.formStyle[i];
-		}
-		// Store animation sets
-		var aset_count = 0;
-		for (var prop in Stage.animations) {
-			if (Stage.animations.hasOwnProperty(prop)) {
+require(["app/vncanvas-base"], function() {
+    Helper.saveCheckpoint = ((chkpt) => {
+        // Store script entry point
+        if (Stage.script.sequence[0] == label) {
+            localStorage[chkpt+'sequence'] = Stage.script.sequence[1];
+            localStorage[chkpt+'frame'] = Stage.script.frame;
+        }
+        else {
+            localStorage[chkpt+'sequence'] = '';
+            localStorage[chkpt+'frame'] = 0;
+        }
+        // Store jump stack
+        localStorage[chkpt+'frameStack'] = JSON.stringify(Stage.script.frameStack);
+        // Store layer 0: background
+        let layer = Stage.layers.bg, i=0;
+        localStorage[chkpt+'l0_count'] = layer.size;
+        for (let [key, scene] of layer.entries()) {
+            localStorage[chkpt+'l0_'+i+'_id'] = scene.id;   // key
+            localStorage[chkpt+'l0_'+i+'_src'] = scene.image;
+            localStorage[chkpt+'l0_'+i+'_obj_count'] = scene.objects.length;
+            for (let j=0; j<scene.objects.length; j++) {
+                localStorage[chkpt+'l0_'+i+'_obj_'+j+'_src'] = scene.objects[j].src;
+                localStorage[chkpt+'l0_'+i+'_obj_'+j+'_x'] = scene.objects[j].x;
+                localStorage[chkpt+'l0_'+i+'_obj_'+j+'_y'] = scene.objects[j].y;
+                localStorage[chkpt+'l0_'+i+'_obj_'+j+'_frames'] = scene.objects[j].frames;
+                localStorage[chkpt+'l0_'+i+'_obj_'+j+'_fps'] = scene.objects[j].fps;
+                localStorage[chkpt+'l0_'+i+'_obj_'+j+'_link'] = scene.objects[j].link;
+            }
+            localStorage[chkpt+'l0_'+i+'_alpha'] = scene.alpha;
+            localStorage[chkpt+'l0_'+i+'_visible'] = scene.visible;
+            localStorage[chkpt+'l0_'+i+'_effects'] = scene.effects;
+            if (scene.filter)
+                localStorage[chkpt+'l0_'+i+'_filter'] = JSON.stringify(Array.from(scene.filter));
+            else
+                localStorage[chkpt+'l0_'+i+'_filter'] = 'undefined';
+            localStorage[chkpt+'l0_'+i+'_time'] = scene.transTime;
+            localStorage[chkpt+'l0_'+i+'_orientation'] = scene.orientation;
+            localStorage[chkpt+'l0_'+i+'_size'] = scene.scale;
+            localStorage[chkpt+'l0_'+i+'_x'] = scene.pos.vx;
+            localStorage[chkpt+'l0_'+i+'_y'] = scene.pos.vy;
+            i++;
+        }
+        // Store layer 1: foreground
+        layer = Stage.layers.fg;
+        i = 0;
+        localStorage[chkpt+'l1_count'] = layer.size;
+        for (let [key, actor] of layer.entries()) {
+            localStorage[chkpt+'l1_'+i+'_id'] = actor.id;   // key
+            localStorage[chkpt+'l1_'+i+'_nick'] = actor.nick;
+            localStorage[chkpt+'l1_'+i+'_color'] = actor.color;
+            localStorage[chkpt+'l1_'+i+'_zorder'] = actor.z_order;
+            localStorage[chkpt+'l1_'+i+'_sprites_count'] = Object.keys(actor.sprites).length;
+            let j = 0;
+            for (let prop in actor.sprites) {
+                if (actor.sprites.hasOwnProperty(prop)) {
+                    let s = actor.sprites[prop];
+                    localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_id'] = s.id; //k
+                    localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_src'] = s.src;
+                    localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_align'] = s.align;
+                    localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_frames'] = s.frames;
+                    localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_fps'] = s.fps;
+                    localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_reps'] = s.reps;
+                    j++;
+                }
+            }
+            localStorage[chkpt+'l1_'+i+'_active'] = actor.activeSprite;
+            localStorage[chkpt+'l1_'+i+'_psprite'] = actor.pSprite;
+            if (actor.avatars)
+                localStorage[chkpt+'l1_'+i+'_avatars'] = JSON.stringify(actor.avatars);
+            else
+                localStorage[chkpt+'l1_'+i+'_avatars'] = 'undefined';
+            localStorage[chkpt+'l1_'+i+'_avatar'] = actor.activeAvatar;
+            localStorage[chkpt+'l1_'+i+'_alpha'] = actor.alpha;
+            if (actor.prevFx != '')
+                localStorage[chkpt+'l1_'+i+'_effects'] = actor.prevFx;
+            else
+                localStorage[chkpt+'l1_'+i+'_effects'] = 'undefined';
+            localStorage[chkpt+'l1_'+i+'_offset_x'] = actor.offset.vx;
+            localStorage[chkpt+'l1_'+i+'_offset_y'] = actor.offset.vy;
+            localStorage[chkpt+'l1_'+i+'_time'] = actor.transTime;
+            localStorage[chkpt+'l1_'+i+'_visible'] = actor.visible;
+            localStorage[chkpt+'l1_'+i+'_pending'] = actor.pendingRemoval;
+            localStorage[chkpt+'l1_'+i+'_posMode'] = actor.posMode;
+            localStorage[chkpt+'l1_'+i+'_x'] = actor.pos.vx;
+            localStorage[chkpt+'l1_'+i+'_y'] = actor.pos.vy;
+            localStorage[chkpt+'l1_'+i+'_orientation'] = actor.orientation;
+            localStorage[chkpt+'l1_'+i+'_size'] = actor.scale;
+            localStorage[chkpt+'l1_'+i+'_zscale'] = actor.z_scale;
+            if (actor.filter)
+                localStorage[chkpt+'l1_'+i+'_filter'] = JSON.stringify(Array.from(actor.filter));
+            else
+            localStorage[chkpt+'l1_'+i+'_filter'] = 'undefined';
+            localStorage[chkpt+'l1_'+i+'_stats'] = JSON.stringify(actor.stats);
+            i++;
+        }
+        // Store layer 2: overlay
+        layer = Stage.layers.ovl;
+        i = 0;
+        localStorage[chkpt+'l2_count'] = layer.size;
+        for (let [key, overlay] of layer.entries()) {
+            localStorage[chkpt+'l2_'+i+'_id'] = overlay.id;
+            localStorage[chkpt+'l2_'+i+'_src'] = overlay.image;
+            localStorage[chkpt+'l2_'+i+'_alpha'] = overlay.alpha;
+            localStorage[chkpt+'l2_'+i+'_visible'] = overlay.visible;
+            localStorage[chkpt+'l2_'+i+'_effects'] = overlay.effects;
+            localStorage[chkpt+'l2_'+i+'_time'] = overlay.transTime;
+            localStorage[chkpt+'l2_'+i+'_scroll'] = overlay.scroll;
+            localStorage[chkpt+'l2_'+i+'_offset_x'] = overlay.offset.vx;
+            localStorage[chkpt+'l2_'+i+'_offset_y'] = overlay.offset.vy;
+            localStorage[chkpt+'l2_'+i+'_orientation'] = overlay.orientation;
+            localStorage[chkpt+'l2_'+i+'_size'] = overlay.scale;
+            localStorage[chkpt+'l2_'+i+'_x'] = overlay.pos.vx;
+            localStorage[chkpt+'l2_'+i+'_y'] = overlay.pos.vy;
+            localStorage[chkpt+'l2_'+i+'_frames'] = overlay.ovFrames;
+            localStorage[chkpt+'l2_'+i+'_fps'] = overlay.ovFps;
+            if (overlay.filter)
+                localStorage[chkpt+'l2_'+i+'_filter'] = JSON.stringify(Array.from(overlay.filter));
+            else
+                localStorage[chkpt+'l2_'+i+'_filter'] = 'undefined';
+            i++;
+        }
+        // Store layer 3: atmosphere
+        layer = Stage.layers.atm;
+        i = 0;
+        localStorage[chkpt+'l3_count'] = layer.size;
+        for (let [key, atmo] of layer.entries()) {
+            localStorage[chkpt+'l3_'+i+'_id'] = atmo.id;
+            localStorage[chkpt+'l3_'+i+'_type'] = atmo.type;
+            localStorage[chkpt+'l3_'+i+'_action'] = atmo.action;
+            localStorage[chkpt+'l3_'+i+'_visible'] = atmo.visible;
+            localStorage[chkpt+'l3_'+i+'_param'] = JSON.stringify(atmo.saveparam);
+            i++;
+        }
+        // Store layer 4: gui/controls
+        layer = Stage.layers.gui;
+        i = 0;
+        localStorage[chkpt+'l4_count'] = layer.size;
+        for (let [key, control] of layer.entries()) {
+            localStorage[chkpt+'l4_'+i+'_type'] = control.type;
+            localStorage[chkpt+'l4_'+i+'_id'] = control.id;
+            localStorage[chkpt+'l4_'+i+'_text'] = control.text;
+            localStorage[chkpt+'l4_'+i+'_visible'] = control.visible;
+            if (control.type == 'box') {
+                localStorage[chkpt+'l4_'+i+'_pos'] = control.pos;
+                localStorage[chkpt+'l4_'+i+'_back'] = control.back;
+                localStorage[chkpt+'l4_'+i+'_src'] = control.src;
+                localStorage[chkpt+'l4_'+i+'_prompt'] = control.psrc;
+                if (control.avatar != '') {
+                    localStorage[chkpt+'l4_'+i+'_avatar'] = control.avatar;
+                    localStorage[chkpt+'l4_'+i+'_avatarStruct'] = JSON.stringify(control.avatarStruct);
+                }
+                else {
+                    localStorage[chkpt+'l4_'+i+'_avatar'] = 'undefined';
+                    localStorage[chkpt+'l4_'+i+'_avatarStruct'] = 'undefined';
+                }
+                if (control.balloon) {
+                    localStorage[chkpt+'l4_'+i+'_balloon'] = control.balloon;
+                    localStorage[chkpt+'l4_'+i+'_bpos'] = control.bpos;
+                }
+                else 
+                    localStorage[chkpt+'l4_'+i+'_balloon'] = 'undefined';
+                localStorage[chkpt+'l4_'+i+'_cont'] = control.cont;
+                localStorage[chkpt+'l4_'+i+'_fontFamily'] = control.fontFamily;
+                localStorage[chkpt+'l4_'+i+'_fontSize'] = control.fontSize;
+                localStorage[chkpt+'l4_'+i+'_lineHeight'] = control.lineHeight;
+                localStorage[chkpt+'l4_'+i+'_fontWeight'] = control.fontWeight;
+                localStorage[chkpt+'l4_'+i+'_fontColor'] = control.fontColor;
+                localStorage[chkpt+'l4_'+i+'_tagFamily'] = control.tagFamily;
+                localStorage[chkpt+'l4_'+i+'_tagSize'] = control.tagSize;
+                localStorage[chkpt+'l4_'+i+'_tagWeight'] = control.tagWeight;
+                localStorage[chkpt+'l4_'+i+'_tagColor'] = control.tagColor;
+                localStorage[chkpt+'l4_'+i+'_dimStyle'] = JSON.stringify(control.dimStyle);
+                localStorage[chkpt+'l4_'+i+'_balloonStyle'] = JSON.stringify(control.balloonStyle);
+                localStorage[chkpt+'l4_'+i+'_timeout'] = control.timeout;
+                localStorage[chkpt+'l4_'+i+'_textAlign'] = control.textAlign;
+                localStorage[chkpt+'l4_'+i+'_offset_x'] = control.textOffset.vx;
+                localStorage[chkpt+'l4_'+i+'_offset_y'] = control.textOffset.vy;
+                localStorage[chkpt+'l4_'+i+'_inputFocus'] = control.inputFocus;
+                localStorage[chkpt+'l4_'+i+'_alpha'] = control.alpha;
+                localStorage[chkpt+'l4_'+i+'_effects'] = control.effects;
+            }
+            else {
+                if (control.group != '')
+                    localStorage[chkpt+'l4_'+i+'_group'] = control.group;
+                else
+                    localStorage[chkpt+'l4_'+i+'_group'] = 'undefined';
+                localStorage[chkpt+'l4_'+i+'_param'] = JSON.stringify(control.saveparam);
+                localStorage[chkpt+'l4_'+i+'_hidden'] = control.hidden;
+                localStorage[chkpt+'l4_'+i+'_showText'] = control.showText;
+                localStorage[chkpt+'l4_'+i+'_on'] = control.on;
+                
+                if ((control.link != null) && (control.link.length > 0)) {
+                    localStorage[chkpt+'l4_'+i+'_link_count'] = control.link.length;
+                    for (let j=0; j<control.link.length; ) {
+                        localStorage[chkpt+'l4_'+i+'_link_'+j] = control.link[j].name;
+                        localStorage[chkpt+'l4_'+i+'_link_'+(j+1)] = JSON.stringify(control.link[j+1]);
+                        if ((control.link[j+2]) && (typeof control.link[j+2] == 'boolean')) {
+                            localStorage[chkpt+'l4_'+i+'_link_'+(j+2)] = control.link[j+2];
+                            j += 3;
+                        }
+                        else 
+                            j += 2;
+                    }
+                }
+                else 
+                    localStorage[chkpt+'l4_'+i+'_link_count'] = 0;
+                if ((control.linkd != null) && (control.linkd.length > 0)) {
+                    localStorage[chkpt+'l4_'+i+'_linkd_count'] = control.linkd.length;
+                    for (let j=0; j<control.linkd.length; ) {
+                        localStorage[chkpt+'l4_'+i+'_linkd_'+j] = control.linkd[j].name;
+                        localStorage[chkpt+'l4_'+i+'_linkd_'+(j+1)] = JSON.stringify(control.linkd[j+1]);
+                        if ((control.linkd[j+2]) && (typeof control.linkd[j+2] == 'boolean')) {
+                            localStorage[chkpt+'l4_'+i+'_linkd_'+(j+2)] = control.linkd[j+2];
+                            j += 3;
+                        }
+                        else 
+                            j += 2;
+                    }
+                }
+                else 
+                    localStorage[chkpt+'l4_'+i+'_linkd_count'] = 0;
+            }
+            i++;
+        }
+        // Store sounds: bgm, bgs, se, vc
+        for (let i=0; i<4; i++) {
+            if (i==0) layer = Stage.sounds.bgm;
+            else if (i==1) layer = Stage.sounds.bgs;
+            else if (i==2) layer = Stage.sounds.se;
+            else layer = Stage.sounds.vc;
+			localStorage[chkpt+"s"+i+"_count"] = layer.size;
+            let j = 0;
+            for (let [key, sound] of layer.entries()) {
+                localStorage[chkpt+'s_'+i+'_'+j+'_src'] = sound.src;
+                localStorage[chkpt+'s_'+i+'_'+j+'_repeat'] = sound._repeat;
+                localStorage[chkpt+'s_'+i+'_'+j+'_delay'] = sound._delay;
+                localStorage[chkpt+'s_'+i+'_'+j+'_isStopping'] = sound.isStopping;
+                localStorage[chkpt+'s_'+i+'_'+j+'_isPaused'] = sound.isPaused;
+                localStorage[chkpt+'s_'+i+'_'+j+'_adjust'] = sound._adjust;
+                localStorage[chkpt+'s_'+i+'_'+j+'_rate'] = sound._rate;
+                localStorage[chkpt+'s_'+i+'_'+j+'_stereo'] = sound._stereo;
+                if (sound._tag != '') {
+                    localStorage[chkpt+'s_'+i+'_'+j+'_tag'] = sound._tag;
+                    localStorage[chkpt+'s_'+i+'_'+j+'_sprite'] = JSON.stringify(sound.audio._sprite);
+                }
+                else 
+                    localStorage[chkpt+'s_'+i+'_'+j+'_tag'] = 'undefined';
+                j++;
+            }
+        }
+        // Store video? No need.
+        // Store user variables
+        localStorage[chkpt+'uv_count'] = Stage.variables.size;
+        i = 0;
+        for (let [key, vars] of Stage.variables.entries()) {
+            localStorage[chkpt+'uv'+i+'_name'] = key;
+            localStorage[chkpt+'uv'+i+'_value'] = JSON.stringify(vars.value);
+            localStorage[chkpt+'uv'+i+'_type'] = vars.type;
+            if (vars.persist) {
+                localStorage[chkpt+'uv'+i+'_persist'] = true;
+                localStorage['_persist_uv_'+key] = JSON.stringify(vars.value);
+            }
+            else
+                localStorage[chkpt+'uv'+i+'_persist'] = false;
+            i++;
+        }
+        // Store forms
+        localStorage[chkpt+'forms_count'] = Stage.formStack.length;
+        for (let i=0; i<Stage.formStack.length; i++) {
+            localStorage[chkpt+'formStack_'+i] = JSON.stringify(Stage.formStack[i]);
+        }
+        localStorage[chkpt+'forms_style_count'] = Stage.formStyle.length;
+        for (let i=0; i<Stage.formStyle.length; i++) {
+            localStorage[chkpt+'formStyle_'+i] = Stage.formStyle[i];
+        }
+        // Store animation sets
+        let aset_count = 0;
+        for (let prop in Stage.animations) {
+            if (Stage.animations.hasOwnProperty(prop)) {
 				localStorage[chkpt+"animation"+aset_count+"_name"] = prop;
 				localStorage[chkpt+"animation"+aset_count+"_value"] = JSON.stringify(Stage.animations[prop]);
 				aset_count++;
-			}
-		}
-		localStorage[chkpt+"aset_count"] = aset_count;
+            }
+        }
+        localStorage[chkpt+"aset_count"] = aset_count;
 		// Store config
 		localStorage[chkpt+"Config"] = JSON.stringify(Config);
-	}
-	else if (cmd == "load") {
-		var chkpt_exist = false;
-		if (chkpt != '') {
-			var pattern = "/^"+chkpt+"/g";
-			for (var prop in localStorage) {
+
+		// MOD Storage
+		if (Config.modRPG) {
+			localStorage[chkpt+"rpg_actors"] = JSON.stringify(RPG.Actors);
+			localStorage[chkpt+"rpg_inventory"] = JSON.stringify(RPG.Inventory);
+			localStorage[chkpt+"rpg_quests"] = JSON.stringify(RPG.Quests);
+			localStorage[chkpt+"rpg_vars"] = JSON.stringify(RPG.vars);
+		}
+    });
+    Helper.loadCheckpoint = ((chkpt) => {
+        // Populate layer 0
+        Stage.layers.bg.clear();
+        for (let i=0; i<parseInt(localStorage[chkpt+'l0_count']); i++) {
+            let obj = new Array();
+            for (let j=0; j<parseInt(localStorage[chkpt+'l0_'+i+'_obj_count']); j++) {
+				obj.push(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_src"]);
+                obj.push(parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_x"]));
+                obj.push(parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_y"]));
+                obj.push(parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_frames"]));
+                obj.push(parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_fps"]));
+                // TODO: obj.push(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_link"]);
+            }
+            let scene = new Scene(localStorage[chkpt+'l0_'+i+'_id'].replace('scn',''),
+                               localStorage[chkpt+'l0_'+i+'_src'],
+                               obj);
+			scene.effects = localStorage[chkpt+"l0_"+i+"_effects"];
+			scene.alpha = parseFloat(localStorage[chkpt+"l0_"+i+"_alpha"]);
+			scene.visible = (localStorage[chkpt+"l0_"+i+"_visible"] == "true");
+			scene.transTime = parseFloat(localStorage[chkpt+"l0_"+i+"_time"]);
+			scene.orientation = parseFloat(localStorage[chkpt+"l0_"+i+"_orientation"]);
+			scene.rotation = parseFloat(localStorage[chkpt+"l0_"+i+"_orientation"]);
+			scene.size = parseFloat(localStorage[chkpt+"l0_"+i+"_size"]);
+			scene.scale = parseFloat(localStorage[chkpt+"l0_"+i+"_size"]);
+			scene.pos.vx = parseInt(localStorage[chkpt+"l0_"+i+"_x"]);
+            scene.pos.vy = parseInt(localStorage[chkpt+"l0_"+i+"_y"]);
+            scene.filter = null;
+            if (localStorage[chkpt+"l0_"+i+"_filter"] != 'undefined') {
+                let filterArray = JSON.parse(localStorage[chkpt+"l0_"+i+"_filter"]);
+                if (filterArray && (filterArray.length > 0)) {
+                    scene.filter = new Set();
+                    filterArray.forEach(f => {scene.filter.add(f)});
+                }
+            }
+            Stage.layers.bg.set(scene.id, scene);
+        }
+        // Populate layer 1
+        Stage.layers.fg.clear();
+        for (let i=0; i<parseInt(localStorage[chkpt+'l1_count']); i++) {
+            let actor = new Character(localStorage[chkpt+'l1_'+i+'_id'],
+                                      parseInt(localStorage[chkpt+'l1_'+i+'_zorder']));
+            actor.nick = localStorage[chkpt+'l1_'+i+'_nick'];
+            actor.color = localStorage[chkpt+'l1_'+i+'_color'];
+            actor.size = parseFloat(localStorage[chkpt+'l1_'+i+'_size']);
+            actor.scale = parseFloat(localStorage[chkpt+'l1_'+i+'_size']);
+            actor.z_scale = parseFloat(localStorage[chkpt+'l1_'+i+'_zscale']);
+            for (let j=0; j<parseInt(localStorage[chkpt+'l1_'+i+'_sprites_count']); j++) {
+                let sprite = [localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_id'],
+                              localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_src'],
+                              localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_align'],
+                              parseInt(localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_frames']),
+                              parseInt(localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_fps']),
+                              parseInt(localStorage[chkpt+'l1_'+i+'_sprites_'+j+'_src'])];
+                actor.addSprite(sprite);
+            }
+            actor.activeSprite = localStorage[chkpt+'l1_'+i+'_active'];
+            actor.pSprite = localStorage[chkpt+'l1_'+i+'_psprite'];
+            if (localStorage[chkpt+'l1_'+i+'_avatars'] != 'undefined')
+                actor.avatars = JSON.parse(localStorage[chkpt+'l1_'+i+'_avatars']);
+            else
+                actor.avatars = {};
+            actor.activeAvatar = localStorage[chkpt+'l1_'+i+'_avatar'];
+            actor.offset = new Vector2d(parseInt(localStorage[chkpt+'l1_'+i+'_offset_x']),
+                                        parseInt(localStorage[chkpt+'l1_'+i+'_offset_y']));
+            actor.alpha = parseFloat(localStorage[chkpt+'l1_'+i+'_alpha']);
+            if (actor.glSpriteA.texture.baseTexture.imageUrl == actor.sprites[actor.activeSprite].src) {
+                actor.glSpriteA.alpha = actor.alpha;
+                actor.glSpriteB.alpha = 0;
+                actor.pSprite = 0;
+            }
+            else if (actor.glSpriteB.texture.baseTexture.imageUrl == actor.sprites[actor.activeSprite].src) {
+                actor.glSpriteB.alpha = actor.alpha;
+                actor.glSpriteA.alpha = 0;
+                actor.pSprite = 1;
+            }
+            if (localStorage[chkpt+'l1_'+i+'_effects'] != 'undefined')
+                actor.prevFx = localStorage[chkpt+'l1_'+i+'_effects'];
+            else
+                actor.prevFx = 'done';
+            actor.transTime = parseFloat(localStorage[chkpt+'l1_'+i+'_time']);
+            actor.visible = (localStorage[chkpt+'l1_'+i+'_visible'] == 'true');
+            actor.pendingRemoval = (localStorage[chkpt+'l1_'+i+'_pending'] == 'true');
+            actor.posMode = localStorage[chkpt+'l1_'+i+'_posMode'];
+            actor.pos = new Vector2d(parseInt(localStorage[chkpt+'l1_'+i+'_x']),
+                                     parseInt(localStorage[chkpt+'l1_'+i+'_y']));
+            actor.target_pos.copy(actor.pos);
+            actor.orientation = parseFloat(localStorage[chkpt+'l1_'+i+'_orientation']);
+            actor.rotation = parseFloat(localStorage[chkpt+'l1_'+i+'_orientation']);
+            actor.stats = JSON.parse(localStorage[chkpt+'l1_'+i+'_stats']);
+            actor.filter = null;
+            if (localStorage[chkpt+"l1_"+i+"_filter"] != 'undefined') {
+                let filterArray = JSON.parse(localStorage[chkpt+"l1_"+i+"_filter"]);
+                if (filterArray && (filterArray.length > 0)) {
+                    actor.filter = new Set();
+                    filterArray.forEach(f => {actor.filter.add(f)});
+                }
+            }
+            Stage.layers.fg.set(actor.id, actor);
+        }
+        // Populate layer 2
+        Stage.layers.ovl.clear();
+        for (let i=0; i<parseInt(localStorage[chkpt+'l2_count']); i++) {
+            let overlay = new Overlay(localStorage[chkpt+'l2_'+i+'_id'].replace('ovl',''),
+                                  localStorage[chkpt+'l2_'+i+'_src'],
+                                  null);
+			overlay.effects = localStorage[chkpt+"l2_"+i+"_effects"];
+			overlay.alpha = parseFloat(localStorage[chkpt+"l2_"+i+"_alpha"]);
+			overlay.visible = (localStorage[chkpt+"l2_"+i+"_visible"] == "true");
+			overlay.transTime = parseFloat(localStorage[chkpt+"l2_"+i+"_time"]);
+			overlay.scroll = (localStorage[chkpt+"l2_"+i+"_scroll"] == "true");
+            overlay.offset = new Vector2d(parseInt(localStorage[chkpt+"l2_"+i+"_offset_x"]),
+                                      parseInt(localStorage[chkpt+"l2_"+i+"_offset_x"]));
+			overlay.orientation = parseFloat(localStorage[chkpt+"l2_"+i+"_orientation"]);
+			overlay.rotation = parseFloat(localStorage[chkpt+"l2_"+i+"_orientation"]);
+			overlay.size = parseFloat(localStorage[chkpt+"l2_"+i+"_size"]);
+			overlay.scale = parseFloat(localStorage[chkpt+"l2_"+i+"_size"]);
+			overlay.pos.vx = parseInt(localStorage[chkpt+"l2_"+i+"_x"]);
+			overlay.pos.vy = parseInt(localStorage[chkpt+"l2_"+i+"_y"]);
+			overlay.ovFrames = parseInt(localStorage[chkpt+"l2_"+i+"_frames"]);
+			overlay.ovFps = parseInt(localStorage[chkpt+"l2_"+i+"_fps"]);
+            overlay.filter = null;
+            if (localStorage[chkpt+"l2_"+i+"_filter"] != 'undefined') {
+                let filterArray = JSON.parse(localStorage[chkpt+"l2_"+i+"_filter"]);
+                if (filterArray && (filterArray.length > 0)) {
+                    overlay.filter = new Set();
+                    filterArray.forEach(f => {overlay.filter.add(f)});
+                }
+            }
+            Stage.layers.ovl.set(overlay.id, overlay);
+        }
+        // Populate layer 3
+        Stage.layers.atm.clear();
+        for (let i=0; i<parseInt(localStorage[chkpt+'l3_count']); i++) {
+            let type = localStorage[chkpt+"l3_"+i+"_type"],
+                id = localStorage[chkpt+"l3_"+i+"_id"].replace('atm',''),
+                param = JSON.parse(localStorage[chkpt+"l3_"+i+"_param"]),
+                atmo = null;
+            if (type == 'rain') atmo = new Rain(id);
+            else if (type == 'snow') atmo = new Snow(id);
+            else if (type == 'firefly') atmo = new Firefly(id);
+            else if (type == 'cloud') atmo = new Cloud(id);
+            else atmo = new AtmoExtras(id);
+            atmo.Init(type, param);
+            atmo.action = localStorage[chkpt+"l3_"+i+"_action"];
+            atmo.visible =  (localStorage[chkpt+"l3_"+i+"_visible"] == "true");
+            Stage.layers.atm.set(id, atmo);
+        }
+        // Populate layer 4
+        Stage.layers.gui.clear();
+        // TODO: count per cform group, determines frame skip duration
+        // TODO: only non-modal dialogs are stored (e.g. HUD); menu and modal dialogs are not stored
+        let formSet = new Map();
+        for (let i=0; i<parseInt(localStorage[chkpt+'l4_count']); i++) {
+            let type = localStorage[chkpt+'l4_'+i+'_type'];
+            switch (type) {
+                case 'box': 
+                    {
+                        let box = new ScriptBox();
+                        box.Create(Stage.canvas.width, Stage.canvas.height);
+                        box.visible = (localStorage[chkpt+'l4_'+i+'_visible'] == 'true');
+                        box.text = localStorage[chkpt+'l4_'+i+'_text'];
+                        box.pos = localStorage[chkpt+'l4_'+i+'_pos'];
+                        box.back = localStorage[chkpt+'l4_'+i+'_back'];
+                        box.src = localStorage[chkpt+'l4_'+i+'_src'];
+                        // TODO: prompt
+                        if (localStorage[chkpt+'l4_'+i+'_avatar'] != 'undefined') {
+                            box.avatar = localStorage[chkpt+'l4_'+i+'_avatar'];
+                            box.avatarStruct = JSON.parse(localStorage[chkpt+'l4_'+i+'_avatarStruct']);
+                        }
+                        else {
+                            box.avatar = '';
+                            box.avatarStruct = null;
+                        }
+                        if (localStorage[chkpt+'l4_'+i+'_balloon'] != 'undefined') {
+                            box.balloon = localStorage[chkpt+'l4_'+i+'_balloon'];
+                            box.bpos = localStorage[chkpt+'l4_'+i+'_bpos'];
+                        }
+                        else
+                            box.balloon = null;
+                        box.cont = (localStorage[chkpt+'l4_'+i+'_cont'] == 'true');
+                        box.fontFamily = localStorage[chkpt+'l4_'+i+'_fontFamily'];
+                        box.fontSize = localStorage[chkpt+'l4_'+i+'_fontSize'];
+                        box.lineHeight = parseInt(localStorage[chkpt+'l4_'+i+'_lineHeight']);
+                        box.fontWeight = localStorage[chkpt+'l4_'+i+'_fontWeight'];
+                        box.fontColor = localStorage[chkpt+'l4_'+i+'_fontColor'];
+                        box.tagFamily = localStorage[chkpt+'l4_'+i+'_tagFamily'];
+                        box.tagSize = localStorage[chkpt+'l4_'+i+'_tagSize'];
+                        box.tagWeight = localStorage[chkpt+'l4_'+i+'_tagWeight'];
+                        box.tagColor = localStorage[chkpt+'l4_'+i+'_tagColor'];
+                        box.dimStyle = JSON.parse(localStorage[chkpt+'l4_'+i+'_dimStyle']);
+                        box.balloonStyle = JSON.parse(localStorage[chkpt+'l4_'+i+'_balloonStyle']);
+                        box.timeout = parseFloat(localStorage[chkpt+'l4_'+i+'_timeout']);
+                        box.textAlign = localStorage[chkpt+'l4_'+i+'_textAlign'];
+                        box.textOffset.vx = parseInt(localStorage[chkpt+'l4_'+i+'_offset_x']);
+                        box.textOffset.vy = parseInt(localStorage[chkpt+'l4_'+i+'_offset_y']);
+                        box.inputFocus = (localStorage[chkpt+'l4_'+i+'_inputFocus'] == 'true');
+                        box.alpha = parseFloat(localStorage[chkpt+'l4_'+i+'_alpha']);
+                        box.effects = localStorage[chkpt+'l4_'+i+'_effects'];
+                        Stage.layers.gui.set(box.id, box);    
+                    }
+                    break;
+                case 'button':
+                case 'toggle':
+                case 'radio':
+                    {
+                        let control;
+                        if (type == 'toggle')
+                            control = new Toggle(JSON.parse(localStorage[chkpt+'l4_'+i+'_param']));
+                        else if (type == 'radio')
+                            control = new Radio(JSON.parse(localStorage[chkpt+'l4_'+i+'_param']));
+                        else 
+                            control = new Button(JSON.parse(localStorage[chkpt+'l4_'+i+'_param']));
+                        if (localStorage[chkpt+'l4_'+i+'_group'] != 'undefined')
+                            control.group = localStorage[chkpt+'l4_'+i+'_group'];
+                        else 
+                            control.group = '';
+                        control.text = localStorage[chkpt+'l4_'+i+'_text']
+                        control.hidden = (localStorage[chkpt+'l4_'+i+'_hidden'] == 'true');
+                        control.showText = (localStorage[chkpt+'l4_'+i+'_showText'] == 'true');
+                        control.on = (localStorage[chkpt+'l4_'+i+'_on'] == 'true');
+                        //if (!control.hidden) control.visible = true;
+                        control.link = new Array();
+                        for (let j=0; j<parseInt(localStorage[chkpt+'l4_'+i+'_link_count']); ) {
+                            control.link.push(eval(localStorage[chkpt+'l4_'+i+'_link_'+j]));
+                            control.link.push(JSON.parse(localStorage[chkpt+'l4_'+i+'_link_'+(j+1)]));
+                            if (localStorage[chkpt+'l4_'+i+'_link_'+(j+2)] && 
+                                (typeof JSON.parse(localStorage[chkpt+'l4_'+i+'_link_'+(j+2)])=='boolean') ) {
+                                    control.link.push(localStorage[chkpt+'l4_'+i+'_link_'+(j+2)]);
+                                    j+=3;
+                                }
+                            else 
+                                j+=2;
+                        }
+                        if (control.link.length == 0) control.link = null;
+                        Stage.layers.gui.set(control.id, control);
+                    }
+                    break;
+                case 'picture':
+                    {
+                        let control = new Picture(JSON.parse(localStorage[chkpt+'l4_'+i+'_param']));
+                        if (localStorage[chkpt+'l4_'+i+'_group'] != 'undefined')
+                            control.group = localStorage[chkpt+'l4_'+i+'_group'];
+                        else 
+                            control.group = '';
+                        control.hidden = (localStorage[chkpt+'l4_'+i+'_hidden'] == true);
+                        Stage.layers.gui.set(control.id, control);                        
+                    }
+                    break;
+                case 'marquee':
+                case 'timer':
+                    {
+                        let control;
+                        if (type == 'marque')
+                            control = new Marquee(JSON.parse(localStorage[chkpt+'l4_'+i+'_param']));
+                        else
+                            control = new Timer(JSON.parse(localStorage[chkpt+'l4_'+i+'_param']));
+                        if (localStorage[chkpt+'l4_'+i+'_group'] != 'undefined')
+                            control.group = localStorage[chkpt+'l4_'+i+'_group'];
+                        else 
+                            control.group = '';
+                        control.hidden = (localStorage[chkpt+'l4_'+i+'_hidden'] == true);
+                        control.link = new Array();
+                        for (let j=0; j<parseInt(localStorage[chkpt+'l4_'+i+'_link_count']); ) {
+                            control.link.push(eval(localStorage[chkpt+'l4_'+i+'_link_'+j]));
+                            control.link.push(JSON.parse(localStorage[chkpt+'l4_'+i+'_link_'+(j+1)]));
+                            if (localStorage[chkpt+'l4_'+i+'_link_'+(j+2)] && 
+                                (typeof JSON.parse(localStorage[chkpt+'l4_'+i+'_link_'+(j+2)])=='boolean') ) {
+                                    control.link.push(localStorage[chkpt+'l4_'+i+'_link_'+(j+2)]);
+                                    j+=3;
+                                }
+                            else 
+                                j+=2;
+                        }
+                        if (control.link.length == 0) control.link = null;
+                        Stage.layers.gui.set(control.id, control);                        
+                    }
+                    break;
+                case 'textarea':
+                    {   
+                        let control = new Textarea(JSON.parse(localStorage[chkpt+'l4_'+i+'_param']));
+                        if (localStorage[chkpt+'l4_'+i+'_group'] != 'undefined')
+                            control.group = localStorage[chkpt+'l4_'+i+'_group'];
+                        else 
+                            control.group = '';
+                        control.text = localStorage[chkpt+'l4_'+i+'_text'];
+                        control.offset = localStorage[chkpt+'l4_'+i+'_offset'];
+                        control.hidden = (localStorage[chkpt+'l4_'+i+'_hidden'] == 'true');
+                        control.showText = (localStorage[chkpt+'l4_'+i+'_showText'] == 'true');
+                    }
+                    break;
+                default:
+                    {
+                        let control = new Element(JSON.parse(localStorage[chkpt+'l4_'+i+'_param']));
+                        control.text = localStorage[chkpt+'l4_'+i+'_text']
+                        control.hidden = (localStorage[chkpt+'l4_'+i+'_hidden'] == 'true');
+                        control.showText = (localStorage[chkpt+'l4_'+i+'_showText'] == 'true');
+                        Stage.layers.gui.set(control.id, control);                        
+                        control.link = new Array();
+                        for (let j=0; j<parseInt(localStorage[chkpt+'l4_'+i+'_link_count']); ) {
+                            control.link.push(eval(localStorage[chkpt+'l4_'+i+'_link_'+j]));
+                            control.link.push(JSON.parse(localStorage[chkpt+'l4_'+i+'_link_'+(j+1)]));
+                            if (localStorage[chkpt+'l4_'+i+'_link_'+(j+2)] && 
+                                (typeof JSON.parse(localStorage[chkpt+'l4_'+i+'_link_'+(j+2)])=='boolean') ) {
+                                    control.link.push(localStorage[chkpt+'l4_'+i+'_link_'+(j+2)]);
+                                    j+=3;
+                                }
+                            else 
+                                j+=2;
+                        }
+                        if (control.link.length == 0) control.link = null;
+                        control.linkd = new Array();
+                        for (let j=0; j<parseInt(localStorage[chkpt+'l4_'+i+'_linkd_count']); ) {
+                            control.linkd.push(eval(localStorage[chkpt+'l4_'+i+'_linkd_'+j]));
+                            control.linkd.push(JSON.parse(localStorage[chkpt+'l4_'+i+'_linkd_'+(j+1)]));
+                            if (localStorage[chkpt+'l4_'+i+'_linkd_'+(j+2)] && 
+                                (typeof JSON.parse(localStorage[chkpt+'l4_'+i+'_linkd_'+(j+2)])=='boolean') ) {
+                                    control.linkd.push(localStorage[chkpt+'l4_'+i+'_linkd_'+(j+2)]);
+                                    j+=3;
+                                }
+                            else 
+                                j+=2;
+                        }
+                        if (control.linkd.length == 0) control.linkd = null;
+                    }
+                    break;
+            }
+            if (!formSet.get(localStorage[chkpt+'l4_'+i+'_group'])) {
+                formSet.set(localStorage[chkpt+'l4_'+i+'_group'], 1);
+            }
+            else {
+                formSet.set(localStorage[chkpt+'l4_'+i+'_group'], 
+                            formSet.get(localStorage[chkpt+'l4_'+i+'_group'])+1);
+            }
+        }
+        // Populate sounds
+        Stage.sounds.bgm.clear();
+        Stage.sounds.bgs.clear();
+        Stage.sounds.se.clear();
+        Stage.sounds.vc.clear();
+        Howler.unload();
+        for (let i=0; i<4; i++) {
+            let layer;
+            if (i==0) layer = Stage.sounds.bgm;
+            else if (i==1) layer = Stage.sounds.bgs;
+            else if (i==2) layer = Stage.sounds.se;
+            else layer = Stage.sounds.vc;
+            for (let j=0; j<parseInt(localStorage[chkpt+"s"+i+"_count"]); j++) {
+                let sndsrc = localStorage[chkpt+'s_'+i+'_'+j+'_src'].replace(/mp3|m4a|ogg|oga|wav|webm|weba|aac/g,'');
+                let format = localStorage[chkpt+'s_'+i+'_'+j+'_src'].match(/mp3|m4a|ogg|oga|wav|webm|weba|aac/g);
+                let sound = new Sounds(sndsrc.slice(0,sndsrc.length-1), format);
+                sound._repeat = parseInt(localStorage[chkpt+'s_'+i+'_'+j+'_repeat']);
+                sound._delay = parseInt(localStorage[chkpt+'s_'+i+'_'+j+'_delay']);
+                sound.isStopping = (localStorage[chkpt+'s_'+i+'_'+j+'_isStopping'] == 'true');
+                sound.isPaused = (localStorage[chkpt+'s_'+i+'_'+j+'_isPaused'] == 'true');
+                sound._adjust = parseFloat(localStorage[chkpt+'s_'+i+'_'+j+'_adjust']);
+                sound._rate = parseFloat(localStorage[chkpt+'s_'+i+'_'+j+'_rate']);
+                sound._stereo = parseFloat(localStorage[chkpt+'s_'+i+'_'+j+'_stereo']);
+                if ((i==2) && (localStorage[chkpt+'s_'+i+'_'+j+'_tag'] != 'undefined')) {
+                    sound._tag = localStorage[chkpt+'s_'+i+'_'+j+'_tag'];
+                    sound.audio._sprite = JSON.parse(localStorage[chkpt+'s_'+i+'_'+j+'_sprite']);
+                    layer.set(sound._tag, sound);
+                }
+                else {
+                    sound._tag = '';
+                    layer.set(sound.src, sound);
+                }
+            }
+        }
+		// Populate user variables
+		Stage.variables.clear();
+		for (let i=0; i<parseInt(localStorage[chkpt+"uv_count"]); i++) {
+			let vars = new UserVars();
+			vars.Set(JSON.parse(localStorage[chkpt+"uv"+i+"_value"]),(localStorage[chkpt+"uv"+i+"_persist"] == "true"));
+            Stage.variables.set(localStorage[chkpt+"uv"+i+"_name"],vars);
+        }
+		for (let prop in localStorage) {
+			if (prop.match(/^_persist_uv_/g)) {
+				let vars = new UserVars();
+				vars.Set(JSON.parse(localStorage[prop]), true);
+				Stage.variables.set(prop.replace(/^_persist_uv_/g,''), vars);
+			}
+		}
+        
+        // Populate form stack and style
+		Stage.formStack.splice(0, Stage.formStack.length);
+		for (let i=0; i<parseInt(localStorage[chkpt+"forms_count"]); i++) {
+			Stage.formStack.push(JSON.parse(localStorage[chkpt+"formStack_"+i]));
+		}
+		Stage.formStyle.splice(0, Stage.formStyle.length);
+		for (let i=0; i<parseInt(localStorage[chkpt+"forms_style_count"]); i++) {
+			Stage.formStyle.push(localStorage[chkpt+"formStyle_"+i]);
+		}
+        // Populate animations
+		Stage.animations = {};
+		for (let i=0; i<parseInt(localStorage[chkpt+"aset_count"]); i++) {
+			Stage.animations[localStorage[chkpt+"animation"+i+"_name"]] = JSON.parse(localStorage[chkpt+"animation"+i+"_value"]);
+		}
+        // Populare config
+		Config = JSON.parse(localStorage[chkpt+"Config"]);
+		Helper.updateConfig("activeTheme");
+		if (Config.devCordova != "notCordova")
+			Stage.isCordova = true;
+        // Populate frameStack
+        Stage.script.frameStack = JSON.parse(localStorage[chkpt+"frameStack"])
+		// then jump to checkpoint location
+		if (localStorage[chkpt+"sequence"] != '') {
+			Helper.loadScript(localStorage[chkpt+"sequence"], () => {
+				Stage.script.sequence = eval(localStorage[chkpt+"sequence"]);
+                Stage.script.frame = parseInt(localStorage[chkpt+"frame"])+2;
+                // TODO: checkpoint only support default (non-loaderWorkaround) option
+            });
+		}
+
+        // Populate MODS
+		if (Config.modRPG) {
+			if (RPG == null) RPG = {};
+			RPG.Actors = JSON.parse(localStorage[chkpt+"rpg_actors"]);			
+			RPG.Inventory = JSON.parse(localStorage[chkpt+"rpg_inventory"]);			
+			RPG.Quests = JSON.parse(localStorage[chkpt+"rpg_quests"]);			
+			RPG.vars = JSON.parse(localStorage[chkpt+"rpg_vars"]);			
+		}
+        
+    });
+});
+
+function checkpoint(param) {
+    if (!Helper.supportsLocalStorage()) return;
+    
+    let cmd = param,
+        chkpt = '';
+    if (Config.gameNamedCheckpts) {
+        if (typeof param == 'string') {
+            cmd = param;
+            chkpt = '_auto_';
+        }
+        else {
+            for (let prop in param) {
+                if (param.hasOwnProperty(prop)){
+                    cmd = prop;
+                    chkpt = param[prop];
+                }
+            }
+        }
+    }
+    if (cmd == 'save') {
+        if (!Config.gameNamedCheckpts) {
+            let pattern = '/_persist_/g';
+            for (let prop in localStorage) {
+                if (!prop.match(eval(pattern)))
+                    localStorage.removeItem(prop);
+            }
+        }
+        else {
+            if (chkpt != '') {
+                let pattern = '/^'+chkpt+'/g';
+                for (let prop in localStorage) {
+                    if (prop.match(eval(pattern)))
+                        localStorage.removeItem(prop);
+                }
+            }
+        }
+        Helper.saveCheckpoint(chkpt);        
+    }
+    else if (cmd == 'load') {
+        let chkpt_exist = false;
+        if (chkpt != '') {
+			let pattern = "/^"+chkpt+"/g";
+			for (let prop in localStorage) {
 				if (prop.match(eval(pattern))) {
 					chkpt_exist = true;
 					break;
 				}
 			}
-		}
-		else chkpt_exist = true;
-		if ((localStorage.length <= 0) || !chkpt_exist){
-			alert ("No checkpoint data found!\nStarting a new game instead...");
-			return;
-		}
-		// populate layer 0
-		Stage.layers[0].splice(0, Stage.layers[0].length);
-		for (var i=0; i<parseInt(localStorage[chkpt+"l0_count"]); i++) {
-			var bg = new Backdrop();
-			bg.type = 'scene';
-			var obj = new Array();
-			for (var j=0; j<parseInt(localStorage[chkpt+"l0_"+i+"_obj_count"]); j++) {
-				var item = {src:'', x:0, y:0, frames:1, fps:0};
-				item.src = localStorage[chkpt+"l0_"+i+"_obj_"+j+"_src"];
-				item.x = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_x"]);
-				item.y = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_y"]);
-				item.frames = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_frames"]);
-				item.fps = parseInt(localStorage[chkpt+"l0_"+i+"_obj_"+j+"_fps"]);
-				item.link = localStorage[chkpt+"l0_"+i+"_obj_"+j+"_link"];
-				obj.push(item);
-			}
-			bg.Create(localStorage[chkpt+"l0_"+i+"_id"], localStorage[chkpt+"l0_"+i+"_src"], obj);
-			bg.effects = localStorage[chkpt+"l0_"+i+"_effects"];
-			bg.alpha = parseFloat(localStorage[chkpt+"l0_"+i+"_alpha"]);
-			bg.visible = (localStorage[chkpt+"l0_"+i+"_visible"] == "true");
-			bg.transTime = parseFloat(localStorage[chkpt+"l0_"+i+"_time"]);
-			bg.orientation = parseFloat(localStorage[chkpt+"l0_"+i+"_orientation"]);
-			bg.rotation = parseFloat(localStorage[chkpt+"l0_"+i+"_orientation"]);
-			bg.size = parseFloat(localStorage[chkpt+"l0_"+i+"_size"]);
-			bg.scale = parseFloat(localStorage[chkpt+"l0_"+i+"_size"]);
-			Stage.layers[0].push(bg);
-			obj = null; bg = null;
-		}
-		// populate layer 1
-		Stage.layers[1].splice(0, Stage.layers[1].length);
-		for (var i=0; i<parseInt(localStorage[chkpt+"l1_count"]); i++) {
-			var chr = new Character(localStorage[chkpt+"l1_"+i+"_id"]);
-			//chr.type = 'actor';
-			//chr.Create(localStorage[chkpt+"l1_"+i+"_id"]);
-			chr.nick = localStorage[chkpt+"l1_"+i+"_nick"];
-			chr.color = localStorage[chkpt+"l1_"+i+"_color"];
-			chr.z_order = parseInt(localStorage[chkpt+"l1_"+i+"_zorder"]);
-			for (var j=0; j<parseInt(localStorage[chkpt+"l1_"+i+"_sprites_count"]); j++) {
-				var sprite = new Array(6);
-				sprite[0] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"];
-				sprite[1] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"];
-				sprite[2] = localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"];
-				sprite[3] = parseInt(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_frames"]);
-				sprite[4] = parseInt(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_fps"]);
-				sprite[5] = parseInt(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_reps"]);
-				chr.AddSprite(sprite);
-				//chr.AddSprite(localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_id"], 
-				//			  localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_src"],
-				//			  localStorage[chkpt+"l1_"+i+"_sprites_"+j+"_align"]);
-			}
-			if (localStorage[chkpt+"l1_"+i+"_avatar"] != "undefined")
-				chr.AddAvatar(localStorage[chkpt+"l1_"+i+"_avatar"]);
-			else 
-				chr.AddAvatar('');
-			if (localStorage[chkpt+"l1_"+i+"_avatars"] != "undefined")
-				chr.avatars = JSON.parse(localStorage[chkpt+"l1_"+i+"_avatars"]);
-			else 
-				chr.avatars = [];
-			chr.activeSprite = parseInt(localStorage[chkpt+"l1_"+i+"_active"]);
-			chr.offset = new Vector2d(parseInt(localStorage[chkpt+"l1_"+i+"_offset_x"]), parseInt(localStorage[chkpt+"l1_"+i+"_offset_y"]))
-			chr.alpha = parseFloat(localStorage[chkpt+"l1_"+i+"_alpha"]);
-			//chr.effects = localStorage[chkpt+"l1_"+i+"_effects"];
-			if (localStorage[chkpt+"l1_"+i+"_effects"] != "undefined")
-				chr.prevFx = localStorage[chkpt+"l1_"+i+"_effects"];
+        }
+        else {
+			// check for checkpoint item
+			if (!localStorage["Config"])
+				chkpt_exist = false;
 			else
-				chr.prevFx = 'done';
-			chr.transTime = parseFloat(localStorage[chkpt+"l1_"+i+"_time"]);
-			chr.visible = (localStorage[chkpt+"l1_"+i+"_visible"] == "true");
-			chr.pendingRemoval = (localStorage[chkpt+"l1_"+i+"_pending"] == "true");
-			chr.posMode = localStorage[chkpt+"l1_"+i+"_posMode"];
-			//chr.fxparam = localStorage[chkpt+"l1_"+i+"_fxparam"];
-			chr.orientation = parseFloat(localStorage[chkpt+"l1_"+i+"_orientation"]);
-			chr.rotation = parseFloat(localStorage[chkpt+"l1_"+i+"_orientation"]);
-			chr.size = parseFloat(localStorage[chkpt+"l1_"+i+"_size"]);
-			chr.scale = parseFloat(localStorage[chkpt+"l1_"+i+"_size"]);
-			chr.stats = JSON.parse(localStorage[chkpt+"l1_"+i+"_stats"]);
-			Stage.layers[1].push(chr);
-			chr = null;
-		}
-		// populate layer 2
-		Stage.layers[2].splice(0, Stage.layers[2].length);
-		for (var i=0; i<parseInt(localStorage[chkpt+"l2_count"]); i++) {
-			var ovl = new Backdrop();
-			ovl.type = 'overlay';
-			ovl.Create(localStorage[chkpt+"l2_"+i+"_id"], localStorage[chkpt+"l2_"+i+"_src"], null);
-			ovl.effects = localStorage[chkpt+"l2_"+i+"_effects"];
-			ovl.alpha = parseFloat(localStorage[chkpt+"l2_"+i+"_alpha"]);
-			ovl.visible = (localStorage[chkpt+"l2_"+i+"_visible"] == "true");
-			ovl.transTime = parseFloat(localStorage[chkpt+"l2_"+i+"_time"]);
-			ovl.scroll = (localStorage[chkpt+"l2_"+i+"_scroll"] == "true");
-			ovl.offset = new Vector2d(parseInt(localStorage[chkpt+"l2_"+i+"_offset_x"]), parseInt(localStorage[chkpt+"l2_"+i+"_offset_y"]))
-			ovl.orientation = parseFloat(localStorage[chkpt+"l2_"+i+"_orientation"]);
-			ovl.rotation = parseFloat(localStorage[chkpt+"l2_"+i+"_orientation"]);
-			ovl.size = parseFloat(localStorage[chkpt+"l2_"+i+"_size"]);
-			ovl.scale = parseFloat(localStorage[chkpt+"l2_"+i+"_size"]);
-			ovl.ovFrames = parseInt(localStorage[chkpt+"l2_"+i+"_frames"]);
-			ovl.ovFps = parseInt(localStorage[chkpt+"l2_"+i+"_fps"]);
-			//localStorage[chkpt+"l2_"+i+"_fps"] = Stage.layers[2][i].ovFps;
-			Stage.layers[2].push(ovl);
-			ovl = null;
-		}
-		// populate layer 3
-		Stage.layers[3].splice(0, Stage.layers[3].length);
-		for (var i=0; i<parseInt(localStorage[chkpt+"l3_count"]); i++) {
-			var atm = new Atmosphere(localStorage[chkpt+"l3_"+i+"_id"]);
-			var param = JSON.parse(localStorage[chkpt+"l3_"+i+"_param"]);
-			//atm.Create(localStorage[chkpt+"l3_"+i+"_id"]);
-			atm.Init(localStorage[chkpt+"l3_"+i+"_type"], param);
-			atm.action = localStorage[chkpt+"l3_"+i+"_action"];
-			atm.visible = (localStorage[chkpt+"l3_"+i+"_visible"] == "true");
-			Stage.layers[3].push(atm);
-			atm = null;
-		}
-		// populate layer 4
-		Stage.layers[4].splice(0, Stage.layers[4].length);
-		for (var i=0; i<parseInt(localStorage[chkpt+"l4_count"]); i++) {
-			if (localStorage[chkpt+"l4_"+i+"_type"] == 'box') {
-				var sb = new ScriptBox();
-				sb.Create(Stage.canvas.width, Stage.canvas.height);
-				sb.visible = (localStorage[chkpt+"l4_"+i+"_visible"] == "true");
-				sb.text = localStorage[chkpt+"l4_"+i+"_text"];
-				sb.pos = localStorage[chkpt+"l4_"+i+"_pos"];
-				sb.back = localStorage[chkpt+"l4_"+i+"_back"];
-				if (localStorage[chkpt+"l4_"+i+"_src"] != "undefined")
-					sb.src = localStorage[chkpt+"l4_"+i+"_src"];
-				else
-					sb.src = null;
-				if (localStorage[chkpt+"l4_"+i+"_prompt"] != "undefined") {
-					sb.psrc = localStorage[chkpt+"l4_"+i+"_prompt"];
-					sb.prompt.src = sb.psrc;
-				}
-				else 
-					sb.psrc = '';
-				if (localStorage[chkpt+"l4_"+i+"_avatar"] != "undefined") {
-					for (var j in Stage.layers[1]) {
-						if (Stage.layers[1][j].avatar && 
-						   (Stage.layers[1][j].avatar.src.search(localStorage[chkpt+"l4_"+i+"_avatar"])!=-1)) {
-							sb.avatar = Stage.layers[1][j].avatar;
-							for (var k in Stage.layers[1][j].avatars) {
-								if (Stage.layers[1][j].avatars[k].src == localStorage[chkpt+"l4_"+i+"_avatar"]) {
-									sb.avatarStruct = JSON.parse(chkpt+"l4_"+i+"_avatarStruct");
-									break;
-								}
-							}
-							break;
-						}
-					}
-				}
-				else
-					sb.avatar = null;
-				if (localStorage[chkpt+"l4_"+i+"_balloon"] != "undefined")
-					sb.balloon = localStorage[chkpt+"l4_"+i+"_balloon"];
-				else
-					sb.balloon = null;
-				sb.cont = (localStorage[chkpt+"l4_"+i+"_cont"] == "true");
-				sb.fontFamily = localStorage[chkpt+"l4_"+i+"_fontFamily"];
-				sb.fontSize = localStorage[chkpt+"l4_"+i+"_fontSize"];
-				sb.lineHeight = localStorage[chkpt+"l4_"+i+"_lineHeight"];
-				sb.fontWeight = localStorage[chkpt+"l4_"+i+"_fontWeight"];
-				sb.fontColor = localStorage[chkpt+"l4_"+i+"_fontColor"];
-				sb.tagFamily = localStorage[chkpt+"l4_"+i+"_tagFamily"];
-				sb.tagSize = localStorage[chkpt+"l4_"+i+"_tagSize"];
-				sb.tagWeight = localStorage[chkpt+"l4_"+i+"_tagWeight"];
-				sb.tagColor = localStorage[chkpt+"l4_"+i+"_tagColor"];
-				sb.timeout = parseFloat(localStorage[chkpt+"l4_"+i+"_timeout"]);
-				sb.textAlign = localStorage[chkpt+"l4_"+i+"_textAlign"];
-				sb.textOffset.vx = parseInt(localStorage[chkpt+"l4_"+i+"_offset_x"]);
-				sb.textOffset.vy = parseInt(localStorage[chkpt+"l4_"+i+"_offset_y"]);
-				sb.inputFocus = (localStorage[chkpt+"l4_"+i+"_inputFocus"] == "true");
-				sb.alpha = parseFloat(localStorage[chkpt+"l4_"+i+"_alpha"]);
-				sb.effects = localStorage[chkpt+"l4_"+i+"_effects"];
-				for (var j=0; j<parseInt(localStorage[chkpt+"l4_"+i+"_jumpTo_count"]); j++) {
-					var menuItem = {hotspot:[], link:''};
-					menuItem.link = localStorage[chkpt+"l4_"+i+"jumpTo"+j+"link"];
-					menuItem.hotspot = [parseInt(localStorage[chkpt+"l4_"+i+"jumpTo"+j+"hotspot_x"]),
-										parseInt(localStorage[chkpt+"l4_"+i+"jumpTo"+j+"hotspot_y"])];
-					sb.jumpTo.push(menuItem);
-				}			
-				Stage.layers[4].push(sb);
-				sb = null;
-			}
-			else {
-				var element = new ActiveImage();
-				var link = new Array();
-				element.saveparam = JSON.parse(localStorage[chkpt+"l4_"+i+"_param"]);
-				element.type = localStorage[chkpt+"l4_"+i+"_type"];
-				CformElements[element.type]['_init'](element, element.saveparam);
-				if (localStorage[chkpt+"l4_"+i+"_group"] != "undefined")
-					element.group = localStorage[chkpt+"l4_"+i+"_group"];
-				element.text = localStorage[chkpt+"l4_"+i+"_text"];
-				element.visible = (localStorage[chkpt+"l4_"+i+"_visible"] == "true");
-				for (var j=0; j<parseInt(localStorage[chkpt+"l4_"+i+"_link_count"]); j+=2) {
-					link.push(eval(localStorage[chkpt+"l4_"+i+"_link_"+j]));
-					link.push(JSON.parse(localStorage[chkpt+"l4_"+i+"_link_"+(j+1)]));
-				}
-				if (link.length > 0)
-					element.link = link;
-				else
-					element.link = null;
-				/*if ((localStorage[chkpt+"l4_"+i+"_link_0"] != "undefined") && 
-					(localStorage[chkpt+"l4_"+i+"_link_1"] != "undefined")) {
-					var link = new Array();
-					link.push(eval(localStorage[chkpt+"l4_"+i+"_link_0"]));
-					link.push(JSON.parse(localStorage[chkpt+"l4_"+i+"_link_1"]));
-					element.link = link;
-				}*/
-				Stage.layers[4].push(element);
-				element = null;
-			}
-		}
-		// Populate sounds
-		for (var i=0; i<4; i++) {
-			Stage.sounds[i].splice(0, Stage.sounds[i].length);
-			for (var j=0; j<parseInt(localStorage[chkpt+"s"+i+"_count"]); j++) {
-				var s = new Sounds();
-				s.src = localStorage[chkpt+"s"+i+"_"+j+"_src"];
-				s.repeat = parseInt(localStorage[chkpt+"s"+i+"_"+j+"_repeat"]);
-				s.delay = parseFloat(localStorage[chkpt+"s"+i+"_"+j+"_delay"]);
-				s.isStopping = (localStorage[chkpt+"s"+i+"_"+j+"_isStopping"] == "true");
-				s.isPaused = (localStorage[chkpt+"s"+i+"_"+j+"_isPaused"] == "true");
-				Stage.sounds[i].push(s);
-				s = null;
-			}
-		}
-		// populate user variables
-		Stage.variables = {};
-		for (var i=0; i<parseInt(localStorage[chkpt+"uv_count"]); i++) {
-			var uv = new UserVars();
-			uv.Set(JSON.parse(localStorage[chkpt+"uv"+i+"_value"]),(localStorage[chkpt+"uv"+i+"_persist"] == "true"));
-			Stage.variables[localStorage[chkpt+"uv"+i+"_name"]] = uv;
-			uv = null;
-		}
-		// overwrite persistent user variables
-		for (var prop in localStorage) {
-			if (prop.match(/^_persist_uv_/g)) {
-				var uv = new UserVars();
-				uv.Set(JSON.parse(localStorage[prop]), true);
-				Stage.variables[prop.replace(/^_persist_uv_/g,'')] = uv;
-				uv = null;
-			}
-		}
-		
-		// populate form stack and style
-		Stage.formStack.splice(0, Stage.formStack.length);
-		for (var i=0; i<parseInt(localStorage[chkpt+"forms_count"]); i++) {
-			Stage.formStack.push(localStorage[chkpt+"formStack_"+i]);
-		}
-		Stage.formStyle.splice(0, Stage.formStyle.length);
-		for (var i=0; i<parseInt(localStorage[chkpt+"forms_style_count"]); i++) {
-			Stage.formStyle.push(localStorage[chkpt+"formStyle_"+i]);
-		}
-		// populate animations
-		Stage.animations = [];
-		for (var i=0; i<parseInt(localStorage[chkpt+"aset_count"]); i++) {
-			Stage.animations[localStorage[chkpt+"animation"+i+"_name"]] = JSON.parse(localStorage[chkpt+"animation"+i+"_value"]);
-		}
-		// populate Config
-		Config = JSON.parse(localStorage[chkpt+"Config"]);
-		Helper.configUpdate("activeTheme");
-		
-		// populate frameStack
-		Stage.script.frameStack = JSON.parse(localStorage[chkpt+"frameStack"])
-		// then jump to checkpoint location
-		if (localStorage[chkpt+"sequence"] != '') {
-			Helper.scriptLoad(localStorage[chkpt+"sequence"], function() {
-				Stage.script.sequence = eval(localStorage[chkpt+"sequence"]);
-			});
-		}
-		// Stage.script.sequence = eval(localStorage[chkpt+"sequence"]);
-		Stage.script.frame = parseInt(localStorage[chkpt+"frame"]);
-	}
-	else if (cmd == 'clear') {
+				chkpt_exist = true;
+        }
+        if ((localStorage.length <= 0) || !chkpt_exist) {
+            let msg = "[VNC]: No checkpoint data found!\nStarting a new game instead...";
+            if (Stage.isCordova)
+                try {
+                    navigator.notification.alert(msg, function(){}, "vn-Canvas Alert");
+                }
+                catch(e) {
+                    alert(msg);
+                }
+            else
+                alert(msg);
+            return;
+        }
+        // PixiJS must load every resource first in one batch
+        let resArray = new Set();
+        for (let prop in localStorage) {
+            if (prop.includes('_src')) {
+                resArray.add(localStorage[prop]);
+            }
+            if (prop.includes('avatars') && localStorage[prop].includes('src')) {
+                let avatars = JSON.parse(localStorage[prop]);
+                for (let a in avatars) {
+                    if (avatars.hasOwnProperty(a)) {
+                        resArray.add(avatars[a].src);
+                    }
+                }      
+            }
+            if (prop.includes('avatarStruct') && localStorage[prop].includes('src')) {
+                resArray.add(JSON.parse(localStorage[prop]).src);
+            }
+            if (prop.includes('param')) {
+                if (localStorage[prop].includes('base'))
+                    resArray.add(JSON.parse(localStorage[prop]).base);
+                if (localStorage[prop].includes('hover'))
+                    resArray.add(JSON.parse(localStorage[prop]).hover);
+                if (localStorage[prop].includes('click'))
+                    resArray.add(JSON.parse(localStorage[prop]).click);
+                if (localStorage[prop].includes('frames')) {
+                    let frames = JSON.parse(localStorage[prop]).frames;
+                    frames.forEach(f => { resArray.add(f); });
+                }
+            }
+        }
+        if (resArray.size>0) {
+            let toLoad = new Array();
+            resArray.forEach(r => {
+                if (!Stage.glManager.hasLoaded(r)) {
+                    if (Helper.checkIfImage(r)) toLoad.push(r);
+                    if (Helper.checkIfAudio(r)) toLoad.push(r);
+                }
+            });
+            if (toLoad.length > 0) {
+                // directly load instead of going to update queue
+                Stage.pause = true;
+                Stage.glManager.glLoader
+                    .add(toLoad)
+                    .load((loader, resources) => {
+                        Helper.loadCheckpoint(chkpt);
+                        Stage.pause = false;
+                    });
+                    //.on("progress", (loader, resource) => { console.log(`[PIXI]: loading: ${resource.url}`)});
+            }
+            else {
+                Helper.loadCheckpoint(chkpt);
+                Stage.pause = false;
+            }
+        }
+    }
+    else if (cmd == 'clear') {
 		if (chkpt != '') {
-			var pattern = "/^"+chkpt+"/g";
-			for (var prop in localStorage) {
+			let pattern = "/^"+chkpt+"/g";
+			for (let prop in localStorage) {
 				if (prop.match(eval(pattern))) {
 					localStorage.removeItem(prop);
 				}
 			}
 		}
-	}
+    }
 }
-

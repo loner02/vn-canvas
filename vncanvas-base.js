@@ -7,10 +7,11 @@
 //      enchant.js by Ubiquitous Entertainment Inc.                          //
 //      Ren'Py Python VN engine (www.renpy.org)                              //
 //  Requires:                                                                //
-//      CanvasText by Pere Monfort Pàmies (www.pmphp.net, www.canvastext.com)//
-//          - modded to support \n, hover and scroll in text                 //
+//      PixiJS (www.pixijs.com, github.com/pixijs/)                          //
+//          - WebGL support, with Canvas 2D as fallback                      //
+//      HowlerJS (www.howlerjs.com)                                          //
+//          - Web Audio API, with HTML5 Audio as fallback                    //
 //      RequireJS by Dojo Foundation (http://github.com/jrburke/requirejs)   //
-//      [Optional] JQuery by John Resig (jquery.com)                         //
 //  Rationale:                                                               //
 //      A generic engine, whether event or messaging based, is a bit bloated //
 //      for visual novel use. Not only are visual novels notoriously heavy   //
@@ -26,24 +27,101 @@
 //      can be used online/offline and, on top of that, FREE.                //
 ///////////////////////////////////////////////////////////////////////////////
 /******************************************************************************
-	Copyright © 2015 by OCLabbao a.k.a [lo'ner]
+	Copyright © 2018 by OCLabbao a.k.a [lo'ner]
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Lesser General Public License as published 
-    by the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to permit
+    persons to whom the Software is furnished to do so, subject to the
+    following conditions:
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Lesser General Public License for more details.
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
 
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    USE OR OTHER DEALINGS IN THE SOFTWARE.
+	
 ******************************************************************************/
 /******************************************************************************
 Revision history:
+Version 0.8 Georgia
+09.30.18 - Support forced WebGL or Canvas2D mode
+         - Support button hover/click sounds
+Version 0.7.5 Freja (interim release for WebGL port)
+09.15.18 - Start port of RPG mod
+05.05.18 - Port animated sprite and grid to PixiJS
+05.02.18 - Port 'video' to PixiJS
+04.28.18 - Port 'cform' to PixiJS
+04.27.18 - Port 'atmosphere' to PixiJS
+04.26.18 - Port 'audio' to howlerJS
+04.20.18 - Port 'actor' to PixiJS
+04.14.18 - Port 'box' and 'text' to PixiJS
+         - do away with CanvasText
+04.12.18 - Hack PixiJS to fix wordwrap bug
+04.10.18 - Port 'scene' and 'overlay' to PixiJS
+04.06.18 - Try: support for WebGL using PixiJS
+         - Partial port code to ES5/ES6
+         - Change main objects/functions to class
+04.03.18 - Try: support for WebGL using three.js
+Version 0.7 Fiona
+03.10.18 - Support preloading of scripts as workaround for FF asynchronous load
+03.02.18 - Support for walkable map
+02.24.18 - Support for animated buttons
+02.06.18 - Additional actor positions
+         - Bugfix: checkpoint fix for actor position
+         - Add balloon arrow position: 'up' or 'down'
+         - Bugfix: access to array individual elements by reference
+         - Add @ delimiter for stats: actor@stat
+         - Support keyword 'pos' or 'position' for textbox location
+         - Support conditional menu, i.e. display menu items accdg to condition
+         - Bugfix: fix for textbox prompt image not created at runtime
+         - Bugfix: fix "return" when coming from a "menu" jump 
+Version 0.6 Elsa
+01.01.17 - Add conditional menu
+12.15.16 - Bugfix: processEffects breaks ghost effect
+10.29.16 - Add checkpoint support for RPG mod
+08.28.16 - Moved tooltip above cursor
+07.05.16 - Bugfix: setting multiple uservars to null
+07.01.16 - Support for actor horizontal/vertical flip using canvas scale
+06.29.16 - Change button defaults to use Config.activeTheme settings
+         - Support picture from user variables
+06.22.16 - Bugfix: use === or !== when conparing with findStats return value
+06.18.16 - Bugfix: fix 'return' jump to correct frame
+         - Bugfix: fix regex search for string with operator
+         - Bugfix: fix for actor transtions and missing sprites
+         - Add support for active image scaling and hiding
+         - Add support for getting cform control via id
+         - Add support for button images via user variables
+04.28.16 - Bugfix: fix move transitions based on actual image dimensions
+04.27.16 - Bugfix: fix audio pause/resume on device initiated pause
+		 - Add support for full body sprites
+03.01.16 - Add support for canvas image filters
+11.10.15 - Add option to pass previous stat value on update callback
+11.03.15 - Bugfix: fix se repeat parameter on replay
+10.28.15 - Bugfix: fix bgm stops on replay
+		 - added individual sound volume adjustment at creation
+		   - as offset from master volume setting
+		 - prevent updates when window is minimized, see init.js
+		   - stop audio play, for example
+09.29.15 - better handling of touch events
+		 - revamped menu to use buttons
+		   - hard to select menu on small screens
+		   - also makes it possible to have greater than 3 choices
+		 - nodal dialog box no longer require a "loop cheat"
+		 - Bugfix: fix input when a form is active
+		 - TODO: video fix for cordova
+09.22.15 - support for Apache Cordova
+		   - only Android for now, checked with emulator only
+		 - merged vncanvas-script with vncanvas-base
+		   - remove asynchronous load issues
+		   - script is essential to vncanvas anyway, not optional
 Version 0.5 Diana
 01.14.15 - support responsive template
 		 - TODO: Firefox issues - requireJS fails on some version
@@ -173,7 +251,7 @@ Version 0.1 Preview
 // Directives
 ///////////////////////////////////////////////////////////////////////////////
 "use strict";
-//require(["app/vncanvas-vars"]);
+require(["lib/pixi.min"]);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Generic/helper methods
@@ -181,59 +259,55 @@ Version 0.1 Preview
 var Helper = {
 	// Function for adding an event listener
 	_registry: null,
-	initialise: function () {
-		if (this._registry == null) {
-			this._registry = [];
-			Helper.addEvent(window, 'unload', this.cleanUp);
+	initialise: () => {
+		if (Helper._registry === null) {
+			Helper._registry = [];
+			Helper.addEvent(window, 'unload', Helper.cleanUp);
 		}
 	},
-	cleanUp: function () {
-		for (var i = 0; i < Helper._registry.length; i++) {
-			var obj = Helper._registry[i].obj;
-			var evType = Helper._registry[i].evType;
-			var fn = Helper._registry[i].fn;
-			var useCapture = Helper._registry[i].useCapture;
+	cleanUp: () => {
+		for (let i = 0; i < Helper._registry.length; i++) {
+			let obj = Helper._registry[i].obj;
+			let evType = Helper._registry[i].evType;
+			let fn = Helper._registry[i].fn;
+			let useCapture = Helper._registry[i].useCapture;
 			if (obj.removeEventListener)
 				obj.removeEventListener(evType, fn, useCapture);
 			else if (obj.detachEvent)
 				obj.detachEvent("on" + evType, fn);
 		}
 		Helper._registry = null;
+        Stage.glManager.free('all');
+        Stage.glScene.destroy(true);
 	},
-	addEvent: function (obj, evType, fn, useCapture) {
-		this.initialise();
-		if (typeof obj == 'string')
+	addEvent: (obj, evType, fn, useCapture) => {
+		Helper.initialise();
+		if (typeof obj === 'string')
 			obj = document.getElementById(obj);
-		if ((obj == null) || (fn == null))
+		if ((obj === null) || (fn === null))
 			return false;
 		if (obj.addEventListener) {
 			obj.addEventListener(evType, fn, useCapture);
-			this._registry.push({obj: obj, evType: evType, fn: fn, useCapture: useCapture});
+			Helper._registry.push({obj: obj, evType: evType, fn: fn, useCapture: useCapture});
 			return true;
 		}
 		if (obj.attachEvent) {
-			var r = obj.attachEvent("on" + evType, fn);
-			if (r) this._registry.push({obj: obj, evType: evType, fn: fn, useCapture: false});
+			let r = obj.attachEvent("on" + evType, fn);
+			if (r) Helper._registry.push({obj: obj, evType: evType, fn: fn, useCapture: false});
 			return r;
 		}
 		return false;
 	},
 	// Function for including external javascript files
-	includeJs: function (jsFilePath) {
-		//try {
-		//	require([jsFilePath]);
-		//} 
-		//catch(e) {
-			var js = document.createElement("script");
-			js.type = "text/javascript";
-			js.src = jsFilePath;
-			//document.getElementsByTagName('head')[0].appendChild(js);
-			document.body.appendChild(js);
-			js = null;
-		//}
+	includeJs: (jsFilePath) => {
+        let js = document.createElement("script");
+        js.type = "text/javascript";
+        js.src = jsFilePath;
+        document.body.appendChild(js);
+        js = null;
 	},
 	// Function to check support for localStorage
-	supportsLocalStorage: function () {
+	supportsLocalStorage: () => {
 		try {
 			return 'localStorage' in window && window['localStorage'] != null && window['localStorage'] !== undefined;
 		} 
@@ -241,164 +315,173 @@ var Helper = {
 			return false; 
 		}
 	},
-	// Helper function to search for user variable
-	findVar: function (id) {
-		if (Stage.variables[id] != null)
-			return Stage.variables[id].Value();
+	findVar: (id) => {
+        let ids = id.split(/[\[\]]/g);
+        if (Stage.variables.get(ids[0]) != null) {
+            if ((ids.length > 1) && (Stage.variables.get(ids[0]).type == 'object'))
+                return Stage.variables.get(ids[0]).value[parseInt(ids[1])];
+            else
+                return Stage.variables.get(ids[0]).value;
+        }
 		return null;
 	},
 	// Helper function to obtain value from stage or config variables or actor stats
-	getValue: function (id) {
-		var ret = Helper.findStat(id);
+	getValue: (id) => {
+		let ret = Helper.findStat(id);
 		if (ret != null) return ret;
 		ret = Helper.findVar(id);
 		if (ret != null) return ret;
 		return (Config[id]);
 	},
 	// Helper function to set value to stage or config variables
-	setValue: function (id, value) {
-		var ret = Helper.findStat(id);
-		if (ret != null) {
-			var arr_str = id.split('_');
-			for (var j in Stage.layers[1]) {
-				if (Stage.layers[1][j].id == arr_str[0]) {
-					Stage.layers[1][j].stats[arr_str[1]] = value;
-					if (Config.modRPG) {
-						if (RPG.Stats[arr_str[1]]['_update']) {
-							RPG.Stats[arr_str[1]]['_update'](Stage.layers[1][j], Stage.layers[1][j].stats);
-						}
-					}
-					else {
-						if (Stats[arr_str[1]]['_update']) {
-							Stats[arr_str[1]]['_update'](Stage.layers[1][j], Stage.layers[1][j].stats);
-						}
-					}
-					// TODO: update inherited stats
-					break;
-				}
-			}
+	setValue: (id, value) => {
+		let ret = Helper.findStat(id);
+		if (ret !== null) {
+			let arr_str = id.split(/[_@]/g);
+            let actor = Stage.layers.fg.get(arr_str[0]);
+            if (actor) {
+                let old = actor.stats[arr_str[1]];
+                actor.stats[arr_str[1]] = value;
+                if (Config.modRPG) {
+                    if (RPG.Stats[arr_str[1]]['_update']) {
+                        RPG.Stats[arr_str[1]]['_update'](actor, actor.stats);
+                    }
+                }
+                else {
+                    if (Stats[arr_str[1]]['_update']) {
+                        try {
+                            // compare with old stats if given
+                            Stats[arr_str[1]]['_update'](actor, actor.stats, old);
+                        }
+                        catch (e) {
+                            // make callback compatible with old versions
+                            Stats[arr_str[1]]['_update'](actor, actor.stats);
+                        }
+                    }
+                }
+                // TODO: update inherited stats
+            }
 		}
 		else {
-			ret = Helper.findVar(id);
-			if (ret != null)
-				Stage.variables[id].Set(value, false);
-			else {
+            ret = Helper.findConfig(id);
+			if (ret != null) {
 				Config[id] = value;
 				// a configuration variable has changed, reflect it back
-				Helper.configUpdate(id);
+				Helper.updateConfig(id);
 				Stage.redraw = true;
+            }
+			else {
+                // set user variable
+                let v = Stage.variables.get(id);
+                if (v) {
+                    Stage.variables.get(id).value = value;
+                    Stage.variables.get(id).persist = false;
+                }
 			}
 		}
 	},
+	// Helper function to search for config variables
+	findConfig: (id) => {
+		if (Config[id] !== undefined)
+			return Config[id];
+		else if (Config.activeTheme[id] !== undefined)
+			return Config.activeTheme[id];
+		return null;
+	},
 	// Helper function to update game config
-	configUpdate: function (id) {
+	updateConfig: (id) => {
 		switch(id) {
 			case "activeTheme": 
-				if (Config.activeTheme == null) break;
+				if (Config.activeTheme === null) break;
 				// formstyle
 				if (Config.activeTheme.formFontStyle) {
 					Stage.formStyle.splice(0, Stage.formStyle.length);
-					var subs = Helper.parseFontString(Config.activeTheme.formFontStyle);
-					if (subs.length >= 4) {
-						Stage.formStyle.push(subs.slice(0,3).join(' '));
-						Stage.formStyle.push(subs.slice(3).join(' '));
-					}
-					else
-						Stage.formStyle.push(param);
+					let subs = Helper.parseFontString(Config.activeTheme.formFontStyle);
+                    subs.forEach(s => {Stage.formStyle.push(s)});
 				}
 				// tooltips are automatically updated
 				// script box
+                let box = Stage.layers.gui.get("box");
 				if (Config.activeTheme.boxFontStyle) { 
-					var subs = Helper.parseFontString(Config.activeTheme.boxFontStyle);
+					let subs = Helper.parseFontString(Config.activeTheme.boxFontStyle);
 					
-					if (subs.length > 0) Stage.layers[4][0].fontWeight = subs[0];
+					if (subs.length > 0) box.fontWeight = subs[0];
 					if (subs.length > 1) {
-						Stage.layers[4][0].fontSize = subs[1];
-						Stage.layers[4][0].lineHeight = parseInt(subs[1]) + 4;
+						box.fontSize = subs[1];
+						box.lineHeight = parseInt(subs[1]) + 4;
 					}			
-					if (subs.length > 2) Stage.layers[4][0].fontFamily = subs[2].replace(/['|"]/g,'');
-					if (subs.length > 3) Stage.layers[4][0].fontColor = subs[3];
+					if (subs.length > 2) box.fontFamily = subs[2].replace(/['|"]/g,'');
+					if (subs.length > 3) box.fontColor = subs[3];
 				}
 				if (Config.activeTheme.boxTagStyle) {
-					var subs = Helper.parseFontString(Config.activeTheme.boxTagStyle);
+					let subs = Helper.parseFontString(Config.activeTheme.boxTagStyle);
 					
-					if (subs.length > 0) Stage.layers[4][0].tagWeight = subs[0];
-					if (subs.length > 1) Stage.layers[4][0].tagSize = subs[1];
-					if (subs.length > 2) Stage.layers[4][0].tagFamily = subs[2].replace(/['|"]/g,'');
-					if (subs.length > 3) Stage.layers[4][0].tagColor = subs[3];
+					if (subs.length > 0) box.tagWeight = subs[0];
+					if (subs.length > 1) box.tagSize = subs[1];
+					if (subs.length > 2) box.tagFamily = subs[2].replace(/['|"]/g,'');
+					if (subs.length > 3) box.tagColor = subs[3];
 				}
 				if (Config.activeTheme.boxDimStyle) {
-					var subs = Config.activeTheme.boxDimStyle.split(' ');
-					Stage.layers[4][0].dimStyle.splice(0,Stage.layers[4][0].dimStyle.length);
-					for (var idx in subs)
-						Stage.layers[4][0].dimStyle.push(subs[idx]);
+					let subs = Config.activeTheme.boxDimStyle.split(' ');
+					box.dimStyle.splice(0,box.dimStyle.length);
+					for (let s of subs)
+						box.dimStyle.push(s);
 				}
-				if (Config.activeTheme.boxImageStyle)
-					Stage.layers[4][0].src = Config.activeTheme.boxImageStyle;
-				else
-					Stage.layers[4][0].src = null;
+				box.src = (Config.activeTheme.boxImageStyle) ? Config.activeTheme.boxImageStyle : '';
+
 				// balloon styling
-				Stage.layers[4][0].balloonStyle.splice(0,Stage.layers[4][0].balloonStyle.length);
+				box.balloonStyle.splice(0,box.balloonStyle.length);
 				if (Config.activeTheme.balloonStrokeStyle)
-					Stage.layers[4][0].balloonStyle.push(Config.activeTheme.balloonStrokeStyle);
+					box.balloonStyle.push(Config.activeTheme.balloonStrokeStyle);
 				else
-					Stage.layers[4][0].balloonStyle.push('transparent');
+					box.balloonStyle.push('transparent');
 				if (Config.activeTheme.balloonFillStyle) {
-					var subs = Config.activeTheme.balloonFillStyle.split(' ');
-					for (var idx in subs)
-						Stage.layers[4][0].balloonStyle.push(subs[idx]);
+					let subs = Config.activeTheme.balloonFillStyle.split(' ');
+					for (let s of subs)
+						box.balloonStyle.push(s);
 				}
-				// configure CanvasText
-				Stage.layers[4][0].canvasText.config({
-					canvas: Stage.layers[4][0].context.canvas,
-					context: Stage.layers[4][0].context,
-					fontFamily: Stage.layers[4][0].fontFamily,
-					fontSize: Stage.layers[4][0].fontSize,
-					fontWeight: Stage.layers[4][0].fontWeight,
-					fontColor: Stage.layers[4][0].fontColor,
-					lineHeight: Stage.layers[4][0].lineHeight
-				});
-				Stage.layers[4][0].canvasText.defineClass("menu", {
-					fontFamily: Stage.layers[4][0].fontFamily,
-					fontSize: Stage.layers[4][0].fontSize,
-					fontWeight: Stage.layers[4][0].fontWeight,
-					fontColor: Stage.layers[4][0].fontColor,
-					fontStyle: "italic"
-				});
 				break;
 			case "volumeAudio":
-				if (Config.volumeAudio == null) break;
+				if (Config.volumeAudio === null) break;
 				if (typeof Config.volumeAudio == 'string') {
-					var volume = parseFloat(Config.volumeAudio);
+					let volume = parseFloat(Config.volumeAudio);
 					if (isNaN(volume)) volume = 1.0;
 					Config.volumeAudio = volume;
 				}
-				for (var idx in Stage.sounds) {
-					for (var entry in Stage.sounds[idx]) {
-						if ((!Stage.sounds[idx][entry].isPaused) && (!Stage.sounds[idx][entry].isStopping))
-							Stage.sounds[idx][entry].audio.volume = Config.volumeAudio;
-					}
-				}
+                for (let s in this.sounds) {
+                    if (this.sounds.hasOwnProperty(s)) {
+                        for (let [key, sound] of this.sounds[s]) {
+                            if (!sound.isPaused && !sound.isStopping)
+                                sound.volume = Config.volumeAudio + sound.adjust;
+                        }
+                    }
+                }
 				break;
 			case "volumeVideo":
-				if (Config.volumeVideo == null) break;
+				if (Config.volumeVideo === null) break;
 				if (typeof Config.volumeVideo == 'string') {
-					var volume = parseFloat(Config.volumeVideo);
+					let volume = parseFloat(Config.volumeVideo);
 					if (isNaN(volume)) volume = 1.0;
 					Config.volumeVideo = volume;
 				}
-				for (var idx in Stage.videos) {
-					if (!Stage.videos[idx].isStopping) {
-						this.videos[idx].movie.volume = Config.volumeVideo;
+                for (let [key, vid] of Stage.videos.entries()) {
+					if (!vid.isStopping) {
+						vid.movie.volume = Config.volumeVideo;
 					}
 				}
 				break;
 		}
 	},
 	// Helper function to parse string arguments
-	parseArg: function (arg) {
+	parseArg: (arg) => {
 		// check if arg is a user variable
-		var ret = Helper.findVar(arg);
+		let ret = Helper.findVar(arg);
+		if (ret != null) return ret;
+		// TODO: to speed up parsing, if stats and config are not required,
+		// 	skip the next 4 lines
+		ret = Helper.findStat(arg);
+		if (ret != null) return ret;
+		ret = Config[arg];
 		if (ret != null) return ret;
 		// check if arg is a number
 		ret = parseFloat(arg)
@@ -411,258 +494,117 @@ var Helper = {
 		return arg;
 	},
 	// Helper function to parse font string
-	parseFontString: function (s) {
-		var splitText = s.split(' ');
+	parseFontString: (s) => {
+		let splitText = s.split(' ');
 		// combine as needed
-		var subs = new Array();
-		var combine = false;
-		var tempText = '';
-		for (var i in splitText) {
-			if (splitText[i].search(/^['|"].*['|"]$/g)!=-1) {
+		let subs = new Array();
+		let combine = false;
+		let tempText = '';
+		for (let txt of splitText) {
+			if (txt.search(/^['|"].*['|"]$/g)!=-1) {
 				combine = false;
-				subs.push(splitText[i].replace(/^['|"]|['|"]$/g, ""));
+				subs.push(txt.replace(/^['|"]|['|"]$/g, ""));
 			}
-			else if (splitText[i].search(/['|"]/g)!=-1) {
+			else if (txt.search(/['|"]/g)!=-1) {
 				if (combine == false) {
 					combine = true;
-					tempText = splitText[i];
+					tempText = txt;
 				}
 				else {
 					combine = false;
-					tempText += " " + splitText[i];
+					tempText += " " + txt;
 					subs.push(tempText);
 				}
 			}
 			else {
 				if (combine == true)
-					tempText += " " + splitText[i];
+					tempText += " " + txt;
 				else
-					subs.push(splitText[i]);
+					subs.push(txt);
 			}
 		}
 		return subs;
-	},
+	},    
 	// Helper function to check for image file
-	checkIfImage: function(src) {
+	checkIfImage: (src) => {
 		// crude way of checking if src is an image
 		src = Helper.parseArg(src);
 		return (/jpg|jpeg|bmp|png|gif|svg/i.test(src));
 	},
-	// Helper function to process audio
-	processAudio: function (obj, src, param) {
-		var mimeType = {"wav": 'audio/wav',
-						"ogg": 'audio/ogg;codecs="vorbis"',
-						"oga": 'audio/ogg;codecs="vorbis"',
-						"mp3": 'audio/mpeg',
-						"m4a": 'audio/mp4;codecs="mp4a.40.2"',
-						"aac": "audio/aac",
-						"webma": 'audio/webm; codecs="vorbis"'};			
-		var index = -1;
-		src = Helper.parseArg(src);
-		for (var i in obj) {
-			if (obj[i].src.search(src) != -1) {
-				index = i;
-				break;
-			}
-		}
-		if (index != -1) {
-			switch (param.action) {
-				case "stop":
-					obj[index].Stop(false);
-					break;
-				case "pause":
-					obj[index].Pause();
-					break;
-				case "rewind":
-					obj[index].Rewind();
-					break;
-				case "remove":
-					if (param.bgs || param.se) {
-						obj[index].Stop(true);
-						obj[index].audio = null;
-						obj.splice(index, 1);
-					}
-					break;
-				case "play":
-				default:
-					obj[index].Play(false);
-					break;
-			}
-		}
-		else {
-			try {
-				var s = new Sounds();
-				s.src = null;
-				var soundformat = (param.format) ? param.format : Config.audioFormat;
-				for (var i in soundformat) {
-					//if (s.audio.canPlayType(mimeType[soundformat[i]]) != '') {
-					//if (!!s.audio.canPlayType(mimeType[soundformat[i]])) {
-					// workaround, only allow 'probably'; 'maybe' oftentimes fail
-					if (s.audio.canPlayType(mimeType[soundformat[i]]).toLowerCase() == 'probably') {			
-						s.src = src + '.' + soundformat[i];
-						break;
-					}
-				}
-				if (s.src != null) {
-					if ((param.bgm) || (param.voice)){
-						while (obj.length > 0) {
-							var old = obj.shift();
-							old.Stop(true);
-							old.audio = null;
-						}
-					}
-					if ((param.se) || (param.voice))
-						s.repeat = (param.repeat > 0) ? param.repeat : 0;
-					else
-						s.repeat = -1;
-					s.delay = (param.delay > 0) ? param.delay : 0;
-					s.Mute(Helper.findVar("_mute_audio"));	// initialize muted property
-					obj.push(s);
-				}
-				s = null;
-			}
-			catch (e) {
-			}
-		}
-	},
-	// Helper function to process effects
-	processEffects: function (obj, elapsed) {
-		if (obj.effects.indexOf('done')!=-1) {
-			obj.drawn = true;
-			return;
-		}
-		var fxarr = obj.effects.split('_');
-		if (fxarr[0] == '') fxarr[0] = 'none';
-		if (fxarr.length == 1) fxarr.push('in');
-		
-		obj.target_alpha = 1.0;
-		TransEffects[fxarr[0]]['_'+fxarr[1]](obj, elapsed);
-	},
-	// Helper function to draw visual elements
-	drawElements: function(obj, order) {
-		if (!obj.visible) return false;
-
-		Stage.context.save();
-		Stage.context.translate(obj.pos.vx - obj.scale * obj.origin.vx + obj.offset.vx,
-								obj.pos.vy - obj.scale * obj.origin.vy + obj.offset.vy);
-		Stage.context.scale(obj.scale, obj.scale);
-		Stage.context.drawImage(obj.context.canvas,
-								Stage.AddDepth(order/10, Stage.canvas.width/2 - Stage.coord.vx) + 
-								Stage.shake * Stage.transTime * Math.sin(Stage.transTime*10*Math.PI),
-								Stage.AddDepth(order/10, Stage.canvas.height/2 - Stage.coord.vy)/2 +
-								Stage.fall * Stage.transTime * Math.sin(Stage.transTime*10*Math.PI),
-								obj.context.canvas.width,
-								obj.context.canvas.height);	
-		Stage.context.restore();
-		return (Stage.transTime>0);
-	},
 	// Helper to interpolate object position
-	interpolatePosition: function(obj) {
+	interpolatePosition: (obj) => {
 		if (Stage.transTime <= 0) {
 			obj.pos.copy(obj.target_pos);
 			obj.startpos = null;
 		}
 		else {
-			if ((obj.startpos == undefined) || (obj.startpos == null))
+			if ((obj.startpos === undefined) || (obj.startpos === null))
 				obj.startpos = new Vector2d(obj.pos.vx, obj.pos.vy);
-			obj.pos.lerp(obj.target_pos, obj.startpos, Stage.transTime/obj.transTime);
+            let normalizedTime = Stage.transTime/obj.transTime;
+            if (obj.tween && typeof obj.tween === 'string') {
+                let curvedTime = TransEffects.ease[obj.tween](normalizedTime);
+                obj.pos.lerp(obj.target_pos, obj.startpos, curvedTime);
+            }
+            else {
+                obj.pos.lerp(obj.target_pos, obj.startpos, normalizedTime);
+            }
 		}
 	},
 	// Helper function to get current speaker
-	checkCurrentSpeaker: function(name, append) {
-		var current_speaker = '';
-		var startIdx = Stage.layers[4][0].text.indexOf(Stage.layers[4][0].tagFamily+";\'>");
-		var endIdx = Stage.layers[4][0].text.indexOf("</style><br/>");
-		if ((startIdx != -1) && (endIdx != -1)) {
-			current_speaker = Stage.layers[4][0].text.substr(startIdx+Stage.layers[4][0].tagFamily.length+3, 
-															 endIdx-startIdx-Stage.layers[4][0].tagFamily.length-3);
-		}
-		//return current_speaker;
-		var same_window = false;
+	checkCurrentSpeaker: (name, append) => {
+        let box = Stage.layers.gui.get("box");
+		let current_speaker = box.glActorNick.text;
+        box.glActorNick.text = name;
+		let same_window = false;
 		if ((current_speaker != name) || (append == false)) {
-			Stage.layers[4][0].cont = false;
+			box.cont = false;
 			same_window = false;
 		}
 		else if (append == true) {
-			Stage.layers[4][0].cont = true;
+			box.cont = true;
 			same_window = true;
 		}
 		else {	// whatever value including undefined
-			same_window = Stage.layers[4][0].cont;
+			same_window = box.cont;
 		}
 		return same_window;
 	},
 	// Helper function to add name tag, if any, to dialog
-	addTagToDialog: function(tag, tagcolor, text, append) {
-		var dialog = '';
-		Stage.layers[4][0].autotypeCount = 0;
-		if (tag != null) {
-			dialog = "<style=\'font-weight:" + Stage.layers[4][0].tagWeight +
-						";color:" + tagcolor + 
-						";font-size:" + Stage.layers[4][0].tagSize +
-						";font-family:" + Stage.layers[4][0].tagFamily +
-						";\'>" + tag + "</style><br/>";
-			Stage.layers[4][0].autotypeCount = tag.length;
-		}
-		if (append) {
-			// strip speaker name here if present
-			var index = Stage.layers[4][0].text.indexOf("</style><br/>");
-			var buf = "";
-			if (index!=-1)
-				buf = Stage.layers[4][0].text.slice(index+13);
-			else 
-				buf = Stage.layers[4][0].text;
-			dialog += buf + '\n';
-			Stage.layers[4][0].autotypeCount += buf.length+2;
+	addTagToDialog: (tag, tagcolor, text, append) => {
+		let dialog = '';
+        let box = Stage.layers.gui.get("box");
+		box.autotypeCount = 0;
+		if (append && (box.text.length>0)) {
+            dialog += box.text + '\n';
+			box.autotypeCount += dialog.length+2;
 		}
 		if (text != null) {
-			var match = text.match(/#([^#|\s]+)#/g);
-			for (var i in match)
+			let match = text.match(/#([^#|\s]+)#/g);
+			for (let i in match)
 				text = text.replace(match[i],Helper.parseArg(match[i].replace(/#/g,'')));
-			dialog += Helper.parseArg(text).toString().replace(/\n/g,"<br/>");
-		}		
-		return Helper.filterBadWords(dialog);
+			dialog += Helper.parseArg(text).toString();
+		}
+		dialog = Helper.filterBadWords(dialog);
+        box.autotypeLength = dialog.length;
+        return dialog;
 	},
-	// Helper function to show tooltip on forms
-	showTooltip: function(tip) {
-		Stage.context.save();
-		Stage.context.fillStyle = Config.activeTheme.formTipColor;
-		Stage.context.shadowColor = 'black';
-		Stage.context.shadowBlur = 2;
-
-		var subs = Helper.parseFontString(Config.activeTheme.formTipStyle);
-		Stage.context.font = subs.slice(0,3).join(' ');
-		var w = Stage.context.measureText(tip).width;
-		var h = parseInt(subs[1]);
-		var x = Math.min(Stage.coord.vx, Stage.canvas.width - w - 5);
-		var y = Math.min(Stage.coord.vy, Stage.canvas.height - 2*h - 5);
-		Stage.context.fillRect(x-5, y-5+h, w+10, h+10);
-		//Stage.context.strokeRect(x-5, y-5+h, w+10, h+10);
-		
-		Stage.context.shadowBlur = 0;
-		Stage.context.fillStyle = subs.slice(3).join(' ');
-		Stage.context.textBaseline = 'top';
-		Stage.context.fillText(tip, x, y + h);
-		Stage.context.restore();
-	},
-	// Helper function to filter words, if enabled
-	filterBadWords: function (str) {
+	filterBadWords: (str) => {
 		if (Config.gameMatureFilter) {
-			var pattern = "/(^|\\n?|\\s*)("+Config.gameBadWords.join('|')+")($|\\n?|\\s*)/img";
+			let pattern = "/(^|\\n?|\\s*)("+Config.gameBadWords.join('|')+")($|\\n?|\\s*)/img";
 			return str.replace(eval(pattern), Config.gameAltWord);
 		}
 		else
 			return str;
-	},
+	},    
 	// Helper function to queue animation set in script lines
-	queueAnimation: function (type, param, aset) {
-		var newLines = new Array();
-		for (var i=0; i<aset.length; i+=2) {
+	queueAnimation: (type, param, aset) => {
+		let newLines = new Array();
+		for (let i=0; i<aset.length; i+=2) {
 			if (type == 'scene') newLines.push(scene);
 			if (type == 'overlay') newLines.push(overlay);
 			if (type == 'actor') newLines.push(actor);
-			var newParam = {};
-			for (var prop in param) {
+			let newParam = {};
+			for (let prop in param) {
 				if (param.hasOwnProperty(prop)) {
 					if (prop.search(/(src|sprite|avatar|nick|color|say|balloon|append|remove|voice)/g) == -1)
 						newParam[prop] = param[prop];
@@ -672,33 +614,40 @@ var Helper = {
 			newParam.effect = aset[i+1];
 			newLines.push(newParam);
 		}
-		Stage.script.Insert(newLines);
+		Stage.script.insert(newLines);
 	},
 	// Helper function to check map adjacency
 	checkMapAccess: function(mapname, locationid) {
-		if (this.findVar("_nav_loc") != null) {
-			var ret = this.findVar(mapname+'#'+Stage.variables["_nav_loc"].Value());
+		if (mapname == "") return true;
+		if (Helper.findVar("_nav_loc")) {
+			let ret = Helper.findVar(mapname+'#'+Stage.variables.get("_nav_loc").value);
 			if ( ret != null) {
-				for (var i in ret)
-					if (ret[i] == locationid) return true;
+				for (let loc of ret)
+					if (loc == locationid) return true;
 				return false;
 			}
 		}
 		return true;
-	},
+	},    
 	// Helper function to preload resources
-	preloadResources: function(seq, param) {
+	preloadResources: (seq, param) => {
 		if ((seq == scene) || (seq == overlay)) {
-			if ((param.src) && (Helper.checkIfImage(param.src))) {
-				var newImage = new Image();
-				newImage.src = param.src;
-				newImage = null;
-			}						
+            if ((param.src) && (typeof param.src == 'string')) {
+                if (Helper.checkIfImage(param.src)) {
+                    let newImage = new Image();
+                    newImage.src = param.src;
+                }						
+            }
+            else if (param.src) {
+                if (Helper.checkIfImage(param.src[0])) {
+                    let newImage = new Image();
+                    newImage.src = param.src[0];
+                }
+            }
 			if (param.objects) {
-				for (var j=0; j<param.objects.length; ) {
-					var newImage = new Image();
+				for (let j=0; j<param.objects.length; ) {
+					let newImage = new Image();
 					newImage.src = param.objects[j];
-					newImage = null;
 					j += 3;
 					if (param.objects[j] && (typeof param.objects[j] == 'number'))
 						j += 2;
@@ -710,118 +659,159 @@ var Helper = {
 		if (seq == actor) {
 			if (param.sprite) {
 				if (typeof param.sprite != 'string') {
-					var newImage = new Image();
+					let newImage = new Image();
 					newImage.src = param.sprite[1];
-					newImage = null;
 				}
 			}
 			if (param.avatar) {
-				if (typeof param.avatar == 'string') {
-					if (Helper.checkIfImage(param.avatar)) {
-						var newImage = new Image();
-						newImage.src = param.avatar;
-						newImage = null;
-					}
-				}
-				else {
-					var newImage = new Image();
+				if (typeof param.avatar != 'string') {
+					let newImage = new Image();
 					newImage.src = param.avatar[1];
-					newImage = null;
 				}
 			}
 			if (param.voice) {
-				for (var j=0; j<Config.audioFormat.length; j++) {
-					var newAudio = new Audio();
+				for (let j=0; j<Config.audioFormat.length; j++) {
+					let newAudio = new Audio();
 					newAudio.preload = 'auto';
 					newAudio.autoplay = false;
 					newAudio.src = param.voice + '.' + Config.audioFormat[j];
-					newAudio = null;
 				}
 			}
 		}
 		if (seq == audio) {
-			var soundfile, soundformat;
-			if (param.bgm) soundfile = param.bgm;
-			if (param.bgs) soundfile = param.bgs;
-			if (param.se) soundfile = param.se;
+			let soundfile, soundformat;
+			if (param.bgm) soundfile = (typeof param.bgm=='string')?param.bgm:param.bgm[1];
+			if (param.bgs) soundfile = (typeof param.bgs=='string')?param.bgs:param.bgs[1];
+			if (param.se) soundfile = (typeof param.se=='string')?param.se:param.se[1];
 			if (param.format) soundformat = param.format;
 			else soundformat = Config.audioFormat;
-			for (var j=0; j<soundformat.length; j++) {
-				var newAudio = new Audio();
+			for (let j=0; j<soundformat.length; j++) {
+				let newAudio = new Audio();
 				newAudio.preload = 'auto';
 				newAudio.autoplay = false;
 				newAudio.src = soundfile + '.' + soundformat[j];
-				newAudio = null;
 			}
 		}
 		if (seq == video) {
-			var videofile, videoformat;
+			let videofile, videoformat;
 			if (param.src) videofile = param.src;
 			if (param.format) videoformat = param.format;
 			else videoformat = Config.movieFormat;
-			for (var j=0; j<videoformat.length; j++) {
-				var newVideo = document.createElement('video');
+			for (let j=0; j<videoformat.length; j++) {
+				let newVideo = document.createElement('video');
 				newVideo.preload = 'auto';
 				newVideo.autoplay = false;
 				newVideo.src = videofile + '.' + videoformat[j];
-				newVideo = null;
 			}
 		}
-	},
+        if (seq == jump) {
+            let str = '';
+            if (typeof param == 'string')
+                str = param.split('#');
+            else
+                str = param.label.split('#');
+            if (str.length > 1) {
+                let newseq = str.shift();
+                Helper.loadScript(newseq, function() {
+                    // just load, do nothing
+                });
+            }
+        }
+        if (seq == menu) {
+            for (let s of param) {
+                if (typeof s == 'string') {
+                    let str = s.split('#');
+                    if (str.length > 1) {
+                        let newseq = str.shift();
+                        Helper.loadScript(newseq, function() {
+                            // just load, do nothing
+                        });
+                    }
+                }
+            }
+        }
+	},    
 	// Helper function to skip previously read text for quick replay
-	skipReadText: function() {
-		if (this.findVar("_skip_text") != true) return false;
+	skipReadText: () => {
+		if (Helper.findVar("_skip_text") != true) return false;
 		if (!Stage.inputFocus) return false;
-		if (!this.supportsLocalStorage()) return false;
-		if ((Stage.script.sequence[0] != label) || (localStorage["_persist_skip_"+Stage.script.sequence[1]] == null))
+		if (!Helper.supportsLocalStorage()) return false;
+		if ((Stage.script.sequence[0] != label) || (localStorage["_persist_skip_"+Stage.script.sequence[1]] === null))
 			return false;
-		var tmp = JSON.parse(localStorage["_persist_skip_"+Stage.script.sequence[1]]);
-		for (var i=0; i<tmp.length; i+=2) {
+		let tmp = JSON.parse(localStorage["_persist_skip_"+Stage.script.sequence[1]]);
+		for (let i=0; i<tmp.length; i+=2) {
 			if ((Stage.script.frame >= tmp[i]) && (Stage.script.frame <= tmp[i+1]))
 				return true;
 		}
 		return false;
 	},
-	// Helper function to build default stats for a character
-	buildStats: function(id) {
-		if (Config.modRPG) {
-			return RPG.methods.buildStats(id);
-		}
-		else if (Stats){
-			var newStats = {};
-			for (var prop in Stats) {
-				if (Stats.hasOwnProperty(prop)) {
-					newStats[prop] = Stats[prop]._value[0];
-					if (Stats[prop]._inherit) {
-						newStats[Stats[prop]._inherit[Stats[prop]._value[0]].type] = {};
-						for (attr in Stats[prop]._inherit[Stats[prop]._value[0]]) {
-							if (attr == "type") continue;
-							newStats[Stats[prop]._inherit[Stats[prop]._value[0]].type][attr] =
-								Stats[prop]._inherit[Stats[prop]._value[0]][attr]._value[0];
-						}
-					}
-				}
-			}
-			return newStats;
+	// Helper function to look for actor stat
+	findStat: (id) => {
+		if (Stage.layers.fg.size > 0) {
+			let arr_str = id.split(/[_@]/g);    // add @ delimiter
+			if ((arr_str.length > 1) && (arr_str[0].length > 0)){
+                if (Stage.layers.fg.get(arr_str[0]))
+                    return Stage.layers.fg.get(arr_str[0]).stats[arr_str[1]];
+            }
 		}
 		return null;
 	},
-	// Helper function to look for actor stat
-	findStat: function (id) {
-		if (Stage.layers[1].length > 0) {
-			var arr_str = id.split('_');
-			if ((arr_str.length > 1) && (arr_str[0].length > 0)){
-				for (var i in Stage.layers[1]) {
-					if (Stage.layers[1][i].id == arr_str[0])
-						return Stage.layers[1][i].stats[arr_str[1]];
+	// Helper function to load script on the fly
+	loadScript: (id, callback) => {
+		try {
+			let dummy = eval(id);
+			callback();
+		}
+		catch (e) {
+			for (let entry of TOC) {
+				if (entry.match(id) != null) {
+					require([entry], function() {
+						callback();
+					});
 				}
 			}
 		}
-		return null;
-	}
+		//return id;
+	},
+    // DEFUNCT: Helper function to load texture using framework loader
+    loadTexture: (texture, init, callback) => {
+        if (init) {
+            Stage.glLoader
+                .add(texture)
+                .load((loader, resources) => {
+                    callback(resources, init);
+                })
+                .on("progress", (loader, resource) => { console.log(`[PIXI]: loading: ${resource.url}`)});
+        }
+        else {
+            callback(Stage.glLoader.resources, init);
+        }
+    },
+	// Helper function to check if valid actor from id
+	checkIfActor: (id) => {
+        if (Stage.layers.fg.has(id)) return true;
+        //if (Stage.layers[1].get(id)) return true;
+		return false;
+	},
+    // Helper function to check for WebGL support
+    checkWebGL: () => {
+        //console.log(PIXI);
+        return PIXI.utils.isWebGLSupported();
+        /*try {
+			let canvas = document.createElement( 'canvas' );
+			return !!( window.WebGLRenderingContext && (
+				canvas.getContext( 'webgl' ) ||
+				canvas.getContext( 'experimental-webgl' ) )
+			);
+		} catch ( e ) {
+			return false;
+		}*/        
+    }
 }
+
 // Function to determine optimal animation frame
-window.requestAnimFrame = (function(callback){
+//window.requestAnimFrame = (function(callback){
+window.requestAnimFrame = ((callback) => {
 	return window.requestAnimationFrame ||
 	window.webkitRequestAnimationFrame ||
 	window.mozRequestAnimationFrame ||
@@ -832,89 +822,1044 @@ window.requestAnimFrame = (function(callback){
 	};
 })();
 // Helper function on window resize
-window.onresize = (function(){
-	if (!Config.movieOnCanvas) {
-		for (var idx in Stage.videos) {
-			var x = Stage.canvas.offsetLeft + (1-Config.movieSize)/2 * Stage.canvas.width;
-			var y = Stage.canvas.offsetTop + (1-Config.movieSize)/2 * Stage.canvas.height;
-			Stage.videos[idx].movie.setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px');
-		}
-	}
-	for (var i=0; i<document.forms.length; i++) {
-		var x = Stage.canvas.offsetLeft;
-		var y = Stage.canvas.offsetTop;
-		document.forms[i].setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px;');
+window.onresize = (() => {
+	//for (let i=0; i<document.forms.length; i++) {
+    for (let f of document.forms) {
+        let x = Stage.canvas.offsetLeft + (Stage.canvas.clientWidth-f.clientWidth)/2;
+        let y = Stage.canvas.offsetTop + (Stage.canvas.clientHeight-f.clientHeight)/2;
+		f.setAttribute('style', 'position:absolute; left:'+x+'px; top:'+y+'px;');
 	}
 });
 
 ///////////////////////////////////////////////////////////////////////////////
 // Rect class
 ///////////////////////////////////////////////////////////////////////////////
-function Rect(x, y, w, h) {
-	this.x = x;
-	this.y = y;
-	this.w = w;
-	this.h = h;
-};
-Rect.prototype.isPointInRect = function (x, y) {
-	if (x < this.x) return false;
-	if (x > this.x + this.w) return false;
-	if (y < this.y) return false;
-	if (y > this.y + this.h) return false;
-	return true;
-};
+class Rect {
+    constructor(x=0, y=0, w=0, h=0) {
+        this._x = x;
+        this._y = y;
+        this._w = w;
+        this._h = h;
+    }
+    isPointInRect(x, y) {
+        if (x < this._x) return false;
+        if (x > this._x + this._w) return false;
+        if (y < this._y) return false;
+        if (y > this._y + this._h) return false;
+        return true;
+    }
+    set x (val) { this._x = val; }
+    get x ()    { return this._x; }
+    set y (val) { this._y = val; }
+    get y ()    { return this._y; }
+    set w (val) { this._w = val; }
+    get w ()    { return this._w; }
+    set h (val) { this._h = val; }
+    get h ()    { return this._h; }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // 2D vector class
 ///////////////////////////////////////////////////////////////////////////////
-function Vector2d(x, y) {
-	this.vx = x;
-	this.vy = y;
-};
-Vector2d.prototype.copy = function (vec2) {
-	this.vx = vec2.vx;
-	this.vy = vec2.vy;
-};
-Vector2d.prototype.scale = function (scale) {
-	this.vx *= scale;
-	this.vy *= scale;
-};
-Vector2d.prototype.add = function (vec2) {
-	this.vx += vec2.vx;
-	this.vy += vec2.vy;
-};
-Vector2d.prototype.sub = function (vec2) {
-	this.vx -= vec2.vx;
-	this.vy -= vec2.vy;
-};
-Vector2d.prototype.equal = function (vec2) {
-	return ((this.vx == vec2.vx) && (this.vy == vec2.vy));
-};
-Vector2d.prototype.length = function () {
-	return Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-};
-Vector2d.prototype.lengthSquared = function () {
-	return this.vx * this.vx + vec.vy * vec.vy;
-},
-Vector2d.prototype.normalize = function () {
-	var len = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-	if (len) {
-		this.vx /= len;
-		this.vy /= len;
+class Vector2d {
+    constructor(x=0, y=0) {
+        this.vx = x;
+        this.vy = y;
+    }
+    set(x, y) {
+        this.vx = x;
+        this.vy = y;
+    }
+    copy(vec2) {
+        this.vx = vec2.vx;
+        this.vy = vec2.vy;
+    }
+    scale(scale) {
+        this.vx *= scale;
+        this.vy *= scale;
+    }
+    add(vec2) {
+        this.vx += vec2.vx;
+        this.vy += vec2.vy;
+    }
+    sub(vec2) {
+        this.vx -= vec2.vx;
+        this.vy -= vec2.vy;
+    }
+    equal(vec2) {
+        return ((this.vx == vec2.vx) && (this.vy == vec2.vy));
+    }
+    length() {
+        return Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    }
+    lengthSquared() {
+        return this.vx * this.vx + vec.vy * vec.vy;
+    }
+    normalize() {
+        let len = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        if (len) {
+            this.vx /= len;
+            this.vy /= len;
+        }
+        return len;
+    }
+    rotate(angle) {
+        let vx = this.vx,
+            vy = this.vy,
+            cosVal = Math.cos(angle),
+            sinVal = Math.sin(angle);
+        this.vx = vx * cosVal - vy * sinVal;
+        this.vy = vx * sinVal + vy * cosVal;
+    }
+    lerp(vec1, vec2, amt) {
+        this.vx = (1-amt) * vec1.vx + (amt) * vec2.vx;
+        this.vy = (1-amt) * vec1.vy + (amt) * vec2.vy;
+    }
+}
+///////////////////////////////////////////////////////////////////////////////
+// Resource manager: specifically for PIXI
+// - implements resource queue, loader, unloader
+///////////////////////////////////////////////////////////////////////////////
+class ResourceManager {
+    constructor() {
+        this.queue = new Array();
+        this.glLoader = PIXI.loader; //new PIXI.loaders.Loader();// 
+        this.busy = false;
+    }
+    addQueue(resources, flag=true, callback=null) {
+        let entry = {resources:new Set(), flag:true, callback:null};
+        // check if resources already loaded
+        for (let r of resources) {
+            if (Helper.checkIfImage(r) && !this.hasLoaded(r)) {
+                // check also if already in queue, do not duplicate
+                //let found = false;
+                //for (let item of this.queue) {
+                //    if (item.resources.has(r)) found = true;
+                //}
+                //if (!found) entry.resources.add(r);
+                entry.resources.add(r);
+            }
+            else if (Helper.checkIfVideo(r) && !this.hasLoaded(r)) {
+                entry.resources.add(r);
+            }
+        }
+        entry.flag = flag && (entry.resources.size>0);
+        entry.callback = callback;
+        if (!entry.flag) {
+           if (entry.callback) 
+                entry.callback(this.glLoader.resources, entry.flag);
+        }
+        else
+            this.queue.push(entry);
+    }
+    hasLoaded(resource) {
+        return (!!this.glLoader.resources[resource]);
+    }
+    getTexture(resource) {
+        if (this.glLoader.resources[resource])
+            return (this.glLoader.resources[resource]).texture;
+        return null;
+    }
+    free(resource) {
+        if (resource.toString() == 'all') {
+            this.glLoader.destroy();
+        }
+        else {
+            let r = resource;
+            if (Helper.checkIfImage(r)) {
+            }
+            // TODO: how to remove texture from PIXI.loader
+            //this.glLoader.resources[this.sprites[tag].src].texture.destroy();
+            //PIXI.Texture.removeFromCache(this.sprites[tag].src);
+        }
+    }
+    Update() {
+        if (this.busy) return;
+        if (this.queue.length == 0) return;
+        this.busy = true;
+     
+        // shift() first item in queue and load
+        let entry = this.queue.shift();
+        // what if resource already loaded previously
+        entry.resources.forEach(r => {
+            if (this.hasLoaded(r)) entry.resources.delete(r);
+        });
+        if (entry.resources.size > 0) {
+            this.glLoader
+                .add(Array.from(entry.resources))
+                .load((loader, resources) => {
+                    if (entry.callback) entry.callback(resources, entry.flag);
+                })
+                .on("progress", (loader, resource) => { console.log(`[PIXI]: loading: ${resource.url}`)})
+                .on("complete", () => { this.busy=false; });
+        }
+        else {
+            if (entry.callback) entry.callback(this.glLoader.resources, !entry.flag);
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Script box and script handler for dialogs
+///////////////////////////////////////////////////////////////////////////////
+// box - configures script box (layer 4)
+function box(param) {
+    let box = Stage.layers.gui.get("box");
+	if (param.show == true)
+		box.visible = true;
+	else {
+		box.visible = false;
+		box.text = '';
+        box.glActorNick.text = '';
+        box.avatar = '';
+		box.balloon = null;
 	}
-	return len;
-};
-Vector2d.prototype.rotate = function (angle) {
-	var vx = this.vx,
-		vy = this.vy,
-		cosVal = Math.cos(angle),
-		sinVal = Math.sin(angle);
-		this.vx = vx * cosVal - vy * sinVal;
-		this.vy = vx * sinVal + vy * cosVal;
-};
-Vector2d.prototype.lerp = function (vec1, vec2, amt) {
-	this.vx = (1-amt) * vec1.vx + (amt) * vec2.vx;
-	this.vy = (1-amt) * vec1.vy + (amt) * vec2.vy;
-};
+	if (param.pos) box.pos = param.pos;
+	else if (param.position) box.pos = param.position;
+	if (param.back) {
+		box.back = param.back;
+		box.src = Config.activeTheme.boxImageStyle;
+	}
+	if (param.prompt) {
+		if (param.prompt=='none') {
+			box.psrc = '';
+		}
+        else if ((param.prompt=='config') || (param.prompt=='default')) {
+            box.psrc = Config.activeTheme.boxTextPrompt;
+        }
+		else if (Helper.checkIfImage(param.prompt)) {
+			box.isready = false;
+			box.psrc = param.prompt;
+        }
+        else
+            box.psrc = param.prompt;
+	}
+	if (param.align) 
+		box.textAlign = param.align;
+
+	// assumes this function won't be called unless there are some changes somewhere
+	box.changed = true;
+}
+// text - display text in script box (layer 4)
+function text(param) {
+    let box = Stage.layers.gui.get("box");
+	box.avatar = '';
+	box.alpha = 1;
+	box.effects = "none";
+	box.scrollOffsetY = 0;
+	box.balloon = null;
+	box.autotype = false;	/* TODO: add to storage? */
+	if (typeof param == "string") {
+		//Stage.layers[4][0].text = Helper.addTagToDialog(null, null, param, Stage.layers[4][0].cont || Config.boxAppendOverride);		
+		box.text = Helper.addTagToDialog(null, null, param, Helper.checkCurrentSpeaker(' ', Config.boxAppendOverride));		
+		if (Config.boxAutotype) {
+			box.autotype = true;
+			box.effects = "autotype";
+		}
+	}
+	else {
+		if (param.font) { 
+			let subs = Helper.parseFontString(param.font);
+			if (subs.length > 0) box.fontWeight = subs[0];
+			if (subs.length > 1) {
+				box.fontSize = subs[1];
+				box.lineHeight = parseInt(subs[1]) + 4;			
+			}			
+			if (subs.length > 2) box.fontFamily = subs[2];
+			if (subs.length > 3) box.fontColor = subs[3];
+		}
+		if (param.align)
+			box.textAlign = param.align;
+		if (param.effect) {
+			if (param.effect == "fade")
+				box.alpha = 0;
+			if (param.effect == "scroll")
+				box.scrollOffsetY = box.size.vy;
+			if (param.effect == "autotype")
+				box.autotype = true;
+			else if (param.effect == "noautotype")
+				box.autotype = false;
+			box.effects = param.effect;
+		}
+		else {
+			if (Config.boxAutotype) {
+				box.autotype = true;
+				box.effects = "autotype";
+			}
+		}
+
+		let nick = null;
+		let color = '';
+		if (param.speaker) {
+			nick = param.speaker;
+			color = box.tagColor;
+            let actor = Stage.layers.fg.get(param.speaker);
+            if (actor) {
+					nick = actor.nick;
+					color = actor.color;
+					box.avatar = (actor.activeAvatar != '') ? actor.activeAvatar : '';
+                    box.avatarStruct = (box.avatar != '') ? actor.avatars[actor.activeAvatar] : null;
+            }
+		}
+		let same_window = Helper.checkCurrentSpeaker((param.speaker) ? param.speaker : ' ',  (param.append != undefined) ? param.append : Config.boxAppendOverride);
+		box.text = Helper.addTagToDialog(nick, color, (param.value) ? param.value : null, same_window);		
+		if (param.duration > 0) box.timeout = param.duration;
+		if (param.offset) {
+			box.textOffset.vx = param.offset[0];
+			box.textOffset.vy = param.offset[1];
+		}
+		if (param.value && param.voice && Helper.processAudio)
+			Helper.processAudio (Stage.sounds.vc, param.voice, {voice:param.voice});
+	}
+	box.visible = true;
+	box.changed = true;
+}
+// menu - display choices in script box (layer 4)
+function menu(param) {
+    // automatically hide text box
+    Stage.layers.gui.get('box').visible = false;
+    Stage.layers.gui.get('box').text = '';
+    Stage.layers.gui.get('box').balloon = null;
+    
+    // Dynamically create a cform with buttons for options
+    let buttonX = Stage.canvas.width * (1-Config.boxWidth)/2;
+    let buttonW = Stage.canvas.width * Config.boxWidth;
+    let buttonH = Stage.canvas.height * Config.menuHeight;
+    let buttonY = (Stage.canvas.height - ((param.length+1)/2 * buttonH))/2;
+    let choices = [param[0], true, button,
+                   {name:param[0], x:buttonX, y:buttonY, w:buttonW, h:buttonH, base:Config.activeTheme.menuPrompt}];
+    let i=1, j=4;
+    while (i<param.length) {
+        if ((param.length>i+2) && (typeof param[i+2] != 'string')) {
+            // this is a condition
+            let arr_param = new Array();
+            for (let prop in param[i+2]) {
+                if (param[i+2].hasOwnProperty(prop)) {
+                    arr_param.push(prop);
+                    arr_param.push(JSON.stringify(param[i+2][prop]));
+                }
+            }
+            let compare = false;
+            for (let k=0; k<arr_param.length; k+=2) {
+                arr_param[k+1] = eval(arr_param[k+1]);
+
+                compare = false;
+                let val = Helper.getValue(arr_param[k]);
+                if (val != null) {
+                    if (typeof val == 'number') {
+                        if (val >= arr_param[k+1])
+                            compare = true;
+                    }
+                    else if (typeof val == 'string') {
+                        if (val === arr_param[k+1])
+                            compare = true;
+                    }
+                    else {
+                        if (val == arr_param[k+1])
+                            compare = true;
+                    }
+                }
+                if (compare == false) break;
+            }
+            if (compare == true) {
+                choices[j] = button;
+                choices[j+1] = {name:param[i], link:[menu_close,param[i+1]], 
+                    x:buttonX, y:buttonY+buttonH*(j-2)/2, w:buttonW, h:buttonH, 
+                    base:Config.activeTheme.menuBase, hover:Config.activeTheme.menuHover, click:Config.activeTheme.menuClick};
+                j += 2;
+            }
+            i += 3;
+        }
+        else {
+            choices[j] = button;
+            choices[j+1] = {name:param[i], link:[menu_close,param[i+1]], 
+                x:buttonX, y:buttonY+buttonH*(j-2)/2, w:buttonW, h:buttonH, 
+                base:Config.activeTheme.menuBase, hover:Config.activeTheme.menuHover, click:Config.activeTheme.menuClick};
+            i += 2;
+            j += 2;
+        }
+    }
+    cform(choices);
+    // set focus to menu box
+    //for (let [key, control] of Stage.layers.gui.entries()) {
+    //    if (control.id == param[0])
+    //        param.inputFocus = true;
+    //}
+}
+function menu_close(param) {
+	// causes default menu to close then jumps to label
+	cform("close");
+	if (typeof (param) == 'string') {
+        // Bugfix: frame correction to set framestack pointer to "menu" not the "jump"
+        Stage.script.frame -= 2;
+		jump(param);
+    }
+	else	// assumes uservar setting
+		set(param);
+}
+
+class ScriptBox {
+    constructor() {
+        //this.image = null;
+        this.vpwidth = 0;
+        this.vpheight = 0;
+        this.redraw = true;
+        this.update = false;
+        this.fxupdate = false;
+        this.balloon = false;
+        this.curLineCount = 0;
+        
+        this.canvas = 0;
+        this.ctx = 0;
+
+        this.id = 'box';
+        this.type = 'box';				// identifies type of gui
+        this.group = '';
+        this.pos = 'bottom';
+        this.back = 'dim';
+        this.src = '';
+        this.dimStyle = new Array();
+        this.balloonStyle = new Array();
+        this.origin = new Vector2d(0,0);		// gui origin is topleft
+        this.size = new Vector2d(0,0);          // WebGL new
+            
+        this.isready = true;				// flow control
+        this.changed = true;
+        this.cont = false;
+        this.visible = false;
+        this.inputFocus = false;
+        this.timeout = 0;
+        this.bpos = 'up';
+
+        this.text = '';					// text display
+        this.prompt = null;
+        this.avatar = '';				// avatar kept for compatibility    // WebGl changed to activeAvatar
+        this.avatarStruct = null;		// for avatar parameters
+        this.psrc = (Config.activeTheme.boxTextPrompt) ? Config.activeTheme.boxTextPrompt : '';
+        this.alpha = 1;
+        this.effects = 'none';
+        this.scrollOffsetY = 0;
+        this.autotypeMax = 65536;
+        this.autotypeCount = 0;
+        this.autotypeLength = this.autotypeMax;
+
+        this.fontFamily = 'Verdana';		// font properties
+        this.fontColor = 'white';
+        this.fontSize = '14px';
+        this.fontWeight = 'normal';
+        this.lineHeight = '18';
+        this.textOffset = new Vector2d(10, 10);
+        this.textAlign = 'left';            // WebGL changed
+        this.tagFamily = this.fontFamily;
+        this.tagColor = '#c8ffc8';
+        this.tagSize = this.fontSize;
+        this.tagWeight = 'bold';
+
+        this.glBack = null;     // WebGL new
+        this.glBackImage = null;
+        this.glText = null;
+        this.glActorPic = null;
+        this.glActorNick = null;
+        this.glPrompt = null;
+        this.glBox = null;
+        this.glMask = null;
+    }
+    Create(w,h) {
+        this.vpwidth = w;	// viewport dimensions
+        this.vpheight = h;
+        this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
+        this.origin.vy = this.vpheight * (1-Config.boxHeight);
+        this.size.vx = this.vpwidth * Config.boxWidth;
+        this.size.vy = this.vpheight * Config.boxHeight;
+
+        this.glBox = new PIXI.Container();
+
+        // default background is 'dim'
+        this.glBack = new PIXI.Graphics();      // SB background
+        this.glBack.beginFill(0xFFFFFF);
+        this.glBack.drawRect(0, 0, this.size.vx, this.size.vy);
+        this.glBack.endFill();
+        this.glBack.position.set(this.origin.vx, this.origin.vy);
+        this.glBack.alpha = 0.5;
+        this.glBox.addChild(this.glBack);
+                     
+        this.glBackImage = new PIXI.Sprite();
+        this.glBox.addChild(this.glBackImage);
+        
+        this.glMask = new PIXI.Graphics();
+        this.glMask.beginFill(0xFFFFFF);
+        this.glMask.drawRect(0, 0, this.size.vx, this.size.vy);
+        this.glMask.endFill();
+        this.glMask.position.set(this.origin.vx, this.origin.vy);
+        this.glBox.addChild(this.glMask);
+
+        this.glActorPic = new PIXI.Sprite();         // actor profile pic
+        this.glBox.addChild(this.glActorPic);
+        
+        this.glActorNick = new PIXI.Text('');
+        this.glActorNick.position.set(this.origin.vx, this.origin.vy);
+        this.glActorNick.mask = this.glMask;
+        this.glBox.addChild(this.glActorNick);
+        
+        this.glText = new PIXI.Text('');
+        this.glText.position.set(this.origin.vx, this.origin.vy);
+        this.glText.mask = this.glMask;
+        this.glBox.addChild(this.glText);
+        
+        this.glPrompt = new PIXI.Sprite();      // SB prompt
+        this.glPrompt.mask = this.glMask;
+        this.glText.addChild(this.glPrompt);
+        
+        Stage.glSubScene[4].addChild(this.glBox);
+    }
+    Update(elapsed) {
+        if (this.changed || this.fxupdate) {
+            if (this.changed) {
+                let style = new PIXI.TextStyle();
+                style.fontFamily = this.fontFamily;
+                style.fontSize = this.fontSize;
+                style.fontStyle = this.fontWeight;
+                style.fill = this.fontColor;
+                style.wordWrap = true;
+                style.wordWrapWidth = this.size.vx - 2*this.textOffset.vx;
+                style.align = this.textAlign;
+                this.glText.style = style;
+                
+                let tagStyle = new PIXI.TextStyle();
+                tagStyle.fontFamily = this.tagFamily;
+                tagStyle.fontSize = this.tagSize;
+                tagStyle.fontStyle = this.tagWeight;
+                tagStyle.fill = this.tagColor;
+                this.glActorNick.style = tagStyle;
+
+                switch (this.back) {
+                    case 'image':
+                        if (this.src != '') {
+                            this.isready = false;
+                            Stage.glManager.addQueue([this.src], true/*!Stage.glManager.hasLoaded(this.src)*/,
+                                (resources, init) => {
+                                    // set scriptbox to be the size of image
+                                    let base = resources[this.src].texture;
+                                    this.size.set(base.width, base.height);
+                                    this.origin.vx = (this.vpwidth-base.width)/2
+                                    switch (this.pos) {
+                                        case 'bottom': this.origin.vy = this.vpheight - base.height; break;
+                                        case 'top': this.origin.vy = 0; break;
+                                        case 'center':
+                                        case 'full': this.origin.vy = (this.vpheight - base.height)/2; break;
+                                    }                                        
+                                    this.glBackImage.texture = base;
+
+                                    style.wordWrapWidth = this.size.vx - 2*this.textOffset.vx;
+                                    this.glText.style = style;
+                                    this.isready = true;                                        
+                                }
+                            );
+                            this.update = false;
+                        }
+                        break;
+                    case 'dim':
+                    case 'none':
+                        if (!this.balloon) {
+                            this.origin.vx = this.vpwidth * (1-Config.boxWidth)/2;
+                            this.size.vx = this.vpwidth * Config.boxWidth;
+                            this.size.vy = this.vpheight * Config.boxHeight;
+                            switch (this.pos) {
+                                case 'bottom':
+                                    this.origin.vy = this.vpheight * (1-Config.boxHeight);
+                                    break;
+                                case 'center':
+                                    this.origin.vy = this.vpheight * (1-Config.boxHeight)/2;
+                                    break;
+                                case 'top':
+                                    this.origin.vy = 0;
+                                    break;
+                                case 'full':
+                                    this.origin.vy = this.vpheight * (1-Config.boxFullHeight)/2;
+                                    this.size.vy = this.vpheight * Config.boxFullHeight;
+                                    break;
+                            }
+                        }
+                        else {
+                            let xoffset=0, yoffset=0;
+                            let actor = Stage.layers.fg.get(this.balloon);
+                            if (actor) {
+                                yoffset = this.vpheight * (1 - Config.balloonHeight)/2;
+                                if (actor.pos.vx >= this.vpwidth/2)
+                                    xoffset = actor.pos.vx - Config.balloonWidth * this.vpwidth * 0.75;
+                                else
+                                    xoffset = actor.pos.vx - Config.balloonWidth * this.vpwidth * 0.25;
+                            }
+                            this.origin.vx = xoffset;
+                            this.origin.vy = yoffset;
+                            this.size.vx = this.vpwidth * Config.balloonWidth;
+                            this.size.vy = this.vpheight * Config.balloonHeight;
+                            style.wordWrapWidth = this.size.vx - 2*this.textOffset.vx;
+                            this.glText.style = style;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            switch (this.effects) {
+                case 'fade':
+                    //console.log("fade:"+this.alpha);
+                    if (this.alpha >= 1) {
+                        this.effects = 'none';
+                    }
+                    else {
+                        this.alpha += elapsed/(Config.transTime * 1000);
+                        this.fxupdate = true;
+                    }
+                    this.update = false;
+                    break;
+                case 'scroll':
+                    //console.log("scroll:"+this.scrollOffsetY);
+                    if ((Stage.mouseClick && this.fxupdate) || 
+                        //(this.scrollOffsetY <= -(this.curLineCount+1) * this.lineHeight)) {
+                        (this.scrollOffsetY <= -this.glText.height - this.textOffset.vy)) {
+                        this.effects = 'none';
+                        this.timeout = 0.1;	// setup timer once scroll is finished
+                    }
+                    else {
+                        this.scrollOffsetY -= Config.boxScrollSpeed * elapsed/(Config.transTime * 25);
+                        this.fxupdate = true;
+                        this.timeout = 0;	// disable timer if enabled
+                    }
+                    this.update = false;
+                    break;
+                case 'autotype':
+                    if ((Stage.mouseClick && this.fxupdate) || 
+                        //(this.autotypeCount >= Math.max(this.autotypeLength,this.text.length))) {
+                        (this.autotypeCount >= this.autotypeLength)) {
+                        this.autotypeCount = 0;
+                        this.autotypeLength = this.autotypeMax;
+                        this.autotype = false;
+                        this.effects = 'none';
+                    }
+                    else {
+                        this.autotypeCount += Math.floor(Config.boxAutotypeSpeed*elapsed/16);
+                        this.fxupdate = true;
+                    }
+                    this.update = false;
+                    break;
+                case 'noautotype':
+                    this.autotype = false;
+                case 'none':
+                default:
+                    this.fxupdate = false;
+                    break;
+            }
+            if ((this.psrc != '') && (Helper.checkIfImage(this.psrc))) {
+                this.isready = false;
+                Stage.glManager.addQueue([this.psrc], true,
+                    (resources, init) => {
+                        let base = resources[this.psrc].texture;
+                        this.glPrompt.texture = base;
+                        this.isready = true;                                        
+                    }
+                );
+                this.update = false;
+            }
+
+            this.changed = false;
+            this.redraw = true;
+        }
+        if ((this.avatar != '') && (this.avatarStruct != null)) {
+            this.glActorPic.texture = Stage.glManager.getTexture(this.avatarStruct.src);
+            
+            if ((!this.avatarStruct.avTimerOn) && (this.avatarStruct.fps>0)) {
+                this.avatarStruct.avTimer = setTimeout(() => {
+                    this.avatarStruct.curFrame = (++this.avatarStruct.curFrame) % this.avatarStruct.frames;
+                    if (this.avatarStruct.curFrame == 0) this.avatarStruct.curRep++;
+                    this.redraw = true;
+                    if (this.visible) { 
+                        if ((this.avatarStruct.reps < 0) || (this.avatarStruct.curRep < this.avatarStruct.reps))
+                            this.avatarStruct.avTimerOn = false;
+                    }
+                }, 1000/this.avatarStruct.fps);
+                this.avatarStruct.avTimerOn = true;
+            }            
+        }
+        return this.update;
+    }
+    Draw() {
+        if (!this.isready) return false;
+        if (!this.redraw) return false;
+ 
+        this.glBox.visible = this.visible;
+        if (this.visible == true) {
+            if (!this.balloon) {
+                let avatarOffsetX = 0;
+                if (Config.actorShowAvatar && (this.avatar != '')) {
+                    this.glActorPic.anchor.set(this.avatarStruct.origin.vx, this.avatarStruct.origin.vy);
+                    if (this.size.vy > this.avatarStruct.imageDim.vy)
+                        this.glActorPic.position.y = this.origin.vy+this.size.vy-(this.size.vy - this.avatarStruct.imageDim.vy)/2;
+                    else
+                        this.glActorPic.position.y = this.origin.vy+this.size.vy-this.textOffset.vy;
+                    this.glActorPic.position.x = this.origin.vx+this.textOffset.vx;
+                    this.glActorPic.alpha = 1;
+                    avatarOffsetX = this.avatarStruct.imageDim.vy+this.textOffset.vx;                   
+                    this.glText.style.wordWrapWidth = this.size.vx-2*this.textOffset.vx-avatarOffsetX;
+
+                    if (this.avatarStruct.fps > 0) {
+                        let base = this.glActorPic.texture.baseTexture;
+                        let framewidth = base.width/this.avatarStruct.frames;
+                        this.glActorPic.texture.frame = new PIXI.Rectangle(this.avatarStruct.curFrame * framewidth, 0, framewidth, base.height);
+                    }
+
+                }
+                else {
+                    this.glActorPic.alpha = 0;
+                    avatarOffsetX = 0;
+                    this.glText.style.wordWrapWidth = this.size.vx-2*this.textOffset.vx;
+                }
+               
+                if (this.textAlign == 'left') {
+                    this.glText.anchor.set(0,0);
+                    this.glText.position.x = this.origin.vx+this.textOffset.vx+avatarOffsetX;
+                    this.glActorNick.anchor.set(0,0);
+                    this.glActorNick.position.x = this.origin.vx+this.textOffset.vx+avatarOffsetX;
+                }
+                else if (this.textAlign == 'center') {
+                    this.glText.anchor.set(0.5,0);
+                    this.glText.position.x = this.origin.vx+this.size.vx/2+avatarOffsetX/2;
+                    this.glActorNick.anchor.set(0.5,0);
+                    this.glActorNick.position.x = this.origin.vx+this.size.vx/2+avatarOffsetX/2;
+                }
+                else if (this.textAlign == 'right') {
+                    this.glText.anchor.set(1,0);
+                    this.glText.position.x = this.origin.vx+this.size.vx-this.textOffset.vx;
+                    this.glActorNick.anchor.set(1,0);
+                    this.glActorNick.position.x = this.origin.vx+this.size.vx-this.textOffset.vx;
+                }
+                if ((this.glActorNick.text.replace(' ','') == '')) {
+                    this.glActorNick.alpha = 0.0;
+                    this.glText.position.y = this.origin.vy+this.textOffset.vy+this.scrollOffsetY;
+                }
+                else {
+                    this.glActorNick.alpha = 1.0;
+                    //this.glActorNick.position.x = this.origin.vx+this.textOffset.vx;
+                    this.glActorNick.position.y = this.origin.vy+this.textOffset.vy/2;
+                    this.glText.position.y = this.origin.vy+this.textOffset.vy+parseInt(this.tagSize.replace('px',''))+2;
+                }
+                this.glBack.position.x = this.glBackImage.position.x = this.glMask.position.x = this.origin.vx;
+                this.glBack.position.y = this.glBackImage.position.y = this.glMask.position.y = this.origin.vy;
+                this.glBack.width = this.glBackImage.width = this.glMask.width = this.size.vx;
+                this.glBack.height = this.glBackImage.height = this.glMask.height = this.size.vy;
+                this.glText.alpha = this.alpha;
+                this.drawDialog();
+            }
+            else {
+                this.glActorPic.alpha = 0;
+                this.glActorNick.alpha = 0;
+                this.glBackImage.alpha = 0;
+
+                if (this.textAlign == 'left') {
+                    this.glText.anchor.set(0,0);
+                    this.glText.position.x = this.origin.vx+this.textOffset.vx;
+                }
+                else if (this.textAlign == 'center') {
+                    this.glText.anchor.set(0.5,0);
+                    this.glText.position.x = this.origin.vx+this.size.vx/2;
+                }
+                else if (this.textAlign == 'right') {
+                    this.glText.anchor.set(1,0);
+                    this.glText.position.x = this.origin.vx+this.size.vx-this.textOffset.vx;
+                }
+                this.glText.position.y = this.origin.vy+this.textOffset.vy+((this.bpos=='up')?this.lineHeight:0);
+                
+                this.glBack.position.x = this.glMask.position.x = this.origin.vx;
+                this.glBack.position.y = this.origin.vy;
+                this.glMask.position.y = this.origin.vy+((this.bpos=='up')?this.lineHeight:0);
+                this.glBack.width = this.glMask.width = this.size.vx;
+                this.glBack.height = this.size.vy;
+                this.glMask.height = this.size.vy-this.lineHeight;
+                this.glBack.scale.set(1,1);
+                this.glText.alpha = this.alpha;
+                this.drawDialog((Stage.layers.fg.get(this.balloon).pos.vx<this.vpwidth/2)?true:false,
+                                (this.bpos=='up')?true:false);
+            }
+            if (this.back == 'none') {
+                this.glBack.alpha = (!this.balloon) ? 0.0 : 0.5;
+                this.glBackImage.alpha = 0.0;
+            }
+            else if (this.back == 'dim') {
+                this.glBack.alpha = 0.5;
+                //this.glBack.tint = w3color(this.dimStyle[0]).toVal();
+                this.glBackImage.alpha = 0.0;
+            }
+            else {
+                this.glBack.alpha = 0.0;
+                this.glBackImage.alpha = 1.0;
+            }
+            this.glText.text = (!this.autotype) ? this.text : this.text.substr(0,this.autotypeCount);
+            if ((this.text.length>0) && (this.glText.text.length >= this.text.length)) {
+                // display end prompt here
+                if (Helper.checkIfImage(this.psrc)) {
+                    let metrics = PIXI.TextMetrics.measureText(this.text, this.glText.style);
+                    this.glPrompt.alpha = 1;
+                    this.glPrompt.position.set(metrics.lineWidths[metrics.lines.length-1]+5, 
+                                               metrics.lineHeight*(metrics.lines.length-1));
+                    let aspectratio = this.glPrompt.width/this.glPrompt.height;
+                    this.glPrompt.height = metrics.lineHeight;
+                    this.glPrompt.width = aspectratio * metrics.lineHeight;
+                }
+                else {
+                    this.glText.text += this.psrc;
+                    this.glPrompt.alpha = 0;
+                }
+            }
+            else
+                this.glPrompt.alpha = 0;
+
+            // Pauses script box
+            Stage.pause = true;
+            if (!Stage.utimerOn && (this.timeout > 0)) {
+                Stage.utimer = setTimeout(() => { 
+                    Stage.pause = false; 
+                    Stage.utimerOn = false;
+                    this.timeout = 0;
+                }, this.timeout * 1000);
+                Stage.utimerOn = true;
+            }
+        }
+        else {
+            //Stage.pause = false;
+        }
+        if (!this.changed) this.update = true;
+        this.redraw = false;
+        return true;
+    }
+    drawDialog(left=true, up=false) {
+        // TODO:check if need to change graphic
+        //if (this.balloon && (this.glBack.lineWidth==2)) return;
+        //if (!this.balloon && (this.glBack.lineWidth==0)) return;
+    
+        this.glBack.clear();
+        if (!this.balloon) {
+            if (this.dimStyle.length > 1) {
+                let steps = Math.min(100, this.size.vy);
+                let color1 = w3color(this.dimStyle[0]).toRgb();
+                let color2 = w3color(this.dimStyle[1]).toRgb();
+                let colorstep = {r:(color1.r-color2.r)/steps,
+                                 g:(color1.g-color2.g)/steps,
+                                 b:(color1.b-color2.b)/steps,
+                                 a:(color1.a-color2.a)/steps};
+                let newcolor = {r:0, g:0, b:0, a:1};
+                for (let i=0; i<steps; i++) {
+                    newcolor.r = ((color1.r-i*colorstep.r)&0xFF);
+                    newcolor.g = ((color1.g-i*colorstep.g)&0xFF);
+                    newcolor.b = ((color1.b-i*colorstep.b)&0xFF);
+                    newcolor.a = color1.a-i*colorstep.a;
+                    this.glBack.beginFill((newcolor.r<<16) + (newcolor.g<<8) + (newcolor.b<<0), newcolor.a);
+                    this.glBack.drawRect(0, i*this.size.vy/steps, this.size.vx, this.size.vy/steps);
+                    this.glBack.endFill();
+                }
+            }
+            else {
+                this.glBack.beginFill(w3color(this.dimStyle[0]).toVal());
+                this.glBack.drawRect(0, 0, this.size.vx, this.size.vy);
+                this.glBack.endFill();
+            }
+            this.glBack.position.set(this.origin.vx, this.origin.vy);
+            //this.glBack.alpha = 0.5;
+        }
+        else {
+            let x=0, y=this.lineHeight, r=10, w=this.size.vx, h=this.size.vy;
+            this.glBack.beginFill(w3color(this.balloonStyle[1]).toVal(),(this.back=='none')?0:1);
+            this.glBack.lineStyle(2,w3color(this.balloonStyle[0]).toVal(),1);
+            //this.glBack.drawRoundedRect(0, 0, this.size.vx, this.size.vy);
+            if (up) {
+                this.glBack.moveTo(x+r, y);
+                this.glBack.lineTo(w/3-y/2,y);
+                if (left) this.glBack.lineTo(w/3,0);
+                this.glBack.lineTo(w/3+y/2,y);
+                this.glBack.lineTo(w*2/3-y/2,y);
+                if (!left) this.glBack.lineTo(w*2/3,0);
+                this.glBack.lineTo(w*2/3+y/2,y);
+                this.glBack.lineTo(w-r, y);
+                this.glBack.quadraticCurveTo(w, y, w, y+r);
+                this.glBack.lineTo(w, h-r);
+                this.glBack.quadraticCurveTo(w, h, w-r, h);
+                this.glBack.lineTo(x+r, h);
+                this.glBack.quadraticCurveTo(x, h, x, h-r);
+                this.glBack.lineTo(x, y+r);
+                this.glBack.quadraticCurveTo(x, y, x+r, y);
+            }
+            else {
+                this.glBack.moveTo(r, 0);
+                this.glBack.lineTo(w-r, 0);
+                this.glBack.quadraticCurveTo(w, 0, w, 0+r);
+                this.glBack.lineTo(w, h-y-r);
+                this.glBack.quadraticCurveTo(w, h-y, w-r, h-y);
+
+                //this.glBack.moveTo(x+r, y);
+                this.glBack.lineTo(w*2/3+y/2,h-y);      
+                if (!left) this.glBack.lineTo(w*2/3,h);
+                this.glBack.lineTo(w*2/3-y/2,h-y);      
+                this.glBack.lineTo(w/3+y/2,h-y);        
+                if (left) this.glBack.lineTo(w/3,h);   
+                this.glBack.lineTo(w/3-y/2,h-y);        
+
+                this.glBack.lineTo(x+r, h-y);
+                this.glBack.quadraticCurveTo(x, h-y, x, h-y-r);
+                this.glBack.lineTo(x, 0+r);
+                this.glBack.quadraticCurveTo(x, 0, x+r, 0);
+            }           
+            this.glBack.endFill();
+            this.glBack.position.set(this.origin.vx, this.origin.vy);
+            //this.glBack.alpha = 0.5;
+        }
+    }
+}
+class Script {
+    constructor() {
+        this.sequence = 0;		// story board, composed of object-value pairs
+        this.frame = 0;			// sequence counter
+        this.frameStack = new Array();
+    }   
+    Init(name) {
+        if (typeof name === 'string') {
+            Helper.loadScript(name, () => {
+                Stage.script.sequence = eval(name);
+            });
+        }
+        else {
+            Stage.script.sequence = name;
+        }
+        this.frame = 0;
+    }   
+    Update() {
+        if (Helper.supportsLocalStorage()) {
+            if (Stage.script.sequence[0] == label) {
+                let tmp = new Array();
+                if  (localStorage["_persist_skip_"+Stage.script.sequence[1]] != null)
+                    tmp = JSON.parse(localStorage["_persist_skip_"+Stage.script.sequence[1]]);
+                if ((tmp.length == 0) || (tmp.length%2 == 1)) 
+                    tmp.push(Stage.script.frame);
+                else {
+                    let found = false;
+                    for (let i=0; i<tmp.length; i+=2) {
+                        if ((Stage.script.frame >= tmp[i]) && (Stage.script.frame <= tmp[i+1]+2)) {
+                            if (Stage.script.frame > tmp[i+1]) 
+                                tmp.splice(i+1,1,Stage.script.frame);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) tmp.push(Stage.script.frame);
+                }
+                localStorage["_persist_skip_"+Stage.script.sequence[1]] = JSON.stringify(tmp);
+                Stage.skipTextUpdated = true;
+                tmp = null;
+            }
+        }
+        if (this.sequence.length > this.frame) {
+            if (typeof(this.sequence[this.frame]) === 'function') {
+                this.sequence[this.frame](this.sequence[this.frame+1]);
+            }
+            else if (typeof(this.sequence[this.frame]) === 'string') {
+                // assumes an actor shortcut
+                if (Helper.checkIfActor(this.sequence[this.frame])) {
+                    if (typeof this.sequence[this.frame+1] === 'string') {
+                        var param = {id:this.sequence[this.frame],
+                                     say:this.sequence[this.frame+1]};
+                    }
+                    else {
+                        var param = this.sequence[this.frame+1];
+                        param.id = this.sequence[this.frame];
+                    }
+                    actor(param);
+                    param = null;
+                }
+                
+            }
+            this.frame += 2;
+        }
+        else if (this.sequence.length > 0) {
+            //console.log("[VNC] End of script!");
+            Stage.update = false;
+            Stage.pause = true;
+        }
+    }
+    setFrame(locator) {
+        let str = locator.split('#');
+        if (str.length > 1) {
+            // jump to a new sequence#label
+            let newseq = str.shift();
+            
+            // TODO: unload old sequence to free memory
+            //var oldseq = this.sequence[1];
+            //window[oldseq].splice(0, this.sequence.length);
+            //window[oldseq] = null;
+            
+            Helper.loadScript(newseq, () => {
+                Stage.script.sequence = eval(newseq);
+                let newlabel = str.shift();
+                for (let i=0; i<Stage.script.sequence.length; i+=2){
+                    if ((Stage.script.sequence[i] == label) && (Stage.script.sequence[i+1] == newlabel)) {
+                        Stage.script.frame = i;
+                        return true;
+                    }
+                }
+            });
+        }
+        else {
+            // jump to new label
+            let newlabel = str.shift();
+            for (let i=0; i<this.sequence.length; i+=2){
+                if ((this.sequence[i] == label) && (this.sequence[i+1] == newlabel)) {
+                    this.frame = i;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    pushFrame(hack=false) {
+        let seq_name = '';
+        if (this.sequence[0] == label)
+            seq_name = this.sequence[1];
+        // TODO: limit stack to 8 
+        while (this.frameStack.length >= 8)
+            this.frameStack.shift();
+        //this.frameStack.push([seq_name, this.frame-2]);
+        this.frameStack.push([seq_name, (!hack)?this.frame:this.frame-2]);    
+    }
+    popFrame() {
+        if (this.frameStack.length > 0) {
+            let ret_frame = this.frameStack.pop();
+            this.sequence = eval(ret_frame[0]);
+            this.frame = ret_frame[1];
+        }
+    }
+    insert(newScript) {
+        for (let i=0; i<newScript.length; i+=2) {
+            if ((this.sequence[this.frame+2+i] == newScript[i]) &&
+                (JSON.stringify(this.sequence[this.frame+3+i]) == JSON.stringify(newScript[i+1]))) {
+                this.sequence.splice(this.frame+2+i,2);
+            }
+            this.sequence.splice(this.frame+2+i,0,newScript[i]);
+            this.sequence.splice(this.frame+3+i,0,newScript[i+1]);
+        }
+    }
+    remove(name, start=0, len=0) {
+        if (name == this.sequence[1]) {  // required: first line of any script is "label, <scriptname>"
+            // this is current sequence, handle frame correctly
+            this.sequence.splice(start, len);
+            if (this.frame >= start+len)
+                this.frame -= len;
+            
+        }
+        else {
+            // this is not current sequence, we can splice freely
+            let sequence = eval(name);
+            sequence.splice(start, len);
+        }
+    }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Main Stage
@@ -923,17 +1868,18 @@ var Stage = {
 	canvasid: 0,
 	canvas: 0,
 	context: 0,
-	timer: 0,
 	redraw: 0,
 	update: 0,
 	pause: 0,
 	script: 0,	
-	/* user inputs */
-	coord: new Vector2d(0,0),
-	click: new Vector2d(0,0),
-	utimer: 0,
-	utimerOn: false,
-	inputFocus: true,
+    
+    sBox: 0,        // WebGL new
+
+ 	fps: 0,
+	curtime: 0,
+	prevtime: 0,
+	framecount: 0,
+
 	/* event handling */
 	mouseMove: false,
 	mouseClick: false,
@@ -945,561 +1891,512 @@ var Stage = {
 	keyDown: false,
 	keyUp: false,
 	keyChar: 0,
-	/*	FPS count */
-	fps: 0,
-	curtime: 0,
-	prevtime: 0,
-	framecount: 0,
-	/* camera movement */
+    keyPressed: 0,
+    downTime: 0,
+	eventProcessed: false,
+    
+	coord: new Vector2d(0,0),
+    click: new Vector2d(0,0),
 	targetPos: new Vector2d(0,0),
-	prevPos: new Vector2d(0,0),
-	camTime: 0,
-	/* temporary data */
-	transTime: 0,
-	spritePos: new Array(8),
-	shake: 0,
-	fall:0,
+
+    capture: false,
+	inputFocus: true,
 	stageIdle: 0,
-	lookAheadFrame: 0,
-	skipTextUpdated: 0,
+    lookAheadFrame: 0,
+	transTime: 0,
+    shake: 0,
+    fall: 0,
+	//activeForm: null,
+	utimer: 0,
+	utimerOn: false,
+
 	/* 	Normally shouldn't need more than 5 layers,
 		the higher the layer, the higher Z order
 			- background = 0: backdrop layer
 			- foreground = 1: actors in foreground (optionally more than one layer)
-			- closeup	 = 2: actors in closeup, overlay image
+			- overlay	 = 2: actors in closeup, overlay image
 			- atmosphere = 3: atmospheric effects, e.g. lightning flash, dim/brighten, smoke, rain, etc.
 			- interface  = 4: script box, buttons, ads
 	*/
-	layers: new Array(5),
+	//layers: new Array(5),     // WebGL changed
+    layers: {},
 	/*	User variables that the script can set/get
 		useful for checking conditions, etc.
 	*/
-	variables: {},
+	variables: new Map(),       // WebGL changed
 	/*	Sounds to play, 3+1 types of sound
 			- bgm = 0: background music
 			- bgs = 1: background sound
 			- se  = 2: sound effects
 			- voice = 3: dialog vocals
 	*/
-	sounds: new Array(4),
-	//audioContext : new (window.AudioContext || window.webkitAudioContext)(),
+	//sounds: new Array(4),     // WebGl changed
+    sounds: {},
 	/*	Custom defined animations
 			- reusable for actor, scenes and overlays
 	*/
-	animations: new Array(),
+	//animations: new Array(),    // WebGl changed
+    animations: {},
 	/* 	Videos to play, currently only one video at a time
 			- for intros, cutscenes, etc.
 	*/
-	videos: new Array(),
+	//videos: new Array(),
+    videos: new Map(),                 // WebGl changed
 	/* 	Forms can be used for user required input/configuration
 			- top menu (for new game, continue or options)
 			- options menu
 	*/
-	formStack: new Array(),
+	formStack: new Array(),     // WebGL changed
 	formStyle: new Array(),
-	formBindings: new Array(),
+	formBindings: new Set(),    // WebGL changed
 	activeForm: null,
-	
+    fromForm: false,
+	isCordova: false,
+
+    /* WebGL support 
+    */
+    isWebGL: false,
+    glScene: 0,
+    glRenderer: 0,
+    glManager: 0,
+    /*  Create one container per layer
+    */
+    glSubScene: new Array(6),   //+1 for video
+
+    // ES6: Do not use fat arrow, as 'this' will refer to 'window'
+    //      'this' must refer to Stage
 	Init: function(id, width, height) {
-		// DEBUG: for FPS monitoring
-		this.fps = 0;
-		this.prevtime = new Date().getTime();
-		this.curtime = this.prevtime;
-		this.framecount = 0;
-		
-		this.canvasid = id;
+ 		this.canvasid = id;
 		this.canvas = document.getElementById(id);
-		this.context = this.canvas.getContext('2d');
 		this.canvas.setAttribute('width', width);
 		this.canvas.setAttribute('height', height);
-		this.coord = new Vector2d(width/2, height/2);
-		// for camera integrator
-		this.targetPos.copy(this.coord);
-		this.prevPos.copy(this.coord);
+        
+        this.isWebGL = Helper.checkWebGL();
+        if ((Config.glRenderer == 'webgl') && this.isWebGL) {
+            this.glRenderer = new PIXI.WebGLRenderer({width:width, height:height, view:this.canvas});
+        }
+        else if (Config.glRenderer == 'canvas') {
+            this.glRenderer = new PIXI.CanvasRenderer({width:width, height:height, view:this.canvas});
+        }
+        else // (Config.glRenderer == 'auto')
+            this.glRenderer = PIXI.autoDetectRenderer({width:width, height:height, view:this.canvas});
+        this.glScene = new PIXI.Container();
+        this.glManager = new ResourceManager();
+        for (let i=0; i<6; i++) {
+            this.glSubScene[i] = new PIXI.Container();     //one container per layer
+            this.glScene.addChild(this.glSubScene[i]);
+        }
+        //if (this.isWebGL) { TODO }
+        this.Splash();
+
+ 		this.coord = new Vector2d(width/2, height/2);
+        this.targetPos.copy(this.coord);        
 		// idle detection
 		this.stageIdle = false;
-		// add event listeners here for user inputs
-		Helper.addEvent(this.canvas, 'mousemove', function(e) {
-			Stage.mouseOut = false;
-			Stage.mouseUp = false;
-			Stage.mouseDown = false;
-			Stage.mouseMove = true;
-			Stage.HandleEvents(e);
+        // add mouse/touch input events
+        this.addListeners();
+		// create the stage layers
+		this.layers['bg'] = new Map(); 	//background
+		this.layers['fg'] = new Map();     //foreground
+		this.layers['ovl'] = new Map();	    //overlay
+		this.layers['atm'] = new Map();	    //atmosphere
+		this.layers['gui'] = new Map();	    //gui/hud
+		// auto create script box as first element in layers[4]
+		// FF/requireJS workaround: FF fails in asynchronous load
+		let sb = new ScriptBox();
+		sb.Create(width, height);
+		this.layers['gui'].set("box", sb);
+		Helper.updateConfig("activeTheme");
+		// create the script
+		this.script = new Script();
+ 		// create the sounds playlist
+		this.sounds['bgm'] = new Map();
+		this.sounds['bgs'] = new Map();
+		this.sounds['se'] = new Map();
+		this.sounds['vc'] = new Map();
+
+		// check and wait if script is loaded
+		// setup timer tick
+		this.update = true;		// use this.update = false to wait when loading resources
+		this.redraw = true;		// use this.redraw = false when redraw not necessary
+        this.pause = false;		// use this.pause = true to wait with timer or user input
+		this.Tick(1000/60);		// for 60fps
+    },
+    addListeners: function() {
+		Helper.addEvent(this.canvas, 'mousemove', (e) => {
+			//console.log("handleEvents: mousemove");
+			this.mouseOut = false;
+			this.mouseUp = false;
+			this.mouseDown = false;
+			this.mouseMove = true;
+			this.handleEvents(e);
 		}, false);
-		Helper.addEvent(this.canvas, 'mousedown', function(e) {
+		Helper.addEvent(this.canvas, 'mousedown', (e) => {
+			//console.log("[VNC]: handleEvents: mousedown");
+			e.preventDefault();
 			if (e.which != 1) return;
-			Stage.mouseDown = true;
-			Stage.HandleEvents(e);
+			this.mouseDown = true;
+            this.downTime = Date.now();
+			this.handleEvents(e);
 		}, false);
-		//Helper.addEvent(this.canvas, 'click', function(e) {
-		Helper.addEvent(this.canvas, 'mouseup', function(e) {
+		Helper.addEvent(this.canvas, 'mouseup', (e) => {
+			//console.log("handleEvents: mouseup");
 			if (e.which != 1) return;
-			Stage.mouseUp = true;
-			Stage.mouseDown = false;
-			Stage.HandleEvents(e);
+			this.mouseUp = true;
+			this.mouseDown = false;
+			this.handleEvents(e);
 		}, false);
-		Helper.addEvent(this.canvas, 'mouseover', function(e) {
-			Stage.mouseOut = false;
-			Stage.HandleEvents(e);
+		Helper.addEvent(this.canvas, 'mouseover', (e) => {
+			//console.log("handleEvents: mouseover");
+			this.mouseOut = false;
+			this.handleEvents(e);
 		}, false);
-		Helper.addEvent(this.canvas, 'mouseout', function(e) {
-			Stage.mouseOut = true;
-			//Stage.HandleEvents(e);
+		Helper.addEvent(this.canvas, 'mouseout', (e) => {
+			//console.log("handleEvents: mouseout");
+			this.mouseOut = true;
+			//Stage.handleEvents(e);
 		}, false);
-		Helper.addEvent(this.canvas, 'touchstart', function(e) {
+		Helper.addEvent(this.canvas, 'touchstart', (e) => {
+			//console.log("handleEvents: touchstart");
 			e.preventDefault();
-			Stage.mouseOut = false;
-			Stage.touchStart = true;
-			Stage.HandleEvents(e);
+			this.mouseOut = false;
+			this.touchStart = true;
+            this.downTime = Date.now();
+			this.handleEvents(e);
 		}, false);
-		Helper.addEvent(this.canvas, 'touchmove', function(e) {
+		Helper.addEvent(this.canvas, 'touchmove', (e) => {
+			//console.log("handleEvents: touchmove");
 			e.preventDefault();
-			Stage.mouseOut = false;
-			Stage.mouseMove = true;
-			Stage.HandleEvents(e);
+			this.mouseOut = false;
+			this.mouseMove = true;
+			this.handleEvents(e);
 		}, false);
-		Helper.addEvent(this.canvas, 'touchend', function(e) {
+		Helper.addEvent(this.canvas, 'touchend', (e) => {
+			//console.log("handleEvents: touchend");
 			e.preventDefault();
-			Stage.mouseOut = false;
-			Stage.touchEnd = true;
-			Stage.HandleEvents(e);
+			this.mouseOut = false;
+			this.touchEnd = true;
+			this.handleEvents(e);
 		}, false);
 		// addEventListener to body for 'touchcancel' ?
-		Helper.addEvent(document.body, 'touchcancel', function(e) {
-			Stage.mouseOut = true;
-			Stage.touchStart = false;
-			Stage.touchEnd = false;
+		Helper.addEvent(document.body, 'touchcancel', (e) => {
+			//console.log("handleEvents: touchcancel");
+			this.mouseOut = true;
+			this.touchStart = false;
+			this.touchEnd = false;
 		}, false);
 		// add keyboard events: Return/Enter, arrow keys
-		Helper.addEvent(this.canvas, 'keyup', function(e) {
-			Stage.keyUp = true;
-			Stage.keyDown = false;
-			if (Stage.keyChar == 13) {
+		Helper.addEvent(this.canvas, 'keyup', (e) => {
+			//console.log("handleEvents: keyup");
+			this.keyUp = true;
+			this.keyDown = false;
+            this.keyPressed = 0;
+			if (this.keyChar == 13) {
 				// process Enter/Return
-				Stage.HandleEvents(e);
-				Stage.keyChar = 0;
+				this.handleEvents(e);
+				this.keyChar = 0;
 			}
 		}, false);
-		Helper.addEvent(this.canvas, 'keydown', function (e) {
-			if (!Stage.mouseOut) {
-				Stage.keyUp = false;
-				Stage.keyDown = true;
-				Stage.keyChar = e.keyCode;
+		Helper.addEvent(this.canvas, 'keydown', (e) => {
+            console.log("[VNC]: handleEvents: keydown "+e.keyCode);
+			if (!this.mouseOut) {
+				this.keyUp = false;
+				this.keyDown = true;
+				this.keyChar = e.keyCode;
 				switch (e.keyCode) {
 					case 37:	//left
 					case 38:	//up
 					case 39:	//right
 					case 40:	//down
-						Stage.HandleEvents(e);
+                        this.keyPressed = e.keyCode;
+						this.handleEvents(e);
 						break;
 					default:
 						break;
 				}
 			}
 		}, false);
-		
-		// create the stage layers
-		this.layers[0] = new Array(); 	//background
-		this.layers[1] = new Array();	//foreground
-		this.layers[2] = new Array();	//closeup
-		this.layers[3] = new Array();	//atmosphere
-		this.layers[4] = new Array();	//gui
-		// create an auto-position lookup table, up to 8 simultaneous characters
-		// which is more than enough, else stage will look crowded
-		for (var j=0; j<8; j++) {
-			var table = new Array();
-			for (var i=1; i<j+2; i++) {
-				if (i%2 == 0) // even
-					table.push((Stage.canvas.width*(j+2-i/2)/(j+2))>>0);
-				else // odd
-					table.push((Stage.canvas.width*(((i/2)>>0)+1)/(j+2))>>0);
-			}
-			this.spritePos[j] = table;
-			table = null;
-		}
-		// auto create script box as first element in layers[4]
-		// FF/requireJS workaround: FF fails in asynchronous load
-		var sb = new ScriptBox();
-		sb.Create(width, height);
-		this.layers[4].push(sb);
-		Helper.configUpdate("activeTheme");
-		sb = null;
-		// create the sounds playlist
-		this.sounds[0] = new Array();
-		this.sounds[1] = new Array();
-		this.sounds[2] = new Array();
-		this.sounds[3] = new Array();
-		// create the script
-		this.script = new Script();
-		// setup default forms theme
-		if (Config.activeTheme && Config.activeTheme.formFontStyle) {
-			var subs = Helper.parseFontString(Config.activeTheme.formFontStyle);
-			this.formStyle.splice(0, this.formStyle.length);
-			if (subs.length >= 4) {
-				this.formStyle.push(subs.slice(0,3).join(' '));
-				this.formStyle.push(subs.slice(3).join(' '));
-			}
-			else
-				this.formStyle.push(param);
-		}
-		// setup timer tick
-		this.update = true;		// use this.update = false to wait when loading resources
-		this.redraw = true;		// use this.redraw = false when redraw not necessary
-		this.pause = false;		// use this.pause = true to wait with timer or user input
-		this.Tick(1000/60);			// for 60fps
-	},
+    },
 	Update: function(elapsed) {
 		// Note: set this.redraw to true if update needs a redraw
-		this.inputFocus = (this.activeForm == null);
-		for (var i in this.layers[4]) {
-			if (this.layers[4][i].inputFocus) 
-				this.inputFocus = false;
-		}
-		// handle user inputs
-		this.camTime += elapsed;
-		if (this.camTime > 40) {
-			this.coord = this.GetCameraPosition(elapsed, this.inputFocus);
-			this.camTime -= 40;		// about 25fps
-		}
-		if (this.mouseMove || this.CheckCamera()) {
+		//this.inputFocus = (this.activeForm === null);
+        this.inputFocus = true;     // WebGL: removed standard forms
+        for (let [key, control] of this.layers.gui) {
+            if (control.inputFocus)
+                this.inputFocus = false;
+        }
+        this.coord.copy(this.targetPos);
+
+        // handle user inputs
+   		if (this.mouseMove) {
 			this.redraw = true;
 		}
 		if (this.mouseClick) {
-			if (this.inputFocus)
-				this.pause = false;	
-			if (this.utimerOn) {
-				this.utimerOn = false;
-				clearTimeout(this.utimer);
-				// TODO: cancel all  that uses this timer
-				this.layers[4][0].timeout = 0;
-			}
+            if (this.inputFocus)
+                this.pause = false;	
+            if (this.utimerOn) {
+                this.utimerOn = false;
+                clearTimeout(this.utimer);
+                this.layers.gui.get('box').timeout = 0;
+            }
 		}
+        
 		// update the script
 		//if (this.update && !this.pause) {
-		if (this.update) {
+		if (!this.capture && this.script && this.update /*&& this.inputFocus*/) {
 			if (!(this.pause &&	!Helper.skipReadText()))
 				this.script.Update()
 		}
-		// play sounds if any
-		for (var idx in this.sounds) {
-			for (var entry in this.sounds[idx]) {
-				this.sounds[idx][entry].Mute(Helper.findVar("_mute_audio"));
-				if (this.sounds[idx][entry].isStopping)
-					this.sounds[idx][entry].Stop(false);
-				else
-					this.sounds[idx][entry].Play(true);
-			}
-		}
-		// play videos if any
-		for (var idx in this.videos) {
-			this.videos[idx].Mute(Helper.findVar("_mute_audio"));
-			if ((this.videos[idx].isStopping) ||
-				(this.mouseClick && Config.movieOnCanvas)){
-				this.videos[idx].Stop();
-				this.videos.pop();
-			}
-			else
-				this.videos[idx].Play();
-		}
+        // update resource manager
+        this.glManager.Update();
+
+        // play sounds if any
+        for (let s in this.sounds) {
+            if (this.sounds.hasOwnProperty(s)) {
+                for (let [key, sound] of this.sounds[s]) {
+                    sound.mute = Helper.findVar('_mute_audio');
+                    if (sound.isStopping)
+                        sound.stop(false);
+                    //else
+                    //    sound.play(true);
+                }
+            }
+        }
+        // play videos if any
+        for (let [key, vid] of this.videos.entries()) {
+            vid.mute(Helper.findVar("_mute_audio"));
+            if (vid.isStopping || this.mouseClick) {
+                vid.stop();
+                this.videos.delete(key);
+            }
+            else
+                vid.play();
+        }
+        
 		// update layers
-		var running_update = true;
-		for (var idx in this.layers) {
-			for (var entry in this.layers[idx]) {
-				if (!this.layers[idx][entry].Update(elapsed)) {
-					running_update = false;
-				}
-			}
+		let running_update = true;
+		for (let i in this.layers) {
+            for (let [key, object] of this.layers[i].entries()) {
+                if (!object.Update(elapsed)) {
+                    running_update = false;
+                }
+            }
 		}
 		this.update = running_update;
-		// update stage transition time
-		if (/*(this.update) &&*/ (this.transTime > 0)) {
-			this.transTime = Math.max(0, this.transTime - elapsed/1000);
-			if (this.transTime <=0) {
-				this.shake = 0;
-				this.fall = 0;
-			}
-		}
-		// reset clicked, assumed processing done
-		this.mouseClick = false;
-		this.mouseMove = false;
-		this.touchStart = false;
-		this.touchEnd = false;
-	},	
-	Draw: function() {
-		// TODO: clear entire stage first; manage for improved FPS
-		if (this.redraw && ((this.layers[0].length > 0) || 
-							(this.layers[1].length > 0) ||
-							(this.layers[2].length > 0) ||
-							(this.layers[3].length > 0) ||
-							(this.layers[4].length > 1)	))
-			this.context.clearRect(0,0,this.canvas.width,this.canvas.height);
 
-		var running_draw = false;
+		// update stage transition time
+		if (this.transTime > 0) {
+			this.transTime = Math.max(0, this.transTime - elapsed/1000);
+            if (this.transTime<=0) {
+                this.shake = 0;
+                this.fall = 0;
+            }
+		}
+
+		// reset clicked, assumed processing done
+		if (this.eventProcessed) {
+			this.mouseClick = false;
+            this.mouseUp = false;
+			this.mouseMove = false;
+			this.touchStart = false;
+			this.touchEnd = false;
+			this.eventProcessed = false;
+		}
+    },
+	Draw: function() {
+		let running_draw = false;
 		// draw background here
-		for (var i in this.layers[0]) {
-			if (this.layers[0][i].Draw()) running_draw = true;
-			if (this.redraw) {
-				if (Helper.drawElements(this.layers[0][i], 0)) 
-					running_draw = true;
-			}
+		//for (let scene of this.layers[0]) {
+        for (let [key, scene] of this.layers.bg.entries()) {
+            if (scene.Draw()) running_draw = true;
 		}
 		// draw foreground here
-		if (this.layers[1].length > 0) {
-			// get number of visible && auto-position actors
-			var count = 0;
-			for (var i in this.layers[1]) {
-				if ((this.layers[1][i].visible) && (this.layers[1][i].posMode == 'auto')) count++;
-			}						
-			// display actors
-			var j=0;
-			for (var i in this.layers[1]) {
-				if (this.layers[1][i].Draw()) running_draw = true;
-				if (this.redraw) {
-					if (this.layers[1][i].visible) {
-						if (this.layers[1][i].posMode == 'auto') {
-							this.layers[1][i].target_pos.vx = this.spritePos[count-1][j++];
-							Helper.interpolatePosition(this.layers[1][i]);
-						}
-						if (Helper.drawElements(this.layers[1][i],10 + this.layers[1][i].z_order))
-							running_draw = true;
-					}
-					else if (this.layers[1][i].pendingRemoval) {
-						// free up sprites and avatar
-						for (var j in this.layers[1][i].sprites)
-							this.layers[1][i].sprites[j].src = null;
-						this.layers[1][i].avatar = null;
-						this.layers[1].splice(i, 1);
-					}
-				}
-			}
-		}		
+        if (this.layers.fg.size > 0) {
+            for (let [key, actor] of this.layers.fg.entries()) {
+                if (actor.Draw()) running_draw = true;
+                if (this.redraw) {
+                    if (actor.pendingRemoval) {
+                        actor.glActor.destroy(true);
+                        this.layers.fg.delete(key);
+                    }
+                }
+            }
+        }
 		// draw overlay/closeup here
-		for (var i in this.layers[2]) {
-			if (this.layers[2][i].Draw()) running_draw = true;
-			if (this.redraw && this.layers[2][i].visible) {
-				if (this.layers[2][i].scroll) {
-					this.context.save();
-					this.context.translate((-this.layers[2][i].scale*(this.layers[2][i].context.canvas.width-this.layers[2][i].backdropDim.vx)/2 
-											-(this.layers[2][i].scale*this.layers[2][i].backdropDim.vx-this.canvas.width)*(this.coord.vx/this.canvas.width))>>0,
-										   (-this.layers[2][i].scale*(this.layers[2][i].context.canvas.height-this.layers[2][i].backdropDim.vy)/2
-											-(this.layers[2][i].scale*this.layers[2][i].backdropDim.vy-this.canvas.height)*(this.coord.vy/this.canvas.height))>>0);
-					this.context.scale(this.layers[2][i].scale, this.layers[2][i].scale);
-					this.context.drawImage(this.layers[2][i].context.canvas, 0, 0,
-											this.layers[2][i].context.canvas.width,
-											this.layers[2][i].context.canvas.height);
-					this.context.restore();
-				}
-				else {
-					if (Helper.drawElements(this.layers[2][i], 20)) 
-						running_draw = true;
-				}
-			}
+		for (let [key, overlay] of this.layers.ovl.entries()) {
+            if (overlay.Draw()) running_draw = true;
+ 			if (this.redraw && overlay.visible) {
+				if (overlay.scroll) {
+                    let offsetX = this.canvas.width/2 - ((this.coord.vx/this.canvas.width)-0.5)*(-this.canvas.width+overlay.imageDim.vx);
+                    let offsetY = this.canvas.height/2 - ((this.coord.vy/this.canvas.height)-0.5)*(-this.canvas.height+overlay.imageDim.vy);
+                    overlay.glSprite.position.set(offsetX, offsetY);
+                    running_draw = true;
+                }
+            }
 		}
 		// draw atmosphere effects here
-		for (var i in this.layers[3]) {
-			if (this.layers[3][i].Draw()) running_draw = true;
-			if (this.redraw && this.layers[3][i].visible) {
-				this.context.drawImage(this.layers[3][i].context.canvas, 0, 0);
-			}
+		for (let [key, atmo] of this.layers.atm.entries()) {
+            if (atmo.Draw()) running_draw = true;
 		}		
 		// draw gui here
-		if (this.layers[4].length > 0) {
-			for (var i in this.layers[4]) {
-				if (this.layers[4][i].Draw()) running_draw = true;
-				if (this.redraw && this.layers[4][i].visible) {
-					this.context.drawImage(this.layers[4][i].context.canvas, 
-										   this.layers[4][i].origin.vx>>0, 
-										   this.layers[4][i].origin.vy>>0);
-				}
-			}
-			// draw tooltips if any
-			for (var i in this.layers[4]) {
-				if (this.redraw && this.layers[4][i].visible) {
-					if (!Helper.checkMapAccess(this.layers[4][i].group, this.layers[4][i].id))
-						continue;
-					if ((this.layers[4][i].state == 'hover') && (this.layers[4][i].tooltip)){
-						if (this.transTime <= 0)
-							Helper.showTooltip(this.layers[4][i].tooltip);
-					}
-				}
-			}
-		}
+        for (let [key, control] of this.layers.gui.entries()) {
+            if (control.Draw()) running_draw = true;
+            if (this.redraw && control.visible && (control.type != 'box')) {
+                //if (!Helper.checkMapAccess(control.group, control.id))
+                //    continue;
+                if ((control.state=='hover') && control.tooltip && (this.transTime<=0))
+                    control.showTooltip();
+                else
+                    if (control.hideTooltip) control.hideTooltip();
+            }
+        }
 		// draw videos here
-		if (Config.movieOnCanvas) {
-			for (var i in this.videos) {
-				this.context.drawImage(this.videos[i].movie,
-									   this.videos[i].pos.vx,
-									   this.videos[i].pos.vy,
-									   this.videos[i].movie.width, 
-									   this.videos[i].movie.height);
-			}
-		}
+        for (let [key, video] of this.videos.entries()) {
+            if (video.Draw()) running_draw = true;
+        }
+        
 		// update redraw variable
 		this.redraw = running_draw;
-	},
-	HandleEvents: function(evt) {
+
+        if (this.redraw) {
+            this.glScene.position.x = this.shake * this.transTime * Math.sin(this.transTime*10*Math.PI);
+            this.glScene.position.y = this.fall * this.transTime * Math.sin(this.transTime*10*Math.PI);
+
+            this.glRenderer.render(this.glScene);
+        }
+    },   
+	handleEvents: function(evt) {
 		if (this.mouseOut) { Stage.canvas.blur(); return; }
 		// give focus to canvas element
 		Stage.canvas.setAttribute('tabindex','0');
 		Stage.canvas.focus();
+
 		// all mouse and touch moves
 		if (!this.keyDown && !this.keyUp)
-			this.targetPos = (this.touchStart) ? this.GetTouchPosition(this.canvas, evt) :
-												 this.GetMousePosition(this.canvas, evt);
-		// mouse click / touch end
+			this.targetPos = (this.touchStart && !this.touchEnd) ? 
+							this.getTouchPosition(this.canvas, evt) :
+							this.getMousePosition(this.canvas, evt);
+
+        // mouse click / touch end
 		if (this.mouseUp || this.touchEnd || this.keyUp) {
 			this.click.copy(this.coord);	// used only for debug
-			this.mouseClick = true;
-			this.mouseUp = false;
-			this.touchEnd = false;
-			this.touchStart = false;
-			this.keyUp = false;
-		}
+            if ((Math.abs(this.downTime - Date.now()) <= 200) && !this.mouseClick) {
+                console.log("[VNC]: handleEvents: mouseclick");
+                this.mouseClick = true;
+                this.mouseUp = false;
+                this.touchEnd = false;
+                this.touchStart = false;
+                this.keyUp = false;
+            }
+            
+			for (let [key, controls] of Stage.layers.gui.entries()) {
+                // TODO: buttons
+                if (/*(controls.type == 'button') &&*/ (controls.link)) {
+                    if (controls.rect.isPointInRect(this.targetPos.vx, this.targetPos.vy))
+                        controls.state = 'hover';
+                    else
+                        controls.state = 'base';
+                }
+			}
+        }
 		else if (this.mouseDown || this.touchStart) {
-			// TODO: check for clickable objects, only for top/last scene
-			if (Stage.layers[0].length>0) {
-				for (var i=0; i<Stage.layers[0][Stage.layers[0].length-1].objects.length; i++) {
-					if (Stage.layers[0][Stage.layers[0].length-1].objects[i].link != '') {
-						// translate clicked position relative to backdrop absolute coordinates
-						var position = new Vector2d(
-							this.targetPos.vx + ((Stage.layers[0][Stage.layers[0].length-1].context.canvas.width - Stage.canvas.width)/2) - Stage.AddDepth(0, Stage.canvas.width/2 - Stage.coord.vx),
-							this.targetPos.vy + ((Stage.layers[0][Stage.layers[0].length-1].context.canvas.height - Stage.canvas.height)/2) - Stage.AddDepth(0, Stage.canvas.height/2 - Stage.coord.vy)/2);
-						if (Stage.layers[0][Stage.layers[0].length-1].objects[i].rect.isPointInRect(position.vx, position.vy)) {
-							jump(Stage.layers[0][Stage.layers[0].length-1].objects[i].link);
-						}
-					}
+			//if (!Stage.activeForm) {
+				// TODO: check for clickable objects, only for top/last scene
+				if (Stage.layers.bg.size>0) {
+                    // TODO: objects
 				}
-			}
-			for (var i in Stage.layers[4]) {
-				//if (Stage.layers[4][i].type == "button") {
-				if ((Stage.layers[4][i].link != undefined) && (Stage.layers[4][i].link != null)) {
-					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.vx, this.targetPos.vy))
-						Stage.layers[4][i].state = 'clicked';
-					else
-						Stage.layers[4][i].state = '';
+				for (let [key, controls] of Stage.layers.gui.entries()) {
+                    // TODO: buttons
+                    if (/*(controls.type == 'button') &&*/ (controls.link)) {
+                        if (controls.rect.isPointInRect(this.targetPos.vx, this.targetPos.vy))
+                            controls.state = 'click';
+                        else
+                            controls.state = 'base';
+                    }
 				}
-			}
+			//}
 		}
 		else if (this.mouseMove) {
-			for (var i in Stage.layers[4]) {
-				//if (Stage.layers[4][i].type == "button") {
-				if ((Stage.layers[4][i].link != undefined) && (Stage.layers[4][i].link != null)) {
-					if (Stage.layers[4][i].context.isPointInPath(this.targetPos.vx, this.targetPos.vy))
-						Stage.layers[4][i].state = 'hover';
-					else
-						Stage.layers[4][i].state = '';
-				}
+			for (let [key, controls] of Stage.layers.gui.entries()) {
+                // TODO: buttons
+                if (/*(controls.type == 'button') &&*/ (controls.link)) {
+                    if (controls.rect.isPointInRect(this.targetPos.vx, this.targetPos.vy))
+                        controls.state = (controls.state != 'click') ? 'hover' : 'click';
+                    else
+                        controls.state = 'base';
+                }
 			}
 		}
 		else if (this.keyChar != 0) {
-			//alert('keycode: '+evt.keyCode);
-			if (Stage.layers[4][0].jumpTo.length > 0) {	// we're on a menu choice
-				if (this.keyChar == 38) 
-					Stage.layers[4][0].menuHover = Math.max(0, Stage.layers[4][0].menuHover-1);
-				if (this.keyChar == 40)
-					Stage.layers[4][0].menuHover = Math.min(Stage.layers[4][0].jumpTo.length-1, Stage.layers[4][0].menuHover+1);
-				Stage.layers[4][0].redraw = true;
-			}
+            // TODO: menu up/down
 			this.keyChar = 0;
 		}
-	},
-	AddDepth: function(order, dist) {
-		if (!Config.actorPerspective) return 0;
-		if (order >= 2) return 0;
-		// process only background and foreground layers
-		return ((order+1) * 0.1 * dist);
-	},
-	GetMousePosition: function(obj, event) {
-		var pos = new Vector2d(event.pageX, event.pageY);
+
+		this.eventProcessed = true;
+	},    
+	getMousePosition: function(obj, event) {
+		let pos = new Vector2d(event.pageX, event.pageY);
 		pos.vx -= obj.offsetLeft + obj.offsetParent.offsetLeft;
 		pos.vy -= obj.offsetTop + obj.offsetParent.offsetTop;
 		// scale accdg to automatic responsive resizing
-		var scale = obj.width/obj.clientWidth;
+		let scale = obj.width/obj.clientWidth;
 		pos.vx = Math.max(0, Math.min(obj.width, pos.vx*scale));
 		pos.vy = Math.max(0, Math.min(obj.height, pos.vy*scale));
 		try { return pos; }
 		finally { pos = null; }
 	},
-	GetTouchPosition: function(obj, event) {
-		var pos = new Vector2d(0,0);
-		if (event.targetTouches != null) {
-			pos.vx = event.targetTouches[0].pageX - obj.offsetLeft - obj.offsetParent.offsetLeft;
-			pos.vy = event.targetTouches[0].pageY - obj.offsetTop - obj.offsetParent.offsetTop;
-		}
-		else {
+	getTouchPosition: function(obj, event) {
+		let pos = new Vector2d(0,0);
+		if ((event.touches != null) && (event.touches != undefined)) {
 			pos.vx = event.touches[0].pageX - obj.offsetLeft - obj.offsetParent.offsetLeft;
 			pos.vy = event.touches[0].pageY - obj.offsetTop - obj.offsetParent.offsetTop;
 		}
-		var scale = obj.width/obj.clientWidth;
+		else {
+			pos.vx = event.targetTouches[0].pageX - obj.offsetLeft - obj.offsetParent.offsetLeft;
+			pos.vy = event.targetTouches[0].pageY - obj.offsetTop - obj.offsetParent.offsetTop;
+		}
+		let scale = obj.width/obj.clientWidth;
 		pos.vx = Math.max(0, Math.min(obj.width, pos.vx*scale));
 		pos.vy = Math.max(0, Math.min(obj.height, pos.vy*scale));
 		try { return pos; }
 		finally { pos = null; }
-	},
-	GetCameraPosition: function(elapsed, spring) {
-		if (spring) {
-			var camPos = new Vector2d(this.coord.vx, this.coord.vy);
-			camPos.sub(this.targetPos);
-			if (camPos.length() < 0.1) {
-				this.prevPos.copy(this.targetPos);
-				return this.targetPos;
-			}
-			camPos.copy(this.targetPos);
-			camPos.add(this.coord);
-			camPos.scale(0.5);
-			this.prevPos.copy(this.coord);		
-			try { return camPos; }
-			finally { camPos = null; }
-		}	
-		else {
-			this.prevPos.copy(this.targetPos);
-			return this.targetPos;	
-		}
-	},
-	CheckCamera: function() {
-		var vec = new Vector2d(this.coord.vx, this.coord.vy);
-		vec.sub(this.targetPos);
-		if (vec.length() > 0.1) return true;
-		return false;
 	},
 	Transition: function(time) {
 		this.transTime = Math.max((time != null) ? time : Config.transTime, 0.1);
 	},
 	Tick: function(interval) {	
-		var now = new Date().getTime();
-		var elapsed = now - this.curtime;	// time since last update
+        // halt until splash screen is done
+        if (!Stage.splashDone) {
+            requestAnimFrame(function(){
+                Stage.Tick(interval);
+            });
+            return;
+        }
+
+        let now = new Date().getTime();
+		let elapsed = now - this.curtime;	// time since last update
 		this.curtime = now;
+		//now = null;
 		this.framecount++;
 		if (this.curtime - this.prevtime >= 1000) {
 			this.prevtime = this.curtime;
 			this.fps = this.framecount;
 			this.framecount = 0;
+            //console.log('[VNC] fps='+ this.fps);
 		}
-		now = null;
 		
-		if (window.jQuery) {
-			// DEBUG:
-			//$('#debug').html(Stage.coord.vx +', '+ Stage.coord.vy +' : '+Stage.targetPos.vx +', '+ Stage.targetPos.vy);
-			//$('#debug').html(Stage.targetPos.vx +','+ Stage.targetPos.vy +' : '+Stage.click.vx +','+ Stage.click.vy+' : '+
-			//Stage.AddDepth(0, Stage.canvas.width/2 - Stage.coord.vx)+','+Stage.AddDepth(0, Stage.canvas.height/2 - Stage.coord.vy)/2);
-			//$('#debug').html(eval(Stage.coord.vx - Stage.targetPos.vx) +', '+ eval(Stage.coord.vy-Stage.targetPos.vy));
-			//$('#debug').html(Stage.click.vx +', '+ Stage.click.vy);
-			//$('#debug').html(this.script.frame/2 + ' ' + this.update);
-			//if (Helper.findVar("_nav_loc") != null)
-			//	$('#debug').html(this.variables["_nav_loc"].Value()+' '+this.variables["_nav_dir"].Value());
-			//$('#debug').html('FPS: '+ this.fps + ' Frame: ' + this.script.frame/2 + ' Idle: ' + this.stageIdle + ' Autotype: ' + Stage.layers[4][0].autotypeCount);
-		}
 		// update the stage
 		this.Update(elapsed);	
 		// draw the stage
 		this.Draw();
+        
 		// check for idle
 		this.stageIdle = false;
 		if (this.pause && (this.transTime <= 0) && (this.fps > 30)) {
 			this.stageIdle = true;
 			if (Config.gameAllowLookAhead && (this.script.frame > this.lookAheadFrame)) {
 				// look for resources to preload
-				for (var i=this.script.frame; i<this.script.sequence.length; i+=2) {
+				for (let i=this.script.frame; i<this.script.sequence.length; i+=2) {
 					if ((this.script.sequence[i] == actor) ||
 						(this.script.sequence[i] == scene) ||
 						(this.script.sequence[i] == overlay) ||
@@ -1514,45 +2411,88 @@ var Stage = {
 					}
 				}
 			}
-			if (this.skipTextUpdated && Helper.supportsLocalStorage() && 
-			   ((Stage.script.sequence[0] == label) && (localStorage["_persist_skip_"+Stage.script.sequence[1]] != null))) {
-				var skip_array = JSON.parse(localStorage["_persist_skip_"+Stage.script.sequence[1]]);
-				var opt_array = [];
-				for (var i=0; i<skip_array.length; i+=2) {
-					if (opt_array.length == 0) {
-						opt_array.push(skip_array[i]);
-						opt_array.push(skip_array[i+1]);
-					}
-					else {
-						var found = false;
-						for (var j=0; j<opt_array.length; j+=2) {
-							if ((skip_array[i] >= opt_array[j]) && (skip_array[i] <= opt_array[j+1]+2)) {
-								if ((skip_array[i+1] > opt_array[j+1]))
-									opt_array[j+1] = skip_array[i+1];
-								found = true;
-								break;
-							}
-						}
-						if (!found) {
-							opt_array.push(skip_array[i]);
-							opt_array.push(skip_array[i+1]);
-						}
-					}
-				}
-				opt_array.sort(function(a,b){return a-b});
-				localStorage["_persist_skip_"+Stage.script.sequence[1]] = JSON.stringify(opt_array);
-				this.skipTextUpdated = false;
-				opt_array = null; skip_array = null;
-			}
 		}
+
 		// setup next timer tick
-		requestAnimFrame(function(){
+        requestAnimFrame(() => {
 			Stage.Tick(interval);
 		});
-	}
+    },
+    Splash: function() {
+        // display a 3-sec generated VNCANVAS logo at start of game
+        // DO NOT REMOVE or BYPASS!
+        let size = 1.0;
+        if (Config.splashSize && (Config.splashSize>0.2))  size = Config.splashSize;
+        
+        let x = Stage.canvas.width/2;
+        let y = Stage.canvas.height/2;
+
+        let glSplash = new PIXI.Graphics();
+        let fillcolor = w3color("rgb(241, 101, 41)");
+        glSplash.beginFill(fillcolor.toVal(), 1);
+        glSplash.drawCircle(x,y,96*size);
+        glSplash.endFill();
+
+        fillcolor = w3color("rgb(255, 255, 255)");
+        glSplash.beginFill(fillcolor.toVal(), 1);
+        glSplash.moveTo(x-86*size, y-42*size);
+        glSplash.lineTo(x+86*size, y-42*size);
+        glSplash.lineTo(x+88*size, y-38*size);
+        glSplash.lineTo(x-88*size, y-38*size);
+        glSplash.endFill();
+        glSplash.beginFill(fillcolor.toVal(), 1);
+        glSplash.moveTo(x-88*size, y+38*size);
+        glSplash.lineTo(x+88*size, y+38*size);
+        glSplash.lineTo(x+86*size, y+42*size);
+        glSplash.lineTo(x-86*size, y+42*size);
+        glSplash.endFill();
+        
+        glSplash.beginFill(fillcolor.toVal(), 1);
+        glSplash.moveTo(x-90*size, y-30*size);
+        glSplash.quadraticCurveTo(x-65*size, y+30*size, x-32*size, y+30*size);
+        glSplash.lineTo(x-32*size, y-30*size);
+        glSplash.lineTo(x-48*size, y-30*size);
+        glSplash.lineTo(x-48*size, y+14*size);
+        glSplash.quadraticCurveTo(x-65*size, y+10*size, x-90*size, y-30*size);
+        glSplash.endFill();
+
+        glSplash.beginFill(fillcolor.toVal(), 1);
+        glSplash.moveTo(x-22*size, y-30*size);
+        glSplash.lineTo(x-22*size, y+30*size);
+        glSplash.lineTo(x-6*size, y+30*size);
+        glSplash.lineTo(x-6*size, y-14*size);
+        glSplash.quadraticCurveTo(x+11*size, y-15*size, x+36*size, y+30*size);
+        glSplash.quadraticCurveTo(x+20*size, y-30*size, x-22*size, y-30*size);
+        glSplash.endFill();
+
+        glSplash.beginFill(fillcolor.toVal(), 1);
+        glSplash.moveTo(x+26*size, y-30*size);
+        glSplash.quadraticCurveTo(x+30*size, y+15*size, x+86*size, y+30*size);
+        glSplash.quadraticCurveTo(x+45*size, y+10*size, x+42*size, y-14*size);
+        glSplash.lineTo(x+86*size, y-14*size);
+        glSplash.lineTo(x+86*size, y-30*size);
+        //glSplash.lineTo(x+26*size, y-30*size);
+        glSplash.endFill();
+
+        let glSplashTexture = glSplash.generateCanvasTexture();
+        let glSplashSprite = new PIXI.Sprite(glSplashTexture);
+        glSplashSprite.anchor.set(0.5,0.5);
+        glSplashSprite.position.set(x,y);
+
+        //this.glScene.addChild(glSplash);
+        this.glScene.addChild(glSplashSprite);
+        this.glRenderer.render(this.glScene);
+        Stage.splashDone = false;
+        setTimeout(() => {
+            this.glScene.removeChild(glSplashSprite);
+            Stage.splashDone = true;
+		}, (Config.splashDuration && (Config.splashDuration>1.0) ? Config.splashDuration*1000 : 3000));        
+    },    
 }
 
 // ensure config and stats is not null
-var Config = {};
-var Stats = {};
+if ((Config === null) || (Config === undefined))
+	var Config = {};
+if ((Stats === null) || (Stats === undefined))
+	var Stats = {};
 

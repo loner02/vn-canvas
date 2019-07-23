@@ -4,160 +4,152 @@
 "use strict";
 require(["app/vncanvas-fx"]);
 
-
 ///////////////////////////////////////////////////////////////////////////////
 // Local Helpers
 ///////////////////////////////////////////////////////////////////////////////
-// Helper function to process backdrop
-Helper.processBackdrop = (function (obj, type, param) {
-	var nextid = 0;
-	if (obj.length > 0) {
-		// background/overlay layer has more than one element
-		// to conserve memory, maintain only the previous and the incoming backdrop
-		while (obj.length > 1) {
-			var object = obj.shift();
-			object.image = null;
-			object = null;
-		}
-		if (!param.src && (param.show != false)) {
-			// show the previous overlay
-			if (param.effect) {
-				var effect = param.effect;
-				if (Stage.animations[param.effect] != null) {
-					effect = Stage.animations[param.effect][1];
-					obj[0].transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
-					if (Stage.animations[param.effect].length > 2)
-						Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
+require(["app/vncanvas-base"], function() {
+	// Helper function to process backdrop
+	Helper.processBackdrop = ((obj, type, param) => {
+		let nextid = 0;
+		if (obj.size > 0) {
+			// background/overlay layer has more than one element
+			// to conserve memory, maintain only the previous and the incoming backdrop
+            let prevObj = null;
+            for (let[key, object] of obj.entries()) {
+                if (obj.size > 1) {
+                    Stage.glManager.free(object.image);
+                    object.glSprite.destroy({children:true});
+                    obj.delete(key);
+                }
+                else
+                    prevObj = object;
+            }
+			if (!param.src && (param.show != false)) {
+				// show the previous backdrop
+				if (param.effect) {
+					let effect = param.effect;
+					if (Stage.animations[param.effect] != null) {
+						effect = Stage.animations[param.effect][1];
+						prevObj.transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
+						if (Stage.animations[param.effect].length > 2)
+							Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
+					}
+					prevObj.wait = true;
+					if (effect.includes('nowait')) {
+						prevObj.wait = false;
+						effect = effect.replace('nowait','');
+					}
+					let fxarr = effect.split(' ');
+					prevObj.effects = fxarr[0] + '_in';
+					if (fxarr.length>1) prevObj.fxparam = fxarr.slice(1);
+					if (TransEffects[fxarr[0]]['_init'])
+						TransEffects[fxarr[0]]['_init'](prevObj, prevObj.fxparam);
 				}
-				obj[0].wait = true;
-				if (effect.indexOf('nowait')!=-1) {
-					obj[0].wait = false;
+				else {
+					prevObj.effects = '_in';
+					prevObj.wait = true;
+				}
+				if (param.time != null) 
+					prevObj.transTime = (param.time>0) ? param.time : 0.1;
+				prevObj.drawn = false;
+				prevObj.update = false;
+				return;
+			}
+			// do a reverse effect on the previous backdrop
+			prevObj.effects = '_out';
+			if (param.effect) {
+				let effect = param.effect;
+				if (Stage.animations[param.effect] != null) {
+					// just use first animation in the set
+					effect = Stage.animations[param.effect][1];
+					prevObj.transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
+					//if (Stage.animations[param.effect].length > 2)
+					//	Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
+				}
+				prevObj.wait = true;
+				if (effect.includes('nowait')) {
+					prevObj.wait = false;
 					effect = effect.replace('nowait','');
 				}
-				var fxarr = effect.split(' ');
-				obj[0].effects = fxarr[0] + '_in';
-				if (fxarr.length>1) obj[0].fxparam = fxarr.slice(1);
+				let fxarr = effect.split(' ');
+				prevObj.effects = fxarr[0] + '_out';
+				if (fxarr.length>1) prevObj.fxparam = fxarr.slice(1);
 				if (TransEffects[fxarr[0]]['_init'])
-					TransEffects[fxarr[0]]['_init'](obj[0], obj[0].fxparam);
-			}
-			else {
-				obj[0].effects = '_in';
-				obj[0].wait = true;
+					TransEffects[fxarr[0]]['_init'](prevObj, prevObj.fxparam);
 			}
 			if (param.time != null) 
-				obj[0].transTime = (param.time>0) ? param.time : 0.1;
-			obj[0].drawn = false;
-			obj[0].update = false;
-			return;
+				prevObj.transTime = (param.time>0) ? param.time : 0.1;
+			prevObj.drawn = false;
+			prevObj.update = false;
+			nextid = parseInt(prevObj.id.substr(3))+1;
+			if ((!param.src) && (param.show == false)) {
+				return;
+			}
 		}
-		// do a reverse effect on the previous backdrop
-		obj[0].effects = '_out';
+		// add the new backdrop
+        let bd = (type == 'scene') ? new Scene(nextid, param.src, param.objects) : new Overlay(nextid, param.src);
 		if (param.effect) {
-			var effect = param.effect;
+			let fxset = param.effect;
 			if (Stage.animations[param.effect] != null) {
-				// just use first animation in the set
-				effect = Stage.animations[param.effect][1];
-				obj[0].transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
-				//if (Stage.animations[param.effect].length > 2)
-				//	Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
+				fxset = Stage.animations[param.effect][1];
+				bd.transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
+				if (Stage.animations[param.effect].length > 2)
+					Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
 			}
-			obj[0].wait = true;
-			if (effect.indexOf('nowait')!=-1) {
-				obj[0].wait = false;
-				effect = effect.replace('nowait','');
+			if (fxset.includes('nowait')) {
+				bd.wait = false;
+				fxset = fxset.replace('nowait','');
 			}
-			var fxarr = effect.split(' ');
-			obj[0].effects = fxarr[0] + '_out';
-			if (fxarr.length>1) obj[0].fxparam = fxarr.slice(1);
-			if (TransEffects[fxarr[0]]['_init'])
-				TransEffects[fxarr[0]]['_init'](obj[0], obj[0].fxparam);
+			let fxarr = fxset.split(' ');
+			bd.effects = fxarr[0] + '_in';
+			if (fxarr.length > 1) 
+				bd.fxparam = fxarr.slice(1);
+			else 
+                bd.fxparam = (obj.size > 0);
+
+            // BUG: at this point, backdrop may not yet have completed async loading.
+			// So, dimensions dependent effects will have erroneous values
+            // Except when graphics or texture previously loaded
+            if (bd.isready && /*bd.glSprite &&*/ TransEffects[fxarr[0]]['_init'])
+                TransEffects[fxarr[0]]['_init'](bd, bd.fxparam);
 		}
+		else 
+			bd.effects = '_in';
 		if (param.time != null) 
-			obj[0].transTime = (param.time>0) ? param.time : 0.1;
-		obj[0].drawn = false;
-		obj[0].update = false;
-		nextid = parseInt(obj[0].context.canvas.id.substr(2))+1;
-		if ((!param.src) && (param.show == false)) {
-			return;
-		}
-	}
-	// add the new backdrop
-	var bd = new Backdrop();
-	bd.type = type;
-	var objects = new Array();
-	if (param.objects) {
-		// assumes multiples of 3
-		//for (var i=0; i<param.objects.length; i+=3) {
-		var param_count = 0;
-		while (param_count < param.objects.length) {
-			var item = {src:'', x:0, y:0, frames:1, fps:0, link:''};	//fps=0 is static image
-			item.src = param.objects[param_count];
-			item.x = param.objects[param_count+1];
-			item.y = param.objects[param_count+2];
-			param_count += 3;
-			// adds entry for sprite frame animation if it exists, ignores it if it doesn't
-			if (param_count < param.objects.length) {
-				if (typeof param.objects[param_count] == 'number') {
-					item.frames = param.objects[param_count];
-					item.fps = param.objects[param_count+1];
-					param_count += 2;
-				}
+			bd.transTime = (param.time>0) ? param.time : 0.1;
+		if (param.offset) {
+			if (typeof (param.offset) == "string") {
+				bd.scroll = (param.offset == 'scroll') ? true : false;
+                bd.offset = new Vector2d(0,0);
+            }
+			else {
+				bd.scroll = false;
+				bd.offset = new Vector2d(param.offset[0],param.offset[1]);
 			}
-			// adds entry for link
-			if (param_count < param.objects.length) {
-				if ((typeof param.objects[param_count] == 'string') &&
-					(!Helper.checkIfImage(param.objects[param_count]))) {
-					item.link = param.objects[param_count];
-					param_count += 1;
-				}
-			}
-			objects.push(item);
 		}
-	}
-	bd.Create('bd' + nextid, param.src, (objects.length > 0) ? objects : null);
-	if (param.effect) {
-		var fxset = param.effect;
-		if (Stage.animations[param.effect] != null) {
-			fxset = Stage.animations[param.effect][1];
-			bd.transTime = (Stage.animations[param.effect][0] > 0) ? Stage.animations[param.effect][0] : 0.1;
-			if (Stage.animations[param.effect].length > 2)
-				Helper.queueAnimation(type, param, Stage.animations[param.effect].slice(2));
-		}
-		if (fxset.indexOf('nowait')!=-1) {
-			bd.wait = false;
-			fxset = fxset.replace('nowait','');
-		}
-		var fxarr = fxset.split(' ');
-		bd.effects = fxarr[0] + '_in';
-		if (fxarr.length > 1) 
-			bd.fxparam = fxarr.slice(1);
-		else {
-			if (type == 'scene')
-				bd.fxparam = (Stage.layers[0].length > 0);
-			else
-				bd.fxparam = (Stage.layers[2].length > 0);
-		}
-		if (TransEffects[fxarr[0]]['_init'])
-			TransEffects[fxarr[0]]['_init'](bd, bd.fxparam);
-	}
-	else 
-		bd.effects = '_in';
-	if (param.time != null) 
-		bd.transTime = (param.time>0) ? param.time : 0.1;
-	if (param.offset) {
-		if (typeof (param.offset) == "string")
-			bd.scroll = (param.offset == 'scroll') ? true : false;
 		else {
 			bd.scroll = false;
-			bd.offset = new Vector2d(param.offset[0],param.offset[1]);
+			bd.offset = new Vector2d(0,0);
 		}
-	}
-	else {
-		bd.scroll = false;
-		bd.offset = new Vector2d(0,0);
-	}
-	obj.push(bd);
-	bd = null;
+		if (param.filter) {
+            bd.filter = new Set(); //Array();
+            let filters = (typeof param.filter === 'string') ? [param.filter] : param.filter;
+            for (let f of filters) {
+                let fx = {filter:'', param:''};
+                let farr = f.split(' ');
+                fx.filter = farr[0];
+                fx.param = (farr.length>1) ? farr.slice(1) : null;
+                bd.filter.add(fx);
+            }
+			//if (bd.filterparam && (bd.filterparam[bd.filterparam.length-1] == 'run'))
+			//	bd.filterrun = true;
+		}
+		else {
+			bd.filter = null;
+			//bd.filterrun = false;
+		}
+		obj.set(bd.id, bd);
+	});
 });
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -166,231 +158,316 @@ Helper.processBackdrop = (function (obj, type, param) {
 // overlay - displays an overlay image (layer 2)
 function overlay(param) {
 	//Stage.Transition(param.time);
-	Helper.processBackdrop(Stage.layers[2], 'overlay', param);
-	Stage.Transition(Stage.layers[2][Stage.layers[2].length-1].transTime);
+	Helper.processBackdrop(Stage.layers.ovl, 'overlay', param);
+    Stage.Transition(Array.from(Stage.layers.ovl.values()).pop().transTime);
 }
 // scene - displays a background (layer 0)
 function scene(param) {
-	Helper.processBackdrop(Stage.layers[0], 'scene', param);
+	Helper.processBackdrop(Stage.layers.bg, 'scene', param);
 	Stage.Transition(param.time);
 }
 
-function Backdrop() {
-	this.isready = false,
-	this.loaded = 1;
+class Backdrop {
+    constructor() {
+        this.id = 0,        // WebGL new
+        this.isready = false,
 
-	this.type = '';
-	this.context = 0;
-	this.image = 0;
-	this.objects = new Array();
-	this.drawn = false;
-	this.redraw = true;
-	this.visible = true;
-	this.update = false;
-		
-	this.effects = 'done';
-	this.fxparam = '';
-	this.alpha = 0;
-	this.target_alpha = 1;
-	this.rotation = 0;
-	this.accum_rotation = 0;
-	this.orientation = 0;
-	this.scale = 1;
-	this.size = 1;
-	this.scroll = false;
-	this.transTime = 1;
-	this.wait = true;
+        this.type = '';
+        this.image = 0;     // WebGL changed: now image filename
+        this.objects = new Array();
+        this.loadSet = new Set();    // WebGL new
+        this.drawn = false;
+        this.redraw = true;
+        this.visible = true;
+        this.update = false;
 
-	this.origin = new Vector2d(0,0);		// backdrop's origin is center
-	this.pos = new Vector2d(0,0);
-	this.target_pos = new Vector2d(0,0);
-	this.offset = new Vector2d(0,0);
-	this.backdropDim = new Vector2d(0,0);
-	
-	this.ovFrames = 1;						// overlay support for multiple frames
-	this.ovFps = 0;
-	this.ovTimer = 0;						// overlay timer
-	this.ovTimerOn = false;
-	this.ovCurFrame = 0;
-}
-Backdrop.prototype.Create = function(id, file, obj) {
-	var that = this;
-	var canvas = document.createElement('canvas');
-	canvas.id = escape(id);
-	this.context =  canvas.getContext('2d');
+        this.glSprite = null;   // WebGL new
 
-	if (obj) {
-		this.loaded += obj.length;	// total number of images to load
-		for (var i in obj) {
-			var item = {img:new Image(), x:obj[i].x, y:obj[i].y, frames:obj[i].frames, fps:obj[i].fps,
-						bdTimer:0, bdTimerOn:false, curFrame:0, link:obj[i].link, rect:new Rect()};	
-						// each object needs to have its own timer
-			Helper.addEvent(item.img, 'load', function() {
-				that.IsLoaded();
-			}, false);
-			item.img.src = Helper.parseArg(obj[i].src);
-			this.objects.push(item);
-			item = null;
-		}
-	}
-	if (typeof file == 'string') {
-		if (Helper.checkIfImage(file)) {
-			this.image = new Image();
-			Helper.addEvent(this.image, 'load', function() {
-				// use larger canvas to support sprite rotation
-				that.backdropDim = new Vector2d(that.image.width, that.image.height);
-				var dim = Math.ceil(that.backdropDim.length());
-				that.context.canvas.setAttribute('width', dim);
-				that.context.canvas.setAttribute('height', dim);
-				that.origin = new Vector2d(dim/2, dim/2);
-				that.IsLoaded();
-			}, false);
-			this.image.src = Helper.parseArg(file);
-		}
-		else {
-			// assume valid HTML color
-			this.image = file;
-			this.context.canvas.setAttribute('width', 1.1*Stage.canvas.width);
-			this.context.canvas.setAttribute('height', 1.1*Stage.canvas.height);
-			this.origin = new Vector2d(this.context.canvas.width>>1, this.context.canvas.height>>1);
-			this.isready = true;
-		}
-	}
-	else {
-		// assumed array [filename, frames, fps]
-		if (Helper.checkIfImage(file[0])) {
-			this.image = new Image();
-			this.ovFrames = file[1] != null ? file[1] : 1;
-			this.ovFps = file[2] != null ? file[2] : 0;
-			Helper.addEvent(this.image, 'load', function() {
-				that.backdropDim = new Vector2d(that.image.width / that.ovFrames, that.image.height);
-				var dim = Math.ceil(that.backdropDim.length());
-				that.context.canvas.setAttribute('width', dim);
-				that.context.canvas.setAttribute('height', dim);
-				that.origin = new Vector2d(dim/2, dim/2);
-				that.IsLoaded();
-			}, false);
-			this.image.src = Helper.parseArg(file[0]);
-		}
-	}
-	// configure transition
-	this.transTime = (Config.transTime > 0) ? Config.transTime : 0.1;
-	this.update = false;
-	this.Reset(true);
-	canvas = null;
-	return this.context.canvas.id;
-}		
-Backdrop.prototype.IsLoaded = function() {
-	if (--this.loaded <= 0) {
-		for (var i in this.objects) {
-			this.objects[i].rect.x = (this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0;
-			this.objects[i].rect.y = (this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0;
-			this.objects[i].rect.w = this.objects[i].img.width / this.objects[i].frames;
-			this.objects[i].rect.h = this.objects[i].img.height;
-		}
-		this.isready = true;
-	}
+        this.effects = 'done';
+        this.fxparam = '';
+        this.alpha = 0;
+        this.target_alpha = 1;
+        this.rotation = 0;
+        this.orientation = 0;
+        this.scale = 1;
+        this.size = 1;
+        this.scroll = false;
+        this.transTime = 1;
+        this.wait = true;
+
+        this.origin = new Vector2d(0,0);		// backdrop's origin is center
+        this.pos = new Vector2d(0,0);
+        this.target_pos = new Vector2d(0,0);
+        this.offset = new Vector2d(0,0);
+        this.imageDim = new Vector2d(0,0);
+
+        this.ovFrames = 1;						// overlay support for multiple frames
+        this.ovFps = 0;
+        this.ovTimer = 0;						// overlay timer
+        this.ovTimerOn = false;
+        this.ovCurFrame = 0;
+
+        this.filter = null;						// image filter // WebGL changed
+        //this.filterparam = null;
+        //this.filterrun = false;
+    }
+    Create(id, file, obj) {
+        this.id = escape(id);
+
+        if (typeof file === 'string') {
+            this.image = Helper.parseArg(file);
+            this.origin.set(Stage.canvas.width>>1, Stage.canvas.height>>1);
+            this.pos.copy(this.origin);
+            
+            if (obj) {
+                for (let o of obj) {
+                    let item = {glObj:null, src:Helper.parseArg(o.src), x:o.x, y:o.y,                   // WebGL new
+                                frames:o.frames, fps:o.fps, bdTimer:0, bdTimerOn:false, curFrame:0};
+                    this.objects.push(item);
+                }
+            }
+            if (Helper.checkIfImage(this.image)) {
+                let texCount = this.toLoad();
+                Stage.glManager.addQueue(this.loadSet, texCount>0, 
+                    (resources, init) => {
+                        this.glSprite = new PIXI.Sprite(resources[this.image].texture);
+                        this.glSprite.anchor.set(0.5, 0.5);
+                        this.glSprite.position.set(this.pos.vx, this.pos.vy);                 
+                        this.imageDim.set(this.glSprite.width, this.glSprite.height);
+                        
+                        for (let o of this.objects) {
+                            let base = resources[o.src].texture;
+                            o.glObj = new PIXI.Sprite(base);
+                            o.glObj.position.set (o.x - this.imageDim.vx/2, 
+                                                  o.y - this.imageDim.vy/2);
+                            if (o.fps > 0) {
+                                let framewidth = base.width/o.frames;
+                                o.glObj.texture.frame = new PIXI.Rectangle(0,0,framewidth,base.height);
+                            }
+                        }
+                        
+                        if ( init && (this.effects != 'done') && (this.effects != '_in')) {
+                            let fx = this.effects.split('_');
+                            if (TransEffects[fx[0]]['_init']) {
+                                TransEffects[fx[0]]['_init'](this, this.fxparam);
+                            }
+                        }                           
+                        this.isLoaded();
+                    }
+                );
+            }
+            else {
+                // assume valid HTML color; fill Stage with color
+                let col = w3color(this.image);
+                this.glSprite = new PIXI.Graphics();
+                this.glSprite.beginFill(col.toVal(), col.toRgb().a);
+                this.glSprite.drawRect(0, 0, Stage.canvas.width,  Stage.canvas.height);
+                this.glSprite.endFill();
+                this.glSprite.position.set(0,0);
+                // PIXI.graphics does not have anchor point, so ref from top-left alwayx
+
+                this.imageDim.set(this.glSprite.width, this.glSprite.height);
+                this.glSubScene.addChild(this.glSprite);
+                if (!obj) this.isready = true;
+                else {
+                    // glImage is color, but with objects to load
+                    let texCount = this.toLoad();
+                    Stage.glManager.addQueue(this.loadSet, texCount>0, 
+                        (resources, init) => {
+                            for (let o of this.objects) {
+                                let base = resources[o.src].texture;
+                                o.glObj = new PIXI.Sprite(base);
+                                o.glObj.position.set (o.x, o.y);
+                                if (o.fps > 0) {
+                                    let framewidth = base.width/o.frames;
+                                    o.glObj.texture.frame = new PIXI.Rectangle(0,0,framewidth,base.height);
+                                }
+                            }
+                            this.isLoaded();
+                        }
+                    );
+                }
+            }
+        }
+        else {
+            // assumed array [filename, frames, fps]
+            this.image = Helper.parseArg(file[0]);
+            this.origin.set(Stage.canvas.width>>1, Stage.canvas.height>>1);
+            this.pos.copy(this.origin);
+            [, this.ovFrames=1, this.ovFps=0] = file;
+
+            let texCount = this.toLoad();
+            Stage.glManager.addQueue(this.loadSet, texCount>0, 
+                (resources, init) => {
+                    let base = resources[this.image].texture;
+                    this.glSprite = new PIXI.Sprite(base);
+                    this.glSprite.anchor.set(0.5, 0.5);
+                    this.glSprite.position.set(this.pos.vx, this.pos.vy);                 
+                    this.imageDim.set(this.glSprite.width, this.glSprite.height);
+                    
+                    let framewidth = base.width/this.ovFrames;
+                    this.glSprite.texture.frame = new PIXI.Rectangle(0,0,framewidth,base.height);
+                    
+                    if (init && (this.effects != 'done') && (this.effects != '_in')) {
+                        let fx = this.effects.split('_');
+                        if (TransEffects[fx[0]]['_init']) {
+                            TransEffects[fx[0]]['_init'](this, this.fxparam);
+                        }
+                    }                           
+                    this.isLoaded();
+                }
+            );
+        }
+        // configure transition
+        this.transTime = (Config.transTime > 0) ? Config.transTime : 0.1;
+        this.update = false;
+        this.Reset(true);
+        return this.id;
+    }
+    isLoaded() {
+        this.glSubScene.addChild(this.glSprite);
+        this.isready = true;       
+    }
+    toLoad() {
+        this.loadSet.clear();
+        this.loadSet.add(this.image);
+        for (let o of this.objects) {
+            this.loadSet.add(o.src);
+        }
+        return this.loadSet.size;
+    }
+    Reset(init) {
+        if ((init) || (!this.visible)) {
+            this.target_pos = new Vector2d(this.origin.vx, this.origin.vy);
+            this.pos.copy(this.target_pos);
+        }
+        this.visible = true;
+        this.redraw = true;
+    }
+    Update(elapsed) {
+        if (this.isready) { 
+            Helper.processEffects(this, elapsed);
+        }
+        return this.update;
+    }
+    Draw() {
+        if (!this.isready) return false;
+        if (!this.redraw) return false;
+        
+        this.glSprite.visible = this.visible;
+        if (this.visible) {
+            this.glSprite.alpha = Math.max(0, Math.min(1, this.alpha));
+            if (this.glSprite.pluginName == 'sprite') {
+                this.glSprite.position.set(this.pos.vx + this.offset.vx, this.pos.vy + this.offset.vy);
+                this.glSprite.scale.set(this.scale, this.scale);
+                this.glSprite.rotation = this.rotation * Math.PI/180;
+                if (this.filter && (this.filter.size>0)) {
+                    let filterset = new Array();
+                    for (let f of this.filter.values()) {
+                        let fx = Filters[f.filter](f.param);
+                        if (f.filter.toLowerCase().includes('flip')) {
+                            this.glSprite.scale.x *= fx[0];
+                            this.glSprite.scale.y *= fx[1];
+                        }
+                        else {
+                            if (fx != null) filterset.push(fx);
+                        }
+                    }
+                    this.glSprite.filters = (filterset.length>0) ? filterset : null;
+                }
+                if (this.ovFps > 0) {
+                    let base = this.glSprite.texture.baseTexture;
+                    let framewidth = base.width/this.ovFrames;
+                    this.glSprite.texture.frame = new PIXI.Rectangle(this.ovCurFrame * framewidth, 0, framewidth, base.height);
+                }
+            }
+            for (let o of this.objects) {
+                if (o.fps > 0) {
+                    let base = o.glObj.texture.baseTexture;
+                    let framewidth = base.width/o.frames;
+                    o.glObj.texture.frame = new PIXI.Rectangle(o.curFrame * framewidth, 0, framewidth, base.height);
+                }
+            }
+        }
+    
+        this.redraw = false;
+        if (this.drawn) this.update = true;
+        return true;
+    }
 }
-Backdrop.prototype.Reset = function(init) {
-	if ((init) || (!this.visible)) {
-		this.target_pos = new Vector2d(Stage.canvas.width>>1, Stage.canvas.height>>1);
-		this.pos.copy(this.target_pos);
-	}
-	this.visible = true;
-	this.redraw = true;
+
+class Scene extends Backdrop {
+    constructor(id, src, objects) {
+        super();
+        this.type = 'scene';
+        this.glSubScene = Stage.glSubScene[0];
+
+		let obj = new Array();
+		if (objects) {
+			// assumes multiples of 3/5
+			let count = 0;
+			while (count < objects.length) {
+				let item = {src:'', x:0, y:0, frames:1, fps:0, link:''};
+				item.src = objects[count];
+				item.x = objects[count+1];
+				item.y = objects[count+2];
+				count += 3;
+				// adds entry for sprite frame animation if it exists, ignores it if it doesn't
+				if (count < objects.length) {
+					if (typeof objects[count] == 'number') {
+						item.frames = objects[count];
+						item.fps = objects[count+1];
+						count += 2;
+					}
+				}
+				// TODO: add entry for link
+				obj.push(item);
+			}
+		}
+		super.Create(`scn${id}`, src, (obj.length > 0) ? obj : null);
+    }
+    isLoaded() {
+        for (let o of this.objects)
+            this.glSprite.addChild(o.glObj);
+        super.isLoaded();
+    }
+    Update(elapsed) {
+        let ret = super.Update(elapsed);
+        if (this.isready) { 
+            for (let o of this.objects) {
+                if ((!o.bdTimerOn) && (o.fps>0)) {
+                    o.bdTimer = setTimeout(() => {
+                        o.curFrame = (++o.curFrame) % o.frames;
+                        this.redraw = true;
+                        if (this.visible) o.bdTimerOn = false;
+                    }, 1000/o.fps);
+                    o.bdTimerOn = true;
+                }
+            }
+        }
+        return ret;
+    }
 }
-Backdrop.prototype.Update = function(elapsed) {
-	var that = this;
-	if (this.isready) { 
-		Helper.processEffects(this, elapsed);
-		// update overlay timers
-		if (!this.ovTimerOn && (this.ovFps>0)) {
-			this.ovTimer = setTimeout(function() {
-				that.ovCurFrame = (++that.ovCurFrame) % that.ovFrames;
-				that.redraw = true;
-				if (that.visible) that.ovTimerOn = false;
-			}, 1000/this.ovFps);
-			this.ovTimerOn = true;
-		}
-		// update object timers
-		if (this.objects.length>0) {
-			for (var i in this.objects) {
-				if ((!this.objects[i].bdTimerOn) && (this.objects[i].fps>0)) {
-					this.objects[i].bdTimer = setTimeout(function() {
-						that.objects[i].curFrame = (++that.objects[i].curFrame) % that.objects[i].frames;
-						that.redraw = true;
-						if (that.visible) that.objects[i].bdTimerOn = false;
-					}, 1000/this.objects[i].fps);
-					this.objects[i].bdTimerOn = true;
-				}
-			}
-		}
-	}
-	return this.update;
-}
-Backdrop.prototype.Draw = function() {
-	if (!this.isready) return false;
-	if (!this.redraw) return false;
-	
-	if (this.visible) {
-		this.context.clearRect(0,0,this.context.canvas.width,this.context.canvas.height);
-		this.context.globalAlpha = Math.max(0, Math.min(1, this.alpha));
-		if (this.rotation != 0) {
-			this.context.translate(this.context.canvas.width/2, this.context.canvas.height/2);
-			this.context.rotate(this.rotation * Math.PI/180);
-			this.context.translate(-this.context.canvas.width/2, -this.context.canvas.height/2);
-			this.rotation = 0.0;
-		}
-		if ((this.image.constructor == HTMLImageElement) || (this.image.constructor == Image) ||
-			(this.image instanceof HTMLImageElement) || (this.image instanceof Image)) {
-			if (this.ovFps == 0) {
-				this.context.drawImage(this.image, 
-					((this.context.canvas.width - this.backdropDim.vx)/2)>>0,
-					((this.context.canvas.height - this.backdropDim.vy)/2)>>0);
-			}
-			else {
-				this.context.drawImage(this.image,
-					this.ovCurFrame * this.image.width / this.ovFrames,
-					0, this.image.width / this.ovFrames, this.image.height,
-					((this.context.canvas.width - this.backdropDim.vx)/2)>>0,
-					((this.context.canvas.height - this.backdropDim.vy)/2)>>0,
-					this.image.width / this.ovFrames, this.image.height);
-			}
-		}
-		else {
-			this.context.fillStyle = this.image;
-			this.context.fillRect(0, 0, this.context.canvas.width, this.context.canvas.height);		
-		}
-		if (this.objects.length > 0) {
-			for (var i in this.objects) {
-				if (this.objects[i].fps == 0) {
-					this.context.drawImage(this.objects[i].img, 
-						(this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0,
-						(this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0);
-				}
-				else {
-					this.context.drawImage(this.objects[i].img,
-						this.objects[i].curFrame * this.objects[i].img.width / this.objects[i].frames,
-						0, this.objects[i].img.width / this.objects[i].frames, this.objects[i].img.height,
-						(this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0,
-						(this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0,
-						this.objects[i].img.width / this.objects[i].frames, this.objects[i].img.height);
-				}
-				// create detectable path
-				/*if (this.objects[i].link != "") {
-					this.context.beginPath();
-					var rect = new Rect((this.objects[i].x + (this.context.canvas.width - this.backdropDim.vx)/2)>>0,
-									 (this.objects[i].y + (this.context.canvas.height - this.backdropDim.vy)/2)>>0,
-									 this.objects[i].img.width / this.objects[i].frames,
-									 this.objects[i].img.height);
-					this.context.rect(rect.x, rect.y, rect.w, rect.h);
-					this.context.closePath();
-					this.context.stroke();
-				}*/				
-			}
-		}
-	}
-	this.redraw = false;
-	if (this.drawn) this.update = true;
-	return true;
+
+class Overlay extends Backdrop {
+    constructor(id, src) {
+        super();
+        this.type = 'overlay';
+        this.glSubScene = Stage.glSubScene[2];
+		super.Create(`ovl${id}`, src, null);
+    }
+    Update(elapsed) {
+        let ret = super.Update(elapsed);
+        if (this.isready) { 
+            if (!this.ovTimerOn && (this.ovFps>0)) {
+                this.ovTimer = setTimeout(() => {
+                    this.ovCurFrame = (++this.ovCurFrame) % this.ovFrames;
+                    this.redraw = true;
+                    if (this.visible) this.ovTimerOn = false;
+                }, 1000/this.ovFps);
+                this.ovTimerOn = true;
+            }
+        }
+        return ret;
+    }
 }

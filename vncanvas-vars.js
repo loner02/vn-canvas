@@ -8,45 +8,38 @@
 ///////////////////////////////////////////////////////////////////////////////
 // set - sets a user variable
 function set(param) {
-	var arr_param = new Array();
-	for (var prop in param) {
-		if (param.hasOwnProperty(prop)) {
-			arr_param.push(prop);
-			arr_param.push(JSON.stringify(param[prop]));
-		}
-	}
-	for (var i=0; i<arr_param.length; i+=2) {
-		var persist = false;
-		if (arr_param[i].indexOf('$') == 0) {
-			arr_param[i] = arr_param[i].replace(/^\$/g,'');
-			persist = true;
-		}
-		arr_param[i+1] = eval(arr_param[i+1]);
-		var value = Helper.findStat(arr_param[i]);
-		if (value != null) {
-			/* set actor stat */
-			var arr_str = arr_param[i].split('_');
-			var stats_obj;
-			if (Config.modRPG) stats_obj = RPG.Stats[arr_str[1]];
-			else stats_obj = Stats[arr_str[1]];
-
-			var stat = value;
-			var stat_type;
+    const map = new Map();
+    Object.keys(param).forEach(key => {
+       map.set(key, JSON.stringify(param[key])); 
+    });
+    let pmap = new Map(), persist = false;
+    for (let [key, value] of map.entries()) {
+        persist = (key.includes('$')) ? true: false;
+        let k = key.replace(/^\$/g,'');
+        pmap.set(k,eval(value));       
+        let v = Helper.findStat(k);
+        if (v != null) {
+            let arr_str = k.split(/[_@]/g);
+            let stats_obj;
+            if (Config.modRPG) stats_obj = RPG.Stats[arr_str[1]];
+            else stats_obj = Stats[arr_str[1]];
+            
+            let stat_type, stat=v;
 			if (stats_obj._value) stat_type = typeof stats_obj._value[0];
 			if (stats_obj._range) stat_type = typeof stats_obj._range[0];
 			if (stat_type == 'number') {
-				if (typeof arr_param[i+1] == 'number')
-					stat = arr_param[i+1];
-				else if (typeof arr_param[i+1] == 'string') {
-					if (arr_param[i+1].search(/[+|\-|*|%|\/]/g) != -1)
-						stat = eval(stat + arr_param[i+1]);
-					else if (arr_param[i+1] == 'random') {
+				if (typeof pmap.get(k) == 'number')
+					stat = pmap.get(k);
+				else if (typeof pmap.get(k) == 'string') {
+					if (pmap.get(k).search(/[+|\-|*|%|\/]/g) != -1)
+						stat = eval(stat + pmap.get(k));
+					else if (pmap.get(k) == 'random') {
 						if (stats_obj._value) {
-							var delta = stats_obj._value[1] - stats_obj._value[0] + 1;
+							let delta = stats_obj._value[1] - stats_obj._value[0] + 1;
 							stat = Math.floor(Math.random()*delta) + stats_obj._value[0];
 						}
 						if (stats_obj._range) {
-							var delta = stats_obj._range[1] - stats_obj._range[0] + 1;
+							let delta = stats_obj._range[1] - stats_obj._range[0] + 1;
 							stat = Math.floor(Math.random()*delta) + stats_obj._range[0];
 						}
 					}
@@ -57,131 +50,151 @@ function set(param) {
 					stat = Math.max(stats_obj._range[0], Math.min(stats_obj._range[1], stat));
 			}
 			else if (stat_type == 'boolean') {
-				if (typeof arr_param[i+1] == 'number')
-					stat = (arr_param[i+1]==0) ? stats_obj._value[0] : stats_obj._value[1];
-				else if (typeof arr_param[i+1] == 'string') {
-					if (arr_param[i+1].search(/!/g) != -1)
+				if (typeof pmap.get(k) == 'number')
+					stat = (pmap.get(k)==0) ? stats_obj._value[0] : stats_obj._value[1];
+				else if (typeof pmap.get(k) == 'string') {
+					if (pmap.get(k).search(/!/g) != -1)
 						stat = !stat;
 				}
-				else if (typeof arr_param[i+1] == 'boolean')
-					stat = arr_param[i+1];
+				else if (typeof pmap.get(k) == 'boolean')
+					stat = pmap.get(k);
 			}
 			else if (stat_type == 'string') {
-				if (typeof arr_param[i+1] == 'number') {
-					if ((arr_param[i+1] >= 0) && (arr_param[i+1] < stats_obj._value.length))
-						stat = stats_obj._value[arr_param[i+1]];
+				if (typeof pmap.get(k) == 'number') {
+					if ((pmap.get(k) >= 0) && (pmap.get(k) < stats_obj._value.length))
+						stat = stats_obj._value[pmap.get(k)];
 				}
-				else if (typeof arr_param[i+1] == 'string') {
-					for (var j in stats_obj._value) {
-						if (arr_param[i+1] == stats_obj._value[j]) {
-							stat = arr_param[i+1];
+				else if (typeof pmap.get(k) == 'string') {
+					for (let j in stats_obj._value) {
+						if (pmap.get(k) == stats_obj._value[j]) {
+							stat = pmap.get(k);
 							break;
 						}
 					}
 				}
 			}
 			else {	// object type, just assign it
-				stat = arr_param[i+1];
+				stat = pmap.get(k);
 			}
-			Helper.setValue(arr_param[i], stat);
-			//for (var j in Stage.layers[1]) {
-			//	if (Stage.layers[1][j].id == arr_str[0]) {
-			//		Stage.layers[1][j].stats[arr_str[1]] = stat;
-			//		break;
-			//	}
-			//}
-		}
-		else {
-			/* set user variable */
-			value = Helper.findVar(arr_param[i]);
-			if (value != null) {
-				if (arr_param[i+1] == null) {
-					if (Stage.variables[arr_param[i]].Persist() && Helper.supportsLocalStorage())
-						localStorage.removeItem("_persist_uv_"+arr_param[i]);
-					delete(Stage.variables[arr_param[i]]);
-					return;
-				}
-				if (Stage.variables[arr_param[i]].Type() == 'object') {
-					// assumes array, just push new value
-					Stage.variables[arr_param[i]].Value().push(arr_param[i+1]);
-					Stage.variables[arr_param[i]].persist = persist;
-				}
-				else {
-					if (typeof arr_param[i+1] == 'string') {
-						// if value is a reference to other variables
-						var ref = Helper.findVar(arr_param[i+1]);
-						if (ref != null)
-							Stage.variables[arr_param[i]].Set(ref, persist);
-						else {
-							// is it an expression with supported operator
-							if (arr_param[i+1].search(/[+|\-|*|%|\/]/g) != -1)
-								Stage.variables[arr_param[i]].Set(eval(Stage.variables[arr_param[i]].Value() + arr_param[i+1]), persist);
-							else if (arr_param[i+1].search(/!/g) != -1)
-								Stage.variables[arr_param[i]].Set(!Stage.variables[arr_param[i]].Value());
-							// is it a random number
-							else if (arr_param[i+1].search(/random/g) != -1) {
-								var arr_random = arr_param[i+1].split(' ');
-								if (arr_random.length > 1)
-									Stage.variables[arr_param[i]].Set(Math.floor(Math.random()*(eval(arr_random[2])-eval(arr_random[1])+1)) + eval(arr_random[1]));
-								else
-									Stage.variables[arr_param[i]].Set(Math.random(), persist);
-							}								
-							// or a simple string to set
-							else
-								Stage.variables[arr_param[i]].Set(arr_param[i+1], persist);
-						}
-					}
-					else {
-						Stage.variables[arr_param[i]].Set(arr_param[i+1], persist);
-					}
-				}
-			}
-			else {
-				var uv = new UserVars();
-				if (typeof arr_param[i+1] == 'string') {
-					if (arr_param[i+1].search(/random/g) != -1) {
-						var arr_random = arr_param[i+1].split(' ');
-						if (arr_random.length > 1)
-							uv.Set(Math.floor(Math.random()*(eval(arr_random[2])-eval(arr_random[1])+1)) + eval(arr_random[1]));
-						else
-							uv.Set(Math.random(), persist);
-					}
-					else {
-						var ref = Helper.findVar(arr_param[i+1]);
-						uv.Set((ref != null) ? ref : arr_param[i+1], persist);
-					}
-				}
-				else
-					uv.Set(arr_param[i+1], persist);
-				Stage.variables[arr_param[i]] = uv;
-				uv = null;
-			}	
-			if (Stage.variables[arr_param[i]].Persist() && Helper.supportsLocalStorage())
-				localStorage["_persist_uv_"+arr_param[i]] = JSON.stringify(Stage.variables[arr_param[i]].Value());
-		}
-	}
+			Helper.setValue(k, stat);            
+        }
+        else if (Helper.findConfig(k) != null) {
+            if (Config.activeTheme[k] !== undefined) {
+                Config.activeTheme[k] = pmap.get(k);
+                Helper.updateConfig('activeTheme');
+            }
+            else {
+                Config[k] = pmap.get(k);
+                Helper.updateConfig(k);
+            }
+            Stage.redraw = true;
+        }
+        else {
+            v = Helper.findVar(k);
+            if (v != null) {
+                if (pmap.get(k) == null) {
+                    if (Stage.variables.get(k).persist && Helper.supportsLocalStorage())
+                        localStorage.removeItem("_persist_uv_"+k);
+                    Stage.variables.delete(k);
+                    continue;
+                }
+                if (Stage.variables.get(k).type == 'object') {
+                    // assumes array, push new value
+                    if (typeof pmap.get(k) == 'object') {
+                        pmap.get(k).forEach(i => {
+                            Stage.variables.get(k).value.push(i);
+                        });
+                    }
+                    else
+                        Stage.variables.get(k).value.push(pmap.get(k));
+                    Stage.variables.get(k).persist = persist;
+                }
+                else {
+                    if (typeof pmap.get(k) == 'string') {
+                        let ref = Helper.findVar(pmap.get(k));
+                        if (ref != null) {
+                            Stage.variables.get(k).value = ref;
+                        }
+                        else {
+                            // is it an expression with supported operator
+                            if (pmap.get(k).search(/^[+|\-|*|%|\/]/g) != -1) {
+                                Stage.variables.get(k).value = eval(Stage.variables.get(k).value + pmap.get(k));
+                            }
+                            else if (pmap.get(k).search(/^!/g) != -1) {
+                                Stage.variables.get(k).value = !Stage.variables.get(k).value;
+                            }
+                            else if (pmap.get(k).search(/random/g) != -1) {
+                                let arr_random = pmap.get(k).split(' ');
+                                if (arr_random.length > 1)
+                                    Stage.variables.get(k).value = Math.floor(Math.random()*(eval(arr_random[2])-eval(arr_random[1])+1)) + eval(arr_random[1]);
+                                else
+                                    Stage.variables.get(k).value = Math.random();
+                            }
+                            // or a simple string to set
+                            else {
+                                Stage.variables.get(k).value = pmap.get(k);
+                            }
+                        }
+                        Stage.variables.get(k).persist = persist;
+                    }
+                    else {
+                        Stage.variables.get(k).value = pmap.get(k);
+                        Stage.variables.get(k).persist = persist;                    
+                    }
+                }
+            }
+            else {
+                let uv = new UserVars();
+                if (typeof pmap.get(k) == 'string') {
+                    if (pmap.get(k).includes('random')) {
+                        let arr_random = pmap.get(k).split(' ');
+                        if (arr_random.length > 1)
+                            uv.value = Math.floor(Math.random()*(eval(arr_random[2])-eval(arr_random[1])+1)) + eval(arr_random[1]);
+                        else
+                            uv.value = Math.random();
+                    }
+                    else {
+                        let ref = Helper.findVar(pmap.get(k));
+                        uv.value = (ref != null) ? ref : pmap.get(k);
+                    }
+                }
+                else {
+                    uv.value = pmap.get(k);
+                }
+                uv.persist = persist;
+                Stage.variables.set(k,uv);
+            }
+            if (Stage.variables.get(k).persist && Helper.supportsLocalStorage())
+                localStorage["_persist_uv_"+k] = JSON.stringify(Stage.variables.get(k).value);
+        }
+    }
+    return true;
 }
 // get - gets value of a user variable
 function get(param) {
 	return Helper.findVar(param.name);
 }
 
-function UserVars() {
-	this.value = 0;
-	this.type = 0;
-	this.persist = false;
-}
-UserVars.prototype.Set = function(v,p) {
-	this.value = v;
-	this.type = typeof v;
-	if (p) this.persist = p;
-}
-UserVars.prototype.Value = function() {
-	return this.value;
-}
-UserVars.prototype.Type = function() {
-	return this.type;
-}
-UserVars.prototype.Persist = function() {
-	return this.persist;
+class UserVars {
+    constructor() {
+        this._value = 0;    // WebGL changed
+        this._type = 0;
+        this._persist = false;
+    }
+    get value ()   { return this._value; }
+    get type ()    { return this._type; }
+    get persist () { return this._persist; }
+    set value (v) {
+        this._value = v;
+        this._type = typeof v;
+        //this._persist = p;
+    }
+    set persist (p) {
+        this._persist = p;
+    }
+    Set(v,p) {
+        this.value = v;
+        this.persist = p;
+        
+    }
 }
